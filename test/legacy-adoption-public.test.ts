@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { writeFileSync } from 'node:fs';
 import { withLifecycleCliHarness } from './lifecycle-cli-harness';
 import { parseLifecycleReport } from '../src/lifecycle-report';
+import { adoptionDigest, parseLegacyRecordProof } from '../src/legacy-adoption-proof';
 
 test('a supplied adoption expectation without matching legacy proof blocks every native scope before writes', async () => {
   await withLifecycleCliHarness(harness => {
@@ -40,3 +41,44 @@ test('unsealed legacy history is retained with an actionable diagnostic instead 
     expect(result.stores.cursor.after).toEqual(result.stores.cursor.before);
   });
 });
+
+test('scopes previews exact imported legacy identities and snapshot digest without upgrading or writing history', async () => {
+  await withLifecycleCliHarness(harness => {
+    const source = harness.source('legacy', { 'plugin.json': '{"name":"demo","version":"1.0.0"}\n' });
+    harness.writeHome({ 'state.json': JSON.stringify({ version: 1, installs: [{
+      host: 'cursor', id: 'demo@personal', source, sourceSha: 'original-revision', ownership: 'plgnz',
+      pending: 'install', pins: ['server'], fingerprint: 'original-fingerprint',
+    }] }) });
+    const result = harness.run(['scopes', '--target', 'cursor', '--json']);
+    const output = JSON.parse(result.stdout) as { scopes: Array<{ adoptionHistory?: { schemaVersion: number; legacyRecords: unknown[]; records: unknown[] } }> };
+    expect(result.exitCode).toBe(0);
+    const history = output.scopes[0]!.adoptionHistory;
+    expect(history?.schemaVersion).toBe(1);
+    expect(history!.records).toEqual([]);
+    const proof = parseLegacyRecordProof(history!.legacyRecords[0]);
+    expect(proof.original.package).toBe('demo@personal');
+    expect(proof.snapshot.activation.packageId).toBe('demo@personal');
+    expect(proof.snapshot.journal.packageId).toBe('demo@personal');
+    expect(proof.snapshot.activation.pins).toEqual(['server']);
+    expect(proof.original.sealed).toBe(false);
+    expect(proof.original.command).toBe('legacy-recovery');
+    const forged = JSON.parse(JSON.stringify(proof)) as typeof proof;
+    forged.snapshot.activation.sourceRevision = 'forged-revision';
+    expect(rejectedLegacyProof(forged)).toBe(true);
+    const unknown = { ...proof, schemaVersion: 2 };
+    expect(rejectedLegacyProof(unknown)).toBe(true);
+    const sealed = { ...proof, original: { ...proof.original, sealed: true } };
+    expect(rejectedLegacyProof(sealed)).toBe(true);
+    const mismatched = JSON.parse(JSON.stringify(proof)) as typeof proof;
+    mismatched.snapshot.activation.packageId = 'demo';
+    mismatched.recordDigest = adoptionDigest('plugnz/legacy-record/v1', mismatched.snapshot);
+    expect(rejectedLegacyProof(mismatched)).toBe(true);
+    const extra = { ...proof, snapshot: { ...proof.snapshot, unknown: true } };
+    expect(rejectedLegacyProof(extra)).toBe(true);
+    expect(result.state.after).toEqual(result.state.before);
+  });
+});
+
+function rejectedLegacyProof(value: unknown): boolean {
+  try { parseLegacyRecordProof(value); return false; } catch { return true; }
+}
