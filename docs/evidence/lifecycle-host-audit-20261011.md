@@ -114,6 +114,9 @@ failure detection and verified rollback. Only this test's explicit deadline is
 raised to 20 seconds; production deadlines and assertions remain unchanged.
 The corrected test passed without a command-level override: 1 passed,
 1 assertion, 4.24 seconds; typecheck and diff checks passed.
+The full ZCode activation file at `fe95be7` also passed without a command-level
+override: 5 tests, 35 assertions, 14.04 seconds. The retained log is
+`plugnz-fe95-zcode-activation.log` in the same durable evidence directory.
 The correction is not a full-suite pass or native runtime proof. Claude's
 separately confirmed catalog-discovery bug still blocks host integration.
 
