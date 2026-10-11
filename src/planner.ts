@@ -26,6 +26,7 @@ import {
   createResolvedLifecyclePins,
 } from './lifecycle-runtime';
 import { ownedActivation } from './owned-activation';
+import { sameSourceBinding } from './scope-inventory';
 import { CryptoHasher } from './runtime';
 import {
   inventoryPackageSemantics,
@@ -34,7 +35,7 @@ import {
   type PackageSemanticInventory,
   type SourceType,
 } from './semantic-inventory';
-import { resolveSource, type FrozenSource, type PluginSource } from './source';
+import { resolveSource, sourceBindingForArgument, type FrozenSource, type PluginSource } from './source';
 import type { SourceBinding } from './source-reference';
 import {
   hasRetirementAuthority,
@@ -68,6 +69,8 @@ export type LifecyclePlan =
       readonly kind: 'frozen';
       readonly requestedDryRun: boolean;
       readonly attemptId: string;
+      /** Original add argument. Carries fetch credentials that must not enter the report. */
+      readonly transportSource?: string;
       readonly report: LifecycleReport;
       readonly scopes: readonly {
         readonly scope: DeploymentScopeIdentity;
@@ -101,6 +104,8 @@ export interface PlanLifecycleInput {
   readonly validatedAt: string;
   readonly hosts: readonly PlannerHost[];
   readonly command?: 'add' | 'update' | 'remove';
+  /** Original add argument. Carries fetch credentials that must not enter the manifest. */
+  readonly transportSource?: string;
 }
 
 type FrozenOperation = Extract<LifecyclePlan, { kind: 'frozen' }>['operations'][number];
@@ -148,8 +153,9 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
   if (duplicate !== null) return zeroWrite(command, input.dryRun, duplicate);
 
   const prepared: Prepared[] = [];
+  const transportCache = new Map<string, FrozenSource>();
   for (const entry of input.manifest.entries) {
-    const result = await prepareEntry(entry, input.hosts, loaded.state, command);
+    const result = await prepareEntry(entry, input.hosts, loaded.state, command, input.transportSource, transportCache);
     if (result.kind === 'defect') return zeroWrite(command, input.dryRun, result.reason, result.terminalPhase);
     prepared.push(result);
   }
@@ -171,10 +177,12 @@ async function prepareEntry(
   hosts: readonly PlannerHost[],
   state: LifecycleStateV2,
   command: LifecycleCommandName,
+  transportSource: string | undefined,
+  transportCache: Map<string, FrozenSource>,
 ): Promise<Prepared | Defect> {
   switch (entry.operation) {
     case 'sync':
-      return prepareSync(entry, hosts, state, command);
+      return prepareSync(entry, hosts, state, command, transportSource, transportCache);
     case 'retire-source':
       return prepareRetire(entry, hosts, state);
     default: {
@@ -189,10 +197,12 @@ async function prepareSync(
   hosts: readonly PlannerHost[],
   state: LifecycleStateV2,
   command: LifecycleCommandName,
+  transportSource: string | undefined,
+  transportCache: Map<string, FrozenSource>,
 ): Promise<PreparedSync | Defect> {
   let frozen: FrozenSource;
   try {
-    frozen = resolveSource(sourceArgument(entry.source));
+    frozen = resolvePlannedSource(entry.source, transportSource, transportCache);
   } catch (error) {
     const diagnostic = unknownErrorDiagnostic(error);
     if (command === 'add' || command === 'update') {
@@ -792,7 +802,15 @@ function frozenPlan(
       readbackId: null,
     },
   });
-  return { kind: 'frozen', requestedDryRun: input.dryRun, attemptId, report, scopes, operations };
+  return {
+    kind: 'frozen',
+    requestedDryRun: input.dryRun,
+    attemptId,
+    report,
+    scopes,
+    operations,
+    ...(input.transportSource === undefined ? {} : { transportSource: input.transportSource }),
+  };
 }
 
 function outcomeFor(row: FrozenOperation): LifecycleReport['outcomes'][number] {
@@ -1089,6 +1107,30 @@ function zeroWrite(command: LifecycleCommandName, dryRun: boolean, reason: Lifec
 
 function commandName(manifest: SyncManifest): LifecycleCommandName {
   return manifest.entries.every((entry) => entry.operation === 'retire-source') ? 'retire-source' : 'sync';
+}
+
+export function resolvePlannedSource(
+  binding: SourceBinding,
+  transportSource: string | undefined,
+  cache: Map<string, FrozenSource>,
+): FrozenSource {
+  const argument = transportArgument(binding, transportSource);
+  if (argument === undefined) return resolveSource(sourceArgument(binding));
+  const cached = cache.get(argument);
+  if (cached !== undefined) return cached;
+  const frozen = resolveSource(argument);
+  cache.set(argument, frozen);
+  return frozen;
+}
+
+function transportArgument(binding: SourceBinding, transportSource: string | undefined): string | undefined {
+  if (transportSource === undefined) return undefined;
+  try {
+    if (!sameSourceBinding(sourceBindingForArgument(transportSource), binding)) return undefined;
+  } catch {
+    return undefined;
+  }
+  return transportSource;
 }
 
 function sourceArgument(source: SourceBinding): string {

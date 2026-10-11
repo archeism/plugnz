@@ -832,6 +832,7 @@ async function runPlannerAdd(source: string, binding: SourceBinding, targets: re
     hosts: createLifecyclePlannerHosts(),
     now: new Date().toISOString(),
     command: 'add',
+    transportSource: source,
   });
   return parseLifecycleReport({
     ...executed.report,

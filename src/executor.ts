@@ -14,11 +14,10 @@ import {
 } from './lifecycle-report';
 import { LifecycleHostPhaseError, createFrozenPackageSnapshot, createLifecyclePlanCoverage, createResolvedLifecyclePins } from './lifecycle-runtime';
 import { ownedActivation, retirementTombstone } from './owned-activation';
-import { lifecycleAttemptIdForPlannedScopes, type LifecyclePlan, type PlannerHost } from './planner';
+import { lifecycleAttemptIdForPlannedScopes, resolvePlannedSource, type LifecyclePlan, type PlannerHost } from './planner';
 import { inventoryPackageSemantics, SemanticInventoryError, type PackageSemanticInventory } from './semantic-inventory';
 import { CryptoHasher } from './runtime';
-import { resolveSource, type FrozenSource, type PluginSource } from './source';
-import type { SourceBinding } from './source-reference';
+import type { FrozenSource, PluginSource } from './source';
 import { readLifecycleState, type ActivationRecord, type DeploymentScopeRecord, type JournalAction, type JournalEntryRecord, type JournalState, type LifecycleAttemptRecord, type LifecycleStateV2 } from './state';
 import { writeLifecycleState } from './state-write';
 
@@ -266,7 +265,7 @@ async function prepareActivation(
   if (context === undefined) {
     return refused(createLifecycleReason('internal', 'internal.invariant', `${action} '${operation.package}' has no frozen source snapshot`));
   }
-  const frozen = resolveSource(sourceArgument(operation.scope.source));
+  const frozen = resolvePlannedSource(operation.scope.source, plan.transportSource, new Map());
   if (frozen.snapshot.fingerprint !== context.reference.fingerprint || frozen.snapshot.revision !== context.reference.revision) {
     return refused(createLifecycleReason('internal', 'internal.invariant', `${action} '${operation.package}' source bytes drifted from the frozen snapshot`));
   }
@@ -519,19 +518,6 @@ async function prepareRetirement(
 
 function lifecycleTarget(operation: LifecyclePlanOperation): LifecycleTargetIdentity {
   return { kind: operation.scope.target.kind, instance: operation.scope.target.instance };
-}
-
-function sourceArgument(source: SourceBinding): string {
-  switch (source.kind) {
-    case 'local':
-      return source.locator;
-    case 'git':
-      return source.ref === 'HEAD' ? source.locator : `${source.locator}#${source.ref}`;
-    default: {
-      const unreachable: never = source;
-      throw new Error(`unknown source ${String(unreachable)}`);
-    }
-  }
 }
 
 class Ledger {
