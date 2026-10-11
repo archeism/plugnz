@@ -1,0 +1,21 @@
+// Read-only registry verification; writes only the explicitly fresh evidence directory.
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { readdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+const dir = process.argv[2];
+assert(dir?.startsWith('/tmp/plugnz-release-0012-verify.'));
+assert.equal(readdirSync(dir).length, 0);
+const response = await fetch('https://registry.npmjs.org/plugnz/0.0.12');
+assert.equal(response.status, 200);
+const metadata = await response.json();
+assert.equal(metadata.version, '0.0.12');
+assert.equal(metadata.gitHead, '8b6a0c5abb10fc927ec6323140ce48da11ac3195');
+assert.equal(new URL(metadata.dist.tarball).hostname, 'registry.npmjs.org');
+const tarResponse = await fetch(metadata.dist.tarball);
+assert.equal(tarResponse.status, 200);
+const bytes = Buffer.from(await tarResponse.arrayBuffer());
+assert.equal(`sha512-${createHash('sha512').update(bytes).digest('base64')}`, metadata.dist.integrity);
+writeFileSync(join(dir, 'metadata.json'), JSON.stringify(metadata, null, 2));
+writeFileSync(join(dir, 'plugnz-0.0.12.tgz'), bytes);
+console.log(JSON.stringify({ version: metadata.version, gitHead: metadata.gitHead, tarballSha256: createHash('sha256').update(bytes).digest('hex'), bytes: bytes.length }));
