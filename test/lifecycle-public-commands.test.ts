@@ -6,6 +6,37 @@ import { createDeploymentScopeIdentity } from '../src/deployment-scope';
 import { parseLifecycleReport } from '../src/lifecycle-report';
 
 describe('public lifecycle commands', () => {
+  test('sync refreshes same-version changed bytes and leaves an unchanged sibling byte-identical', async () => {
+    await withLifecycleCliHarness((harness) => {
+      harness.writeHome({ '.cursor/.keep': '' });
+      const source = harness.source('sync-refresh', {
+        'demo/plugin.json': '{"name":"demo","version":"1.0.0"}\n',
+        'demo/payload.txt': 'old bytes\n',
+        'sibling/plugin.json': '{"name":"sibling","version":"1.0.0"}\n',
+        'sibling/payload.txt': 'unchanged bytes\n',
+      });
+      const cursor = harness.fakeNative('cursor', versionSteps(48));
+      const env = { OPEN_PLUGIN_CURSOR_BIN: cursor.path };
+      expect(harness.run(['sync', source, '--target', 'cursor', '--json'], { env }).exitCode).toBe(0);
+      writeFileSync(join(source, 'demo/payload.txt'), 'new bytes\n');
+      const preview = harness.run(['sync', source, '--target', 'cursor', '--dry-run', '--json'], { env });
+      expect(preview.exitCode).toBe(0);
+      expect(parseLifecycleReport(JSON.parse(preview.stdout)).plan.map((row) => ({ package: row.package, action: row.action }))).toEqual([
+        { package: 'demo', action: 'update' }, { package: 'sibling', action: 'unchanged' },
+      ]);
+      expect(preview.state.after).toEqual(preview.state.before);
+      expect(preview.stores.cursor.after).toEqual(preview.stores.cursor.before);
+      const applied = harness.run(['sync', source, '--target', 'cursor', '--json'], { env });
+      expect(applied.exitCode).toBe(0);
+      const report = parseLifecycleReport(JSON.parse(applied.stdout));
+      expect(report.outcomes.map((row) => ({ package: row.package, action: row.action, result: row.result }))).toEqual([
+        { package: 'demo', action: 'update', result: 'succeeded' }, { package: 'sibling', action: 'unchanged', result: 'succeeded' },
+      ]);
+      const files = applied.stores.cursor.after.files;
+      const payloads = Object.entries(files).filter(([path]) => path.endsWith('payload.txt')).map(([, bytes]) => bytesToText(bytes)).sort();
+      expect(payloads).toEqual(['new bytes\n', 'unchanged bytes\n']);
+    });
+  });
   test('sync dry-run prints a validated report whose outcomes cite the frozen plan', async () => {
     await withLifecycleCliHarness((harness) => {
       harness.writeAmbient({ 'sentinel.txt': 'outside the managed home\n' });
@@ -855,7 +886,7 @@ describe('public lifecycle commands', () => {
     });
   });
 
-  test('an unchanged re-sync exits 0, update and route-migrate are refused, and an ungated cursor instance is refused', async () => {
+  test('sync updates an independent pair while an unimplemented migration stays loud, and an ungated cursor instance is refused', async () => {
     await withLifecycleCliHarness((harness) => {
       harness.writeHome({ '.cursor/.keep': '' });
       const keptJson = '{"name":"kept","version":"1.0.0","description":"kept"}\n';
@@ -913,21 +944,25 @@ describe('public lifecycle commands', () => {
           stderr: result.stderr,
           mutationStarted: report.summary.mutationStarted,
           changed: report.summary.changed,
-          capability: reasons.every((code) => code === 'capability.unsupported' || code === 'capability'),
+          capability: reasons.includes('capability.unsupported'),
           succeededMutation: report.outcomes.filter((outcome) => outcome.result === 'succeeded' && (outcome.action === 'update' || outcome.action === 'route-migrate')).map((outcome) => outcome.package),
-          store: snapshotTree(cursorStore),
-          state: readFileSync(statePath, 'utf8'),
         }).toEqual({
           label,
           exitCode: 1,
           stderr: '',
-          mutationStarted: false,
-          changed: false,
+          mutationStarted: label === 'apply',
+          changed: label === 'apply',
           capability: true,
-          succeededMutation: [],
-          store: storeBeforeRefusal,
-          state: stateBeforeRefusal,
+          succeededMutation: ['kept'],
         });
+        if (label === 'dry-run') {
+          expect(snapshotTree(cursorStore)).toEqual(storeBeforeRefusal);
+          expect(readFileSync(statePath, 'utf8')).toBe(stateBeforeRefusal);
+        } else {
+          expect(Object.entries(result.stores.cursor.after.files).filter(([path]) => path.endsWith('kept/plugin.json')).map(([, bytes]) => bytesToText(bytes))).toEqual([
+            '{"name":"kept","version":"1.0.0","description":"changed"}\n',
+          ]);
+        }
       };
       refused('dry-run', ['sync', '--manifest', manifest, '--dry-run', '--json']);
       refused('apply', ['sync', '--manifest', manifest, '--json']);
