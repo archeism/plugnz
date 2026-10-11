@@ -76,3 +76,46 @@ legacy adoption remains a design/implementation blocker. Actual Claude native
 proof separately exposed malformed foreign-marketplace global-config false-green,
 which also remains a product blocker; a clean native lifecycle pass does not waive it.
 Skills are unchanged; no method-improvement claim is made.
+
+## Subsequent producer checkpoints — still unreleased
+
+The legacy-adoption design is frozen at `97b411d95cbb8895d5451f0ca75871581474cc38`
+on `finish/recovery-receipt-contract`. Both initial independent design reviews
+found a real retry contradiction: a shared attempt's legitimate aggregate-header
+change could produce a new snapshot and incorrectly conflict with retained failed
+adoption history. The correction establishes one immutable original snapshot at
+first retention and reuses it across all retries, while current generation/CAS
+binds command expectations. The combined Spec design review approves the corrected
+contract; final Standards design review is pending. This is not runtime delivery.
+
+Claude's demonstrated malformed global-marketplace envelope correction is frozen
+at `83f1b035cc1af28b9a0ba8a970f806cf9d79c28e`. Both independent axes approve its
+bounded change: Standards independently passed 55 tests / 317 assertions plus
+typecheck, and Spec independently passed the two targeted public negatives / 25
+assertions. Author Bun and packed Node gates each passed 55 tests / 317 assertions.
+Fresh actual pinned-native negative and clean-positive proof is still required.
+Full recursive native Source-schema admission remains explicitly open; common
+envelope validation does not establish complete native compatibility.
+
+The combined ZCode cleanup candidate `53e40bbdfd58692f05f18742e7f2ea8df5681ffd`
+passed its exact Bun 1.4 full gate: **743 pass, 5 skip, 0 fail, 5059 assertions,
+748 tests / 68 files, 433.45s**, followed by a passing typecheck. The owning runner
+confirmed both terminal statuses were zero on the same original process handle.
+Raw output is `/tmp/plugnz-53e-combined-full.log`, SHA256
+`61f0e3b10b82d10acd2912e68a15e3f2df84574c8708212fb81ad11527d5ce29`.
+The preceding failed full gate remains retained; three measured watchdog cases
+received explicit 20-second test budgets without assertion or production-timeout
+changes. Packed Node proof on the identical production code passed 48 tests / 534
+assertions. Neither gate settles the newly reproduced historical identity bug.
+
+A genuine `75d7bc1` public lifecycle fixture creates physical ZCode ID
+`demo@catalog`; the current producer uses a different hashed physical ID. An
+authentic old-home/current-producer reproduction reports success while retaining
+both activations. This is a verified duplicate-install bug, not a same-directory
+alias or an approved exclusion. A bounded historical CLI fixture will protect
+global zero-write refusal first; the required transactional two-ID migration and
+fresh released-native Git lifecycle proof remain unfinished. The historical
+fixture uses isolated native boundaries, not a released-harness runtime proof.
+
+No producer main integration, new publication, Personal pin advancement or real
+fleet deployment follows from these private checkpoints. Skills remain unchanged.
