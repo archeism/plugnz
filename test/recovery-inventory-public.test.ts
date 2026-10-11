@@ -17,9 +17,14 @@ test('sealed proof rejects an explicit legacy route instead of upgrading it', as
     const row = { ...attempt.journal[0]!, state: 'cleanup-pending' as const };
     expect(row.sealedOperation?.route).toBe('managed');
     expect(projectRecoveryOperationProof(scope, attempt, row).sealed).toBe(true);
-    expect(() => projectRecoveryOperationProof(scope, attempt, { ...row, route: { kind: 'legacy-unverified' } })).toThrow('open journal route differs from its sealed operation');
+    let diagnostic: string | undefined;
+    try { projectRecoveryOperationProof(scope, attempt, { ...row, route: { kind: 'legacy-unverified' } }); }
+    catch (error) { diagnostic = error instanceof Error ? error.message : String(error); }
+    expect(diagnostic).toBe('open journal route differs from its sealed operation');
     const { sealedOperation: _seal, ...unsealed } = row;
-    expect(projectRecoveryOperationProof(scope, attempt, { ...unsealed, route: { kind: 'legacy-unverified' } })).toMatchObject({ route: null, sealed: false });
+    const legacy = projectRecoveryOperationProof(scope, attempt, { ...unsealed, route: { kind: 'legacy-unverified' } });
+    expect(legacy.route).toBe(null);
+    expect(legacy.sealed).toBe(false);
   });
 }, 20_000);
 
