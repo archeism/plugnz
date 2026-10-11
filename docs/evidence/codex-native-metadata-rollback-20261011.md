@@ -53,11 +53,11 @@ No real fleet deployment or external repository write was performed.
 
 ## Remaining acceptance
 
-- Independent review of the correction and retained evidence.
-- Host-route regression exercising post-native metadata capture and rollback.
-- Fresh released-native V1/V2/V3 clean-failure rollback and foreign-change refusal
+- [x] Independent review of the correction and retained evidence.
+- [x] Host-route regression exercising post-native metadata capture and rollback.
+- [x] Fresh released-native V1/V2/V3 clean-failure rollback and foreign-change refusal
   against the exact corrected packed artifact.
-- Full combined suite and typecheck before main integration.
+- [ ] Full combined suite and typecheck with current main before integration.
 
 ## Host-route regression checkpoint
 

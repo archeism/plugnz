@@ -465,7 +465,7 @@ type CodexCatalogBinding =
 
 const CODEX_ROUTE_VERSION = '0.162.0';
 const NATIVE_UPGRADE_TIMEOUT_MS = 120_000;
-/** Codex advances the marketplace checkout itself. plgnz does not capture that git state. */
+/** The native primitive has no whole-checkout rollback; adapter compensation captures its Git state separately. */
 export const codexMarketplaceCheckoutRollback = 'unverified' as const;
 
 function nativeUpgradeTimeout(): number {
