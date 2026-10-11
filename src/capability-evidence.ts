@@ -160,6 +160,7 @@ const dcode0183Managed = createCapabilityEvidenceProfile({
   evidence: [
     'docs/evidence/dcode-native-update-0.1.83-20261009.json',
     'docs/research/dcode-session-findings-2026-10-09.md',
+    'docs/evidence/dcode-managed-lifecycle-20261011.md',
   ],
 });
 
