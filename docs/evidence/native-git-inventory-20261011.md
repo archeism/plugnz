@@ -209,3 +209,43 @@ log `/tmp/plugnz-d758-packed-node22.log`, SHA256
 
 Next full verification pins PATH to Bun 1.4.0 for both runner and fixture
 shebangs. A passing focused/packed gate does not erase the failed full attempt.
+
+The subsequent exact frozen `53e40bb` full suite, with runner and fixture PATH
+pinned to Bun 1.4.0, passed 743 tests, 5 existing skips, 0 failures, 5059
+assertions in 433.45 seconds. Typecheck passed; the runner explicitly reported
+`test_status=0 check_status=0`. Log `/tmp/plugnz-53e-combined-full.log`, SHA256
+`61f0e3b10b82d10acd2912e68a15e3f2df84574c8708212fb81ad11527d5ce29`.
+
+The pre-seal deletion RED and focused GREEN remain retained respectively at
+`/tmp/plugnz-zcode-preseal-snapshot-red.log` (SHA256
+`7a7a027ac96989ad52fbb8850ab16592ad3c18c95e04d578e89bfed38562f658`)
+and `/tmp/plugnz-zcode-preseal-snapshot-focused.log` (SHA256
+`bd743e2084ee8a49515054f3ab3f14a488eecb04120ad9266e74b9460e1c9ab6`).
+
+## Genuine historical physical identity: still RED
+
+An isolated public `sync` run from actual producer
+`75d7bc1a5db8045b6534f0c29cccd3dd0d6354a3` installed a marketplace package as
+physical Native ID `demo@catalog`, with that exact ID in the sealed operation,
+registry, cache and strict ledger. This differs from the old legacy `add` writer,
+which already used the hashed mapping; inspecting that writer alone cannot
+establish historical lifecycle identity. Current planning uses
+`demo@plgnz-3c708994a71afe18`. A two-physical-ID transaction is required here,
+not an assumed same-root alias equivalence.
+
+Current `53e40bb` dry-run incorrectly plans a successful fresh install; apply
+succeeds and leaves both old and new ledger activations and the old cache.
+This verified duplicate-ID bug blocks historical migration acceptance even
+though the ordinary full suite is green. Immediate global zero-write containment
+is the next slice, not delivery of the durable migration or adapter exclusion.
+
+The authentic old Source and home are preserved without invented ownership:
+`/tmp/plugnz-75d-zcode-authentic-source-copy-v2` and
+`/tmp/plugnz-75d-zcode-authentic-home-copy-v2`. Original capture
+`/tmp/plugnz-75d-zcode-public-capture-v2.json`, SHA256
+`46c97ef2ec7a5552a43ff0f72321df5bd9a7f6813be71d0e9982a3fb248959cd`;
+current RED `/tmp/plugnz-75d-zcode-current-probe.json`, SHA256
+`ba88d13fd5b4269c056ecd8fcd1bc338c27e921ae81740e6ee4cbc14e1d4c346`.
+Native commands used a controlled fixture, not a released-native admission.
+The prior successful capture with incomplete Source retention is also retained;
+the v2 replay preserves both Source and home before harness cleanup.
