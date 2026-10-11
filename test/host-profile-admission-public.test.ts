@@ -1,7 +1,53 @@
 import { expect, test } from 'bun:test';
-import { withLifecycleCliHarness } from './lifecycle-cli-harness';
+import { snapshotTree, withLifecycleCliHarness } from './lifecycle-cli-harness';
+import { chmodSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { parseLifecycleReport } from '../src/lifecycle-report';
 import { hermesPublicRuntime } from './hermes-runtime-fixture';
+import { initGitRepo } from './util';
+
+test('an interrupted Hermes checkout is observed without startup recovery or Python bytecode writes', async () => {
+  await withLifecycleCliHarness(harness => {
+    const runtime = harness.source('interrupted-hermes', {
+      '.git/hermes-update-pull': 'pre=0000000000000000000000000000000000000000\n',
+      'hermes_cli/__init__.py': '',
+      'hermes_cli/main.py': `from pathlib import Path\nroot = Path(__file__).resolve().parents[1]\n# Model the documented startup recovery boundary before argument handling.\n(root / '.git/hermes-update-pull').write_text('recovered')\n(root / 'recovery-sentinel').write_text('startup ran')\ndef main():\n    print('Hermes Agent vfixture (test)')\n    print('Install directory: ' + str(root))\n    return 0\n`,
+      '.venv/.keep': '',
+    });
+    initGitRepo(runtime, { 'tracked-sentinel': 'unchanged\n' });
+    const launcher = join(runtime, 'hermes');
+    const bootstrap = `import os, re, sys\nsys.path.insert(0, ${JSON.stringify(runtime)})\nfrom hermes_cli.main import main\nsys.exit(main())`;
+    writeFileSync(launcher, `#!/bin/sh\nexec /usr/bin/python3 -I -c '${bootstrap}' "$@"\n`);
+    chmodSync(launcher, 0o755);
+    harness.writeHome({ '.hermes/config.yaml': 'model: preserved\n' });
+    const source = harness.source('plugin', { 'plugin.json': '{"name":"demo","version":"1.0.0"}\n' });
+    const before = snapshotTree(runtime);
+    const result = harness.run(['add', source, '--target', 'hermes', '--json'], {
+      env: { OPEN_PLUGIN_HERMES_BIN: launcher },
+    });
+    expect(result.exitCode).toBe(1);
+    expect(parseLifecycleReport(JSON.parse(result.stdout)).outcomes[0]?.reason?.code).toBe('capability.unverified');
+    expect(snapshotTree(runtime)).toEqual(before);
+    expect(result.stores.hermes.after).toEqual(result.stores.hermes.before);
+    expect(result.state.after).toEqual(result.state.before);
+  });
+});
+
+test('an unrecognized Hermes launcher reports its missing proof without executing it', async () => {
+  await withLifecycleCliHarness(harness => {
+    harness.writeHome({ '.hermes/config.yaml': 'model: preserved\n' });
+    const source = harness.source('plugin', { 'plugin.json': '{"name":"demo","version":"1.0.0"}\n' });
+    const hermes = harness.fakeNative('hermes', [{ args: ['--version'], stdout: 'Hermes Agent vfixture\n' }]);
+    const result = harness.run(['add', source, '--target', 'hermes', '--json']);
+    expect(result.exitCode).toBe(1);
+    const reason = parseLifecycleReport(JSON.parse(result.stdout)).outcomes[0]?.reason;
+    expect(reason?.code).toBe('capability.unverified');
+    expect(reason?.diagnostic).toContain('launcher source binding is unverified');
+    expect(hermes.invocations()).toEqual([]);
+    expect(result.stores.hermes.after).toEqual(result.stores.hermes.before);
+    expect(result.state.after).toEqual(result.state.before);
+  });
+});
 
 test('Hermes admits evidenced clean revisions and refuses unknown or locally modified revisions', async () => {
   for (const [revision, dirty, expectedCode] of [

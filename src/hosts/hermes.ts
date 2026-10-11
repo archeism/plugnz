@@ -6,9 +6,8 @@
  * only when their native name is in `plugins.enabled` and absent from
  * `plugins.disabled`.
  */
-import { existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
-import { tmpdir } from 'node:os';
 import type { HostReader, InstalledPlugin, McpServerEntry } from '../host';
 import { hermesConfigPath, hermesRoot } from '../paths';
 import { collectPluginServers } from '../mcp';
@@ -22,50 +21,12 @@ import {
 } from '../target-profile';
 
 import { yamlParse, yamlStringify } from '../yaml';
-import { spawnSync, which } from '../runtime';
-import type { TargetVersionObservation } from '../lifecycle-host';
 
 /** Exact source revisions with isolated native loader and input-queue evidence. */
 export const hermesProvenManagedRevisions = [
   'c0d7294769a38c17ceae51d8f7995e66e1dcae27',
   'dce1e9b37581dd62e480a9064dc04a709c2940d3',
 ] as const;
-
-/** Bind the executable's own source root to clean HEAD, never to a profile config. */
-export function observeHermesRevision(): TargetVersionObservation {
-  const binary = process.env['OPEN_PLUGIN_HERMES_BIN'] ?? which('hermes');
-  if (!binary || !existsSync(binary)) return { kind: 'unknown' };
-  const scratch = mkdtempSync(join(tmpdir(), 'plgnz-hermes-version-'));
-  try {
-    // Both evidenced releases honor this opt-out before passive update probes.
-    writeFileSync(join(scratch, 'config.yaml'), 'updates:\n  check: false\n');
-    const env = { ...process.env, HOME: scratch, HERMES_HOME: scratch,
-      XDG_CONFIG_HOME: scratch, XDG_DATA_HOME: scratch, XDG_CACHE_HOME: scratch,
-      XDG_STATE_HOME: scratch, XDG_RUNTIME_DIR: scratch,
-      GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0' };
-    for (const key of ['HERMES_PROFILE', 'HERMES_CONFIG_PATH', 'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE']) delete (env as Record<string, string | undefined>)[key];
-    const output = (args: string[]): string | undefined => {
-      const result = spawnSync(args, { env, stdout: 'pipe', stderr: 'pipe', timeout: 10_000 });
-      return result.exitCode === 0 ? new TextDecoder().decode(result.stdout) : undefined;
-    };
-    const version = output([binary, '--version']);
-    if (version === undefined || !/^Hermes Agent v[^\n]+\n/u.test(version)) return { kind: 'unparseable' };
-    const sourceRoot = /^Install directory: (.+)$/mu.exec(version)?.[1];
-    if (sourceRoot === undefined || !isAbsolute(sourceRoot) || !existsSync(sourceRoot)) return { kind: 'unparseable' };
-    const git = which('git');
-    if (git === null) return { kind: 'unknown' };
-    const identity = output([git, '-C', sourceRoot, 'rev-parse', '--show-toplevel', 'HEAD']);
-    const lines = identity?.trim().split('\n');
-    if (lines?.length !== 2 || lines[0] === undefined || lines[1] === undefined || !/^[a-f0-9]{40}$/u.test(lines[1])) return { kind: 'unknown' };
-    if (realpathSync(lines[0]) !== realpathSync(sourceRoot)) return { kind: 'unparseable' };
-    const dirty = output([git, '-C', sourceRoot, 'status', '--porcelain=v1', '--untracked-files=no']);
-    if (dirty === undefined) return { kind: 'unknown' };
-    const revision = dirty.trim() === '' ? lines[1] : `${lines[1]}+dirty`;
-    return { kind: 'detected', version: revision, probeId: `hermes-cli-git-${revision}` };
-  } catch { return { kind: 'unknown' }; }
-  finally { rmSync(scratch, { recursive: true, force: true }); }
-}
-
 
 export const hermesTargetProfile: TargetProfile<'hermes'> = {
   kind: 'hermes',

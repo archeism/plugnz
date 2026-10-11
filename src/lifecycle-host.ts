@@ -36,8 +36,8 @@ export interface LifecycleTargetIdentity {
 /** Live target version evidence. Static consumer-profile metadata is not a target probe. */
 export type TargetVersionObservation =
   | { readonly kind: 'detected'; readonly version: string; readonly probeId: string }
-  | { readonly kind: 'unknown' }
-  | { readonly kind: 'unparseable' };
+  | { readonly kind: 'unknown'; readonly diagnostic?: string }
+  | { readonly kind: 'unparseable'; readonly diagnostic?: string };
 
 export interface ContentRootObservation {
   readonly label: string;

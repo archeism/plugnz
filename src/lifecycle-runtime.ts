@@ -254,7 +254,9 @@ export function selectLifecycleRoute<Operation extends CapabilityOperation>(
       return selectedDecision(adapterId, target, request, detectedVersion, 'managed', managedAdmission);
     }
 
-    const gaps = dedupeGaps([...nativeGaps, ...managedAdmission.gaps]);
+    const versionDiagnostic = request.version.kind === 'detected' ? undefined : request.version.diagnostic;
+    const gaps = dedupeGaps([...nativeGaps, ...managedAdmission.gaps].map(gap => versionDiagnostic === undefined
+      ? gap : { ...gap, diagnostic: `${gap.diagnostic}. ${versionDiagnostic}` }));
     if (gaps.length === 0) invariant('a refused route decision must retain at least one capability gap');
     return deepFreeze({
       kind: 'capability-gap',
@@ -1495,7 +1497,9 @@ function normalizeVersionObservation(input: TargetVersionObservation): TargetVer
     probeId: stableCopy(input.probeId, 'version probe id'),
   });
   if (input.kind !== 'unknown' && input.kind !== 'unparseable') invariant('target version observation is invalid');
-  return Object.freeze({ kind: input.kind });
+  return Object.freeze({ kind: input.kind, ...(input.diagnostic === undefined ? {} : {
+    diagnostic: stableCopy(input.diagnostic, 'version probe diagnostic'),
+  }) });
 }
 
 function frozenTarget(input: LifecycleTargetIdentity): LifecycleTargetIdentity {

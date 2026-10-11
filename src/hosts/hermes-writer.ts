@@ -1,6 +1,6 @@
 /** Hermes portable package plus native discovery/command companion lifecycle. */
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createCapabilityEvidenceProfile } from '../capability-evidence';
 import { projectPluginForHermes } from '../conversion';
@@ -24,13 +24,14 @@ import type {
   NativeMutationScopeRequest,
   NativeProjectionRequest,
   RetentionObservation,
+  TargetVersionObservation,
 } from '../lifecycle-host';
 import { createLifecycleHostAdapter, createTargetInventoryObservation } from '../lifecycle-runtime';
 import { hermesConfigPath, hermesRoot } from '../paths';
-import { CryptoHasher } from '../runtime';
+import { CryptoHasher, spawnSync, which } from '../runtime';
 import type { PluginSource, ResolvedSource } from '../source';
 import { PACKAGE_SEMANTICS, type PackageSemantic } from '../semantic-inventory';
-import { hermes, hermesInstanceIdentity, hermesPluginsDir, hermesProvenManagedRevisions, listHermesInstance, observeHermesRevision } from './hermes';
+import { hermes, hermesInstanceIdentity, hermesPluginsDir, hermesProvenManagedRevisions, listHermesInstance } from './hermes';
 import { pinPluginMcpFiles } from '../mcp-write';
 
 import { yamlParse, yamlStringify } from '../yaml';
@@ -247,6 +248,133 @@ function nativePluginId(logicalId: string): string {
 function matches(marker: string, id: string, ownership: string): boolean { return marker === id || marker === ownership; }
 
 const EFFECTIVE = { requirement: 'none' as const, status: 'effective' as const };
+/** Parse only literal POSIX launcher arguments; never expand or execute them. */
+function launcherWords(body: string): string[] | undefined {
+  const words: string[] = [];
+  let word = '', active = false, quote = '';
+  for (let at = 0; at < body.length; at++) {
+    const ch = body[at]!;
+    if (quote === "'") {
+      if (ch === "'") quote = ''; else word += ch;
+    } else if (quote === '"') {
+      if (ch === '"') quote = '';
+      else if (ch === '\\') { if (++at >= body.length) return undefined; word += body[at]; }
+      else if (ch === '$' && !(word === '' && body.slice(at, at + 3) === '$@"')) return undefined;
+      else if (ch === '`') return undefined;
+      else word += ch;
+    } else if (ch === "'" || ch === '"') { quote = ch; active = true; }
+    else if (/\s/u.test(ch)) { if (active) { words.push(word); word = ''; active = false; } }
+    else if (ch === '\\') { if (++at >= body.length) return undefined; word += body[at]; active = true; }
+    else if (/[;$`|&<>]/u.test(ch)) return undefined;
+    else { word += ch; active = true; }
+  }
+  if (quote !== '') return undefined;
+  if (active) words.push(word);
+  return words;
+}
+
+function literalPythonPath(literal: string): string | undefined {
+  if (literal.startsWith('"')) {
+    try { const value: unknown = JSON.parse(literal); return typeof value === 'string' ? value : undefined; }
+    catch { return undefined; }
+  }
+  if (!/^'(?:[^'\\]|\\['\\])*'$/u.test(literal)) return undefined;
+  return literal.slice(1, -1).replace(/\\(['\\])/gu, '$1');
+}
+
+/** Read the selected launcher's actual import binding; mere comments/markers do not qualify. */
+function hermesExecutableSource(binary: string, depth = 0): string | undefined {
+  if (depth > 4 || !isAbsolute(binary) || !existsSync(binary)) return undefined;
+  const executable = realpathSync(binary);
+  if (!statSync(executable).isFile()) return undefined;
+  const text = readFileSync(executable, 'utf8');
+  if (text.startsWith('#!/bin/sh\nexec ')) {
+    const args = launcherWords(text.slice('#!/bin/sh\nexec '.length));
+    if (args?.length === 2 && args[1] === '$@') return hermesExecutableSource(args[0]!, depth + 1);
+    if (args?.length !== 5 || args[1] !== '-I' || args[2] !== '-c' || args[4] !== '$@'
+      || !isAbsolute(args[0]!) || !/^python(?:\d+(?:\.\d+)*)?$/u.test(basename(args[0]!))
+      || !existsSync(args[0]!)) return undefined;
+    const code = args[3]!;
+    // Native _launchers._launcher_script starts here and invokes this entry point.
+    if (!code.startsWith('import os, re, sys\n')
+      || !/\nfrom hermes_cli\.main import main\n/u.test(code)
+      || !/\nsys\.exit\(main\(\)\)\s*$/u.test(code)) return undefined;
+    const bindings = [...code.matchAll(/^sys\.path\.insert\(0, ('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")\)$/gmu)];
+    if (bindings.length !== 1) return undefined;
+    const root = literalPythonPath(bindings[0]![1]!);
+    return root !== undefined && isAbsolute(root) && existsSync(join(root, 'hermes_cli', 'main.py'))
+      && realpathSync(join(root, 'hermes_cli', 'main.py')).startsWith(`${realpathSync(root)}/`)
+      ? realpathSync(root) : undefined;
+  }
+  // Python console entry points installed editably by pip/uv bind through local
+  // distribution metadata. Do not run Python, import a finder, or evaluate .pth.
+  const interpreter = /^#!([^\n]+)\n/u.exec(text)?.[1];
+  if (interpreter === undefined || !isAbsolute(interpreter) || !existsSync(interpreter)
+    || !/^python(?:\d+(?:\.\d+)*)?$/u.test(basename(interpreter))
+    || !/^from hermes_cli\.main import main$/mu.test(text)
+    || !/sys\.exit\(main\(\)\)/u.test(text)) return undefined;
+  const venv = dirname(dirname(executable));
+  if (dirname(interpreter) !== join(venv, 'bin') || !existsSync(join(venv, 'pyvenv.cfg'))) return undefined;
+  const lib = join(venv, 'lib');
+  if (!existsSync(lib)) return undefined;
+  const roots: string[] = [];
+  for (const python of readdirSync(lib).filter(name => /^python\d+\.\d+$/u.test(name))) {
+    const packages = join(lib, python, 'site-packages');
+    if (!existsSync(packages)) continue;
+    for (const name of readdirSync(packages).filter(name => /^hermes_agent-[^/]+\.dist-info$/u.test(name))) {
+      const distribution = join(packages, name);
+      const metadata = join(distribution, 'direct_url.json');
+      const entry = join(distribution, 'entry_points.txt');
+      if (!existsSync(metadata) || !existsSync(entry) || !/^hermes\s*=\s*hermes_cli\.main:main$/mu.test(readFileSync(entry, 'utf8'))) continue;
+      const direct: unknown = JSON.parse(readFileSync(metadata, 'utf8'));
+      if (typeof direct !== 'object' || direct === null || !('url' in direct) || typeof direct.url !== 'string'
+        || !('dir_info' in direct) || typeof direct.dir_info !== 'object' || direct.dir_info === null
+        || !('editable' in direct.dir_info) || direct.dir_info.editable !== true || !direct.url.startsWith('file:///')) continue;
+      const root = decodeURIComponent(direct.url.slice('file://'.length));
+      if (!isAbsolute(root) || !existsSync(join(root, 'hermes_cli', 'main.py'))) continue;
+      const binding = readdirSync(packages).some(name => {
+        if (!/^__editable__.*hermes_agent.*\.pth$/u.test(name)) return false;
+        const pth = readFileSync(join(packages, name), 'utf8').trim();
+        if (pth === root) return true;
+        const finder = /^import ([a-zA-Z0-9_]+); \1\.install\(\)$/u.exec(pth)?.[1];
+        if (finder === undefined || !existsSync(join(packages, `${finder}.py`))) return false;
+        const mapping = /^MAPPING(?:\s*:\s*dict\[str,\s*str\])?\s*=\s*\{([^\n]*)\}$/mu.exec(readFileSync(join(packages, `${finder}.py`), 'utf8'))?.[1];
+        if (mapping === undefined) return false;
+        const hermes = /['"]hermes_cli['"]:\s*('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")/u.exec(mapping)?.[1];
+        return hermes !== undefined && literalPythonPath(hermes) === join(root, 'hermes_cli');
+      });
+      if (binding && realpathSync(join(root, 'hermes_cli', 'main.py')).startsWith(`${realpathSync(root)}/`)) roots.push(realpathSync(root));
+    }
+  }
+  return roots.length === 1 ? roots[0] : undefined;
+}
+
+/** Observe provenance without launching Hermes: startup may repair its checkout. */
+function observeHermesRevision(): TargetVersionObservation {
+  const binary = process.env['OPEN_PLUGIN_HERMES_BIN'] ?? which('hermes');
+  if (!binary || !existsSync(binary)) return { kind: 'unknown', diagnostic: 'Select an existing Hermes launcher with OPEN_PLUGIN_HERMES_BIN; a profile config does not identify its runtime' };
+  try {
+    const root = hermesExecutableSource(binary);
+    if (root === undefined) return { kind: 'unparseable', diagnostic: 'Hermes launcher source binding is unverified; use a native isolated-Python launcher or editable pip/uv console entry point with matching local metadata (docs/hosts/hermes.md). Hermes was not executed' };
+    const git = which('git');
+    if (git === null) return { kind: 'unknown' };
+    const env = { ...process.env, GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0',
+      GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' };
+    for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE']) delete (env as Record<string, string | undefined>)[key];
+    const output = (args: string[]): string | undefined => {
+      const result = spawnSync([git, '-C', root, ...args], { env, stdout: 'pipe', stderr: 'pipe', timeout: 10_000 });
+      return result.exitCode === 0 ? new TextDecoder().decode(result.stdout) : undefined;
+    };
+    const lines = output(['rev-parse', '--show-toplevel', 'HEAD'])?.trim().split('\n');
+    if (lines?.length !== 2 || lines[0] === undefined || lines[1] === undefined || !/^[a-f0-9]{40}$/u.test(lines[1])) return { kind: 'unknown' };
+    if (realpathSync(lines[0]) !== root) return { kind: 'unparseable' };
+    const dirty = output(['-c', 'core.fsmonitor=false', 'status', '--porcelain=v1', '--untracked-files=no']);
+    if (dirty === undefined) return { kind: 'unknown' };
+    const revision = dirty.trim() === '' ? lines[1] : `${lines[1]}+dirty`;
+    return { kind: 'detected', version: revision, probeId: `hermes-launcher-git-${revision}` };
+  } catch { return { kind: 'unknown' }; }
+}
+
 const HERMES_SUPPORTED = new Set<PackageSemantic>([
   'ordinary-skills', 'mcp', 'commands', 'model-invocation-control', 'auto-update-control', 'resources',
   'retirement', 'retention-safety', 'readback', 'rollback', 'activation-reload', 'reversible-disable',

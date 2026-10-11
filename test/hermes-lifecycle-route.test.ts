@@ -391,7 +391,7 @@ describe('Hermes managed lifecycle route', () => {
     const detected = await hermesLifecycle.probeVersion(target);
     expect(detected.kind).toBe('detected');
     expect(detected.kind === 'detected' ? detected.version : '').toBe(HERMES_FIXTURE_REVISION);
-    expect(detected.kind === 'detected' ? detected.probeId : '').toBe(`hermes-cli-git-${HERMES_FIXTURE_REVISION}`);
+    expect(detected.kind === 'detected' ? detected.probeId : '').toBe(`hermes-launcher-git-${HERMES_FIXTURE_REVISION}`);
     writeFileSync(join(root, 'config.yaml'), 'hello\n');
     const refused = await hermesLifecycle.probeVersion(target);
     expect(refused.kind).toBe('unparseable');
