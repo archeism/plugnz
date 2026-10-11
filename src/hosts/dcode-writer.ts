@@ -12,7 +12,7 @@ import { inventoryPackageSemantics } from '../semantic-inventory';
 import { capabilityEvidenceProfiles, createCapabilityEvidenceProfile } from '../capability-evidence';
 import { fingerprintTree } from '../fingerprint';
 import { createLifecycleHostAdapter, createTargetInventoryObservation } from '../lifecycle-runtime';
-import type { LifecycleHostDefinition, LifecycleReadbackData, LifecycleTargetIdentity, TargetInstallationData } from '../lifecycle-host';
+import type { LifecycleHostDefinition, LifecycleReadbackData, LifecycleTargetIdentity, NativeProjectionRequest, TargetInstallationData } from '../lifecycle-host';
 declare const TextDecoder: { new(): { decode(input: Uint8Array): string } };
 
 const MARKER = '.plgnz-install.json';
@@ -154,6 +154,26 @@ function captureDcodeRollback(binding: DcodeBinding, attemptId: string, operatio
   return dir;
 }
 
+async function lockPreparation(binding: DcodeBinding, attemptId: string, operationId: string, expectedObservationId: string): Promise<void> {
+  await acquireNativeLock(attemptId, operationId);
+  const observed = createTargetInventoryObservation('dcode', { target: binding.target, installations: observeDcodeTarget(binding.target) });
+  if (observed.observationId !== expectedObservationId) throw new Error('dcode native inventory changed before locked preparation; refusing stale rollback authority');
+}
+
+function preflightAdoption(request: NativeProjectionRequest): void {
+  if (request.operation !== 'install' && request.operation !== 'update') return;
+  const snapshot = request.snapshot;
+  const installed = request.targetObservation.installations.find(item => item.nativeId === snapshot.nativeId);
+  if (installed?.ownership.kind !== 'unmanaged' || installed.presence !== 'present') return;
+  const path = installed.contentRoots[0]?.path;
+  if (path === undefined) throw new Error('dcode unmanaged adoption has no native root');
+  const manifest = declaredManifest(snapshot.packageRoot, snapshot.packageName);
+  // Adoption authority is checked read-only during the global plan, not first
+  // discovered after other hosts or packages have already activated.
+  assessPrior(object(readRegistry(dcodeRegistryFile()).plugins, 'registry plugins')[snapshot.nativeId], snapshot.nativeId, snapshot.nativeGit?.locator ?? `local:${snapshot.scopeId}`, true, snapshot.packageName, manifest.version, snapshot.packageRoot);
+  if (fingerprintTree(path) !== installed.installedFingerprint) throw new Error('dcode unmanaged adoption changed during preflight');
+}
+
 function setDcodeRow(nativeId: string, row: unknown, enabled: boolean | null): void {
   assertManagedPath(dcodeRegistryFile()); assertManagedPath(dcodeEnablementFile());
   const registry = readRegistry(dcodeRegistryFile()), enablement = readEnablement(dcodeEnablementFile());
@@ -168,7 +188,7 @@ const dcodeDefinition: LifecycleHostDefinition = {
   probeVersion: async () => probeLifecycleVersion(),
   observeTarget: async target => ({ target, installations: observeDcodeTarget(target) }),
   observeNativeMutationScope: async () => ({ kind: 'unavailable' }),
-  observeNativeProjection: async () => ({ kind: 'requires-managed', reasonId: 'dcode-frozen-projection-and-updater-isolation' }),
+  observeNativeProjection: async request => { preflightAdoption(request); return { kind: 'requires-managed', reasonId: 'dcode-frozen-projection-and-updater-isolation' }; },
   revalidateTargetPrecondition: async handle => {
     await acquireNativeLock(handle.attemptId, handle.operationId);
     return { version: probeDcodeVersion(), targetObservationId: createTargetInventoryObservation('dcode', { target: handle.target, installations: observeDcodeTarget(handle.target) }).observationId };
@@ -210,6 +230,7 @@ const dcodeDefinition: LifecycleHostDefinition = {
     return [...found];
   },
   captureActivationPreparation: async (projection, fingerprint) => {
+    await lockPreparation(projection, projection.attemptId, projection.operationId, projection.targetObservationId);
     const prior = dcodeLifecycleReadback(projection);
     const target = lifecycleSlot(projection.nativeId, fingerprint); assertCachePath(target);
     const installed = observeDcodeTarget(projection.target).find(item => item.nativeId === projection.nativeId);
@@ -227,8 +248,16 @@ const dcodeDefinition: LifecycleHostDefinition = {
     writeFileSync(join(rollbackReference, 'next-path.json'), JSON.stringify({ target }));
     return { prior, expected: { ...prior, route: 'managed', presence: 'present', enablement: 'enabled', activation: 'active', transition: { requirement: 'restart', status: 'effective' }, installedFingerprint: fingerprint, contentRoots: [{ label: 'managed', path: target, fingerprint }] }, rollbackReference, rollbackCoverageOperationIds: projection.affectedOperationIds };
   },
-  captureDisablePreparation: async request => ({ prior: dcodeLifecycleReadback({ adapterId: 'dcode', ...request.activation }), rollbackReference: captureDcodeRollback({ adapterId: 'dcode', ...request.activation }, request.attemptId, request.operationId), rollbackCoverageOperationIds: request.selection.affectedOperationIds, transition: { requirement: 'restart', status: 'effective' } }),
-  captureRetirementPreparation: async request => ({ prior: dcodeLifecycleReadback({ adapterId: 'dcode', ...request.activation }), rollbackReference: captureDcodeRollback({ adapterId: 'dcode', ...request.activation }, request.attemptId, request.operationId), rollbackCoverageOperationIds: request.selection.affectedOperationIds, transition: { requirement: 'none', status: 'effective' } }),
+  captureDisablePreparation: async request => {
+    const binding = { adapterId: 'dcode', ...request.activation };
+    await lockPreparation(binding, request.attemptId, request.operationId, request.selection.targetObservationId);
+    return { prior: dcodeLifecycleReadback(binding), rollbackReference: captureDcodeRollback(binding, request.attemptId, request.operationId), rollbackCoverageOperationIds: request.selection.affectedOperationIds, transition: { requirement: 'restart', status: 'effective' } };
+  },
+  captureRetirementPreparation: async request => {
+    const binding = { adapterId: 'dcode', ...request.activation };
+    await lockPreparation(binding, request.attemptId, request.operationId, request.selection.targetObservationId);
+    return { prior: dcodeLifecycleReadback(binding), rollbackReference: captureDcodeRollback(binding, request.attemptId, request.operationId), rollbackCoverageOperationIds: request.selection.affectedOperationIds, transition: { requirement: 'none', status: 'effective' } };
+  },
   apply: async prepared => {
     await acquireNativeLock(prepared.handle.attemptId, prepared.handle.operationId);
     const target = lifecycleSlot(prepared.handle.nativeId, prepared.handle.projectedFingerprint!); assertCachePath(target);
