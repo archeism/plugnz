@@ -81,6 +81,11 @@ async function executeFrozen(
         return refusalReport(plan, createLifecycleReason('internal', 'internal.invariant', 'retained frozen source bytes drifted before apply'));
       }
     }
+    for (const row of plan.operations) {
+      if (row.completedRetirement === undefined) continue;
+      const checked = await readbackCompletedRetirement(plan, row.operation, row.completedRetirement, hosts);
+      if (checked.reason !== null) return refusalReport(plan, checked.reason, true);
+    }
   } catch (error) {
     return refusalReport(plan, thrownReason(error));
   }
@@ -98,7 +103,8 @@ async function executeFrozen(
         continue;
       }
     }
-    const result = await runOperation(plan, row.operation, hosts, ledger);
+    const result = row.completedRetirement === undefined ? await runOperation(plan, row.operation, hosts, ledger)
+      : await readbackCompletedRetirement(plan, row.operation, row.completedRetirement, hosts);
     outcomes.push(result.outcome);
     if (result.stop && result.reason !== null) stopped = result.reason;
   }
@@ -109,6 +115,24 @@ async function executeFrozen(
     outcomes,
     summary: summaryFor(outcomes),
   }));
+}
+
+async function readbackCompletedRetirement(plan: FrozenPlan, operation: LifecyclePlanOperation, proof: import('./state').TombstoneRecord, hosts: readonly PlannerHost[]): Promise<OperationStep> {
+  try {
+    const recorded = readLifecycleState().state.tombstones.find(row => row.id === proof.id);
+    if (recorded === undefined || JSON.stringify(recorded) !== JSON.stringify(proof)
+      || proof.scopeId !== operation.scope.id || proof.packageId !== operation.package || proof.nativeId !== operation.nativeId
+      || proof.route.kind !== operation.route) throw new Error('completed retirement retained ownership proof changed');
+    const host = hosts.find(candidate => candidate.kinds.includes(operation.scope.target.kind));
+    if (host === undefined) throw new Error('completed retirement native reader is unavailable');
+    const observation = await host.adapter.observeTarget(lifecycleTarget(plan, operation));
+    const live = observation.installations.find(row => row.nativeId === operation.nativeId);
+    if (live !== undefined && (live.presence !== 'absent' || live.activation !== 'inactive')) {
+      throw new Error(`retired native identity '${operation.nativeId}' reappeared or its absence is unverified; refusing foreign mutation`);
+    }
+    const step = succeeded(operation, false);
+    return { ...step, outcome: { ...step.outcome, resourceState: 'absent', activationState: 'inactive' } };
+  } catch (error) { return stop(operation, createLifecycleReason('runtime', 'runtime.operation-failed', unknownErrorDiagnostic(error))); }
 }
 
 async function runOperation(
@@ -1248,8 +1272,11 @@ function filesystemDenial(error: unknown): boolean {
   return code === 'EACCES' || code === 'EPERM' || code === 'EROFS' || code === 'ENOSPC';
 }
 
-function refusalReport(plan: FrozenPlan, reason: LifecycleReason): ExecuteLifecycleResult {
-  const [first, ...rest] = plan.operations;
+function refusalReport(plan: FrozenPlan, reason: LifecycleReason, globalNotAttempted = false): ExecuteLifecycleResult {
+  const normalized = (operation: LifecyclePlanOperation): LifecyclePlanOperation => globalNotAttempted && operation.action === 'retain-prior'
+    ? { ...operation, action: 'not-attempted', route: 'none' } : operation;
+  const operations = plan.operations.map(row => ({ ...row, operation: normalized(row.operation) }));
+  const [first, ...rest] = operations;
   if (first === undefined) {
     return finish(parseLifecycleReport({
       schemaVersion: 1,
@@ -1268,13 +1295,14 @@ function refusalReport(plan: FrozenPlan, reason: LifecycleReason): ExecuteLifecy
       },
     }));
   }
-  const outcomes = [stop(first.operation, reason).outcome, ...rest.map((row) => notAttempted(row.operation, reason))];
+  const outcomes = globalNotAttempted ? operations.map(row => notAttempted(row.operation, reason))
+    : [stop(first.operation, reason).outcome, ...rest.map((row) => notAttempted(row.operation, reason))];
   return finish(parseLifecycleReport({
     schemaVersion: 1,
     command: plan.report.command,
-    plan: plan.report.plan,
+    plan: plan.report.plan.map(normalized),
     outcomes,
-    summary: summaryFor(outcomes),
+    summary: { ...summaryFor(outcomes), ...(globalNotAttempted ? { reason, failureCategory: reason.category } : {}) },
   }));
 }
 

@@ -87,6 +87,8 @@ export type LifecyclePlan =
       readonly operations: readonly {
         readonly operation: LifecyclePlanOperation;
         readonly reason: LifecycleReason | null;
+      /** Exact retained ownership proof for a current retirement already committed by recovery. */
+      readonly completedRetirement?: import('./state').TombstoneRecord;
         readonly journal:
           | { readonly kind: 'none' }
           | {

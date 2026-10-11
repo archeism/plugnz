@@ -1,7 +1,8 @@
 import { fingerprintTree } from './fingerprint';
 import { unknownErrorDiagnostic } from './error-diagnostic';
 import { hydrateDurableLifecycleOperation } from './lifecycle-runtime';
-import { createLifecycleReason, type LifecycleReason, type LifecyclePlanOperation, type LifecycleOperationOutcome } from './lifecycle-report';
+import { createLifecycleReason, type LifecycleReason, type LifecycleRecoveryReceipt, type LifecycleResourceState, type LifecycleActivationState } from './lifecycle-report';
+import { projectRecoveryOperationProof } from './recovery-proof';
 import type { LifecyclePlan, PlannerHost } from './planner';
 import { readLifecycleState, type JournalEntryRecord, type LifecycleStateV2 } from './state';
 import { writeLifecycleState } from './state-write';
@@ -9,29 +10,35 @@ import { canonicalTargetContextBytes } from './target-identity';
 
 const OPEN = new Set(['pending', 'applying', 'applied', 'readback-verified', 'rollback', 'cleanup-pending']);
 /** All Sources have already resolved and frozen before this write-capable boundary. */
-export async function recoverLifecycleJournals(plan: Extract<LifecyclePlan, { kind: 'frozen' }>, hosts: readonly PlannerHost[], now: string): Promise<{ reason: LifecycleReason; operation: LifecyclePlanOperation | null; changed: boolean; settled: readonly LifecycleOperationOutcome[] } | boolean> {
+export async function recoverLifecycleJournals(plan: Extract<LifecyclePlan, { kind: 'frozen' }>, hosts: readonly PlannerHost[], now: string): Promise<{ reason: LifecycleReason | null; receipts: readonly LifecycleRecoveryReceipt[] }> {
   let state = readLifecycleState().state;
   const scopeIds = new Set(plan.scopes.map(row => row.scope.id));
-  const journals = state.attempts.filter(attempt => attempt.command !== 'legacy-recovery').flatMap(attempt => attempt.journal.filter(row => scopeIds.has(row.scopeId) && OPEN.has(row.state)).map(row => ({ attempt, row })));
-  if (journals.length === 0) return false;
+  const journals = state.attempts.flatMap(attempt => attempt.journal.filter(row => scopeIds.has(row.scopeId) && OPEN.has(row.state)).map(row => ({ attempt, row })));
+  const notAttempted = createLifecycleReason('runtime', 'runtime.operation-failed', 'historical recovery not attempted because an earlier recovery remains unresolved');
+  const receipts: LifecycleRecoveryReceipt[] = journals.map(({ attempt, row }) => ({
+    original: projectRecoveryOperationProof(state.scopes.find(scope => scope.id === row.scopeId)!, attempt, row),
+    status: 'not-attempted', settlement: null, finalJournalState: row.state,
+    resourceState: 'unknown', activationState: 'unknown', mutationStarted: false, changed: false, readbackVerified: false, reason: notAttempted,
+  }));
+  if (journals.length === 0) return { reason: null, receipts };
   const incompatible = journals.find(({ attempt }) => attempt.command !== plan.report.command.name);
   if (incompatible !== undefined) return {
-    operation: null, changed: false, settled: [],
+    receipts,
     reason: createLifecycleReason('internal', 'internal.invariant', `pending operation '${incompatible.row.operationId}' belongs to '${incompatible.attempt.command}' attempt '${incompatible.attempt.id}'; cross-verb recovery is unverified. Retry the original '${incompatible.attempt.command}' command for scope '${incompatible.row.scopeId}' before '${plan.report.command.name}'. Pending proof and native state were retained.`),
   };
   let pending = journals[0]!.row;
+  let pendingIndex = 0;
   let changed = false;
-  const settled: LifecycleOperationOutcome[] = [];
-  const operationFor = (row: JournalEntryRecord): LifecyclePlanOperation => ({
-    operationId: row.operationId, scope: plan.scopes.find(scope => scope.scope.id === row.scopeId)!.scope,
-    sourceSnapshotId: null, package: row.packageId ?? 'unknown', nativeId: row.nativeId ?? null,
-    coverage: row.action === 'retire-orphan' || row.action === 'remove' ? 'retirement' : 'desired-pair',
-    action: row.action === 'remove' ? 'retire-orphan' : row.action, route: row.route?.kind === 'native' ? 'native' : 'managed',
-  });
+  let mutationStarted = false;
+  let settlement: 'commit' | 'rollback' | null = null;
+  let readbackVerified = false;
+  let resourceState: LifecycleResourceState = 'unknown';
+  let activationState: LifecycleActivationState = 'unknown';
   try {
     for (const source of plan.frozenSources.values()) if (fingerprintTree(source.snapshotDir) !== source.snapshot.fingerprint) throw new Error('retained Source drifted before recovery');
     // Hydrate every handle before the first recovery write, including a bad last scope.
-    const prepared = journals.map(({ attempt, row }) => {
+    const prepared = journals.map(({ attempt, row }, index) => {
+      pending = row; pendingIndex = index;
       if (row.state === 'pending' && row.sealedOperation === undefined) return { row, attemptId: attempt.id, handle: null, host: null };
       if (row.sealedOperation === undefined) throw new Error(`journal '${row.operationId}' has no durable sealed operation; recovery remains unverified`);
       const handle = hydrateDurableLifecycleOperation(row.sealedOperation);
@@ -68,9 +75,12 @@ export async function recoverLifecycleJournals(plan: Extract<LifecyclePlan, { ki
       });
       writeLifecycleState(next, { globalPreflight: 'succeeded' }); state = next;
     };
-    for (const { row, attemptId, handle, host } of prepared) {
+    for (const [index, { row, attemptId, handle, host }] of prepared.entries()) {
       pending = row;
+      pendingIndex = index;
       changed = false;
+      mutationStarted = false; settlement = null; readbackVerified = false;
+      resourceState = 'unknown'; activationState = 'unknown';
       if (handle === null || host === null) {
         if (readLifecycleState().state.stateGeneration !== state.stateGeneration) throw new Error('recovery ledger changed concurrently; refusing stale accepted-intent settlement');
         const next: LifecycleStateV2 = { ...state, stateGeneration: state.stateGeneration + 1,
@@ -81,13 +91,9 @@ export async function recoverLifecycleJournals(plan: Extract<LifecyclePlan, { ki
           attempts: state.attempts.map(attempt => attempt.id !== attemptId ? attempt : { ...attempt, phase: 'failed', updatedAt: now, journal: attempt.journal.map(entry => entry.operationId !== row.operationId ? entry : { ...entry, state: 'not-attempted', updatedAt: now }) }),
         };
         writeLifecycleState(next, { globalPreflight: 'succeeded' }); state = next;
-        settled.push({ ...operationFor(row), action: 'not-attempted', route: 'none', result: 'not-attempted',
-          resourceState: 'unknown', activationState: 'unknown', changed: false,
-          reason: createLifecycleReason('runtime', 'runtime.operation-failed', `original accepted operation '${row.operationId}' settled without native apply; unsealed preparation remains retained`),
-        });
+        receipts[index] = { ...receipts[index]!, status: 'completed', settlement: 'not-attempted', finalJournalState: 'not-attempted', reason: null };
         continue; // No native apply began; any unsealed preparation remains retained.
       }
-      let receipt: LifecycleOperationOutcome | undefined;
       try {
         const observed = await host.adapter.beginRecovery(handle);
         const committed = row.settlement === 'commit' || row.settlement === undefined && (row.state === 'readback-verified' || row.state === 'cleanup-pending');
@@ -95,25 +101,37 @@ export async function recoverLifecycleJournals(plan: Extract<LifecyclePlan, { ki
         if (committed) {
           if (observed.kind !== 'expected') throw new Error('committed recovery candidate changed; refusing stale cleanup');
         } else {
-          if (row.settlement !== 'rollback') changed = (await host.adapter.rollback(handle)).changed;
+          if (row.settlement !== 'rollback') { mutationStarted = true; changed = (await host.adapter.rollback(handle)).changed; }
           verifiedObservation = await host.adapter.readback(handle);
           host.adapter.verifyRollback(handle, verifiedObservation);
         }
-        const settlement = committed ? 'commit' : 'rollback';
-        persist(row, settlement, false); // Durable verified receipt before disposing any backup.
+        readbackVerified = true;
+        resourceState = verifiedObservation.presence === 'absent' ? 'absent' : committed ? 'present' : 'retained';
+        activationState = verifiedObservation.presence === 'absent' || verifiedObservation.activation === 'inactive' ? 'inactive' : committed ? 'active-conforming' : 'retained-prior';
+        // Inactive committed containment retains its resource; it is not Desired convergence.
+        if (resourceState === 'present' && activationState === 'inactive') resourceState = 'retained';
+        const verifiedSettlement = committed ? 'commit' : 'rollback';
+        persist(row, verifiedSettlement, false); // Durable verified receipt before disposing any backup.
+        settlement = verifiedSettlement;
         await host.adapter.cleanup(handle, committed ? 'verified-commit' : 'verified-rollback');
-        persist(row, settlement, true);
-        const retired = committed && (row.action === 'retire-orphan' || row.action === 'remove');
-        receipt = { ...operationFor(row), result: retired ? 'succeeded' : 'failed',
-          resourceState: verifiedObservation.presence === 'absent' ? 'absent' : committed ? 'present' : 'retained',
-          activationState: verifiedObservation.presence === 'absent' || verifiedObservation.activation === 'inactive' ? 'inactive' : verifiedObservation.activation === 'active' ? 'retained-prior' : 'unknown',
-          changed, reason: retired ? null : createLifecycleReason('runtime', 'runtime.operation-failed', `original operation '${row.operationId}' settled by verified ${settlement}; current Desired has not been attempted`),
-        };
-      } finally { await host.adapter.releaseRecovery(handle); }
-      settled.push(receipt);
+        await host.adapter.releaseRecovery(handle);
+        persist(row, verifiedSettlement, true);
+        receipts[index] = { original: receipts[index]!.original, status: 'completed', settlement,
+          finalJournalState: committed ? 'completed' : 'rolled-back', resourceState, activationState,
+          changed, mutationStarted, readbackVerified, reason: null };
+      } catch (error) {
+        try { await host.adapter.releaseRecovery(handle); }
+        catch (releaseError) { throw new Error(`${unknownErrorDiagnostic(error)}; releasing recovery fence failed: ${unknownErrorDiagnostic(releaseError)}`); }
+        throw error;
+      }
     }
-    return true;
+    return { reason: null, receipts };
   } catch (error) {
-    return { changed, settled, reason: createLifecycleReason('recovery', 'recovery.required', `cross-process recovery of operation '${pending.operationId}' remains pending: ${unknownErrorDiagnostic(error)}`), operation: operationFor(pending) };
+    const reason = createLifecycleReason('recovery', 'recovery.required', `cross-process recovery of operation '${pending.operationId}' remains pending: ${unknownErrorDiagnostic(error)}`);
+    const persisted = state.attempts.flatMap(attempt => attempt.journal).find(row => row.operationId === pending.operationId && row.scopeId === pending.scopeId);
+    receipts[pendingIndex] = { original: receipts[pendingIndex]!.original, status: 'pending', settlement,
+      finalJournalState: persisted?.state ?? pending.state, changed, mutationStarted,
+      readbackVerified, resourceState: changed && !readbackVerified ? 'potentially-changed' : resourceState, activationState, reason };
+    return { reason, receipts };
   }
 }
