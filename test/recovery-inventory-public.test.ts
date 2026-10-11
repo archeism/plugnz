@@ -3,6 +3,25 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { withLifecycleCliHarness } from './lifecycle-cli-harness';
 import type { LifecycleStateV2 } from '../src/state';
+import { projectRecoveryOperationProof } from '../src/recovery-proof';
+
+test('sealed proof rejects an explicit legacy route instead of upgrading it', async () => {
+  await withLifecycleCliHarness(harness => {
+    harness.writeHome({ '.cursor/.keep': '' });
+    const source = harness.source('conflicting-journal-route', { 'plugin.json': '{"name":"demo","version":"1.0.0"}\n' });
+    const cursor = harness.fakeNative('cursor', Array.from({ length: 16 }, () => ({ args: ['--version'], stdout: '2.4.0\n' })));
+    expect(harness.run(['sync', source, '--target', 'cursor', '--json'], { env: { OPEN_PLUGIN_CURSOR_BIN: cursor.path } }).exitCode).toBe(0);
+    const state: LifecycleStateV2 = JSON.parse(readFileSync(join(harness.home, 'state.json'), 'utf8'));
+    const scope = state.scopes[0]!;
+    const attempt = state.attempts[0]!;
+    const row = { ...attempt.journal[0]!, state: 'cleanup-pending' as const };
+    expect(row.sealedOperation?.route).toBe('managed');
+    expect(projectRecoveryOperationProof(scope, attempt, row).sealed).toBe(true);
+    expect(() => projectRecoveryOperationProof(scope, attempt, { ...row, route: { kind: 'legacy-unverified' } })).toThrow('open journal route differs from its sealed operation');
+    const { sealedOperation: _seal, ...unsealed } = row;
+    expect(projectRecoveryOperationProof(scope, attempt, { ...unsealed, route: { kind: 'legacy-unverified' } })).toMatchObject({ route: null, sealed: false });
+  });
+}, 20_000);
 
 test('scopes exposes every older open journal even without an Activation, without writing', async () => {
   await withLifecycleCliHarness(harness => {

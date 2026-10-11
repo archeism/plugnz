@@ -109,7 +109,7 @@ export function projectRecoveryOperationProof(
     throw new Error('open journal proof differs from its sealed operation');
   }
   const recordedRoute = row.route?.kind === 'native' || row.route?.kind === 'managed' ? row.route.kind : null;
-  if (sealed !== undefined && recordedRoute !== null && recordedRoute !== sealed.route) {
+  if (sealed !== undefined && row.route !== undefined && row.route.kind !== sealed.route) {
     throw new Error('open journal route differs from its sealed operation');
   }
   return parseRecoveryOperationProof({
