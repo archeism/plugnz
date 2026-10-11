@@ -705,22 +705,41 @@ export function claudeRouteEvidence(
   return { route: 'native', proofId: `claude-native-update-${contract.version}-git` };
 }
 
+const CLAUDE_MANAGED_SURFACE = 'managed';
+
+function claudeLiveDetectedVersion(): string | undefined {
+  const observed = claudeVersionObservation(observeClaudeCodeVersion());
+  return observed.kind === 'detected' ? observed.version : undefined;
+}
+
+function claudeProbeVersion(contracts: readonly ClaudeNativeRemoteUpdateContract[]): TargetVersionObservation {
+  const observed = claudeVersionObservation(observeClaudeCodeVersion());
+  if (observed.kind === 'detected' && contracts.some((contract) => contract.version === observed.version && sandboxPasses(contract))) {
+    return observed;
+  }
+  if (observed.kind === 'unparseable') return observed;
+  return { kind: 'detected', version: CLAUDE_MANAGED_SURFACE, probeId: 'claude-code-managed' };
+}
+
+function claudeAdapterProfiles(contracts: readonly ClaudeNativeRemoteUpdateContract[]): readonly CapabilityEvidenceProfile[] {
+  const versions = new Set<string>([CLAUDE_MANAGED_SURFACE, ...contracts.map((contract) => contract.version)]);
+  return [...versions].flatMap((version) => claudeEvidenceProfiles(version, contracts));
+}
+
 function claudeCodeLifecycleDefinition(contracts: readonly ClaudeNativeRemoteUpdateContract[]): LifecycleHostDefinition {
-  const version = claudeVersionObservation(observeClaudeCodeVersion());
-  const detectedVersion = version.kind === 'detected' ? version.version : undefined;
   return {
     id: 'claude-code',
-    evidenceProfiles: claudeEvidenceProfiles(detectedVersion, contracts),
-    probeVersion: async () => version,
+    evidenceProfiles: claudeAdapterProfiles(contracts),
+    probeVersion: async () => claudeProbeVersion(contracts),
     observeTarget: async (target) => ({ target, installations: observeClaudeInstallations() }),
     observeNativeMutationScope: async (request) => ({
       kind: 'bounded',
       mode: 'exact-package',
       affectedNativeIds: [request.nativeId],
     }),
-    observeNativeProjection: async (request) => nativeProjection(contracts, request, detectedVersion),
+    observeNativeProjection: async (request) => nativeProjection(contracts, request, claudeLiveDetectedVersion()),
     revalidateTargetPrecondition: async (handle) => ({
-      version: claudeVersionObservation(observeClaudeCodeVersion()),
+      version: claudeProbeVersion(contracts),
       targetObservationId: createTargetInventoryObservation('claude-code', {
         target: handle.target,
         installations: observeClaudeInstallations(),
