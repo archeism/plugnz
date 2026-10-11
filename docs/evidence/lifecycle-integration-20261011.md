@@ -99,3 +99,10 @@ Raw evidence is retained outside Git under
 These gates do not close the outstanding offline-pin and recovery-edge reviews,
 route migration or final published consumer verification. The five skips are
 explicit platform/real-loader prerequisites, not evidence of those native routes.
+
+The three copied raw files were verified locally against their hashes before
+stopping the owned sandbox. Cleanup completed for session
+`sbx_7yjopUk71tVjA1Y2rNPXtNB52Tlq`: 192.117 seconds active CPU, 1347.406 seconds
+session duration, 4096 MB configured memory, 175 MB ingress and 1.2 MB egress.
+The retained raw evidence occupies 256 KB. No sandbox snapshot was created or
+deleted, and no real installation or existing backup was touched.
