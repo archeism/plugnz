@@ -46,7 +46,7 @@ describe('codex native marketplace upgrade route', () => {
       expect(selectedRoute(await selectedUpdate(snapshot, createResolvedLifecyclePins([]))).route).toBe('managed');
     });
   });
-  test('native rollback restores the bounded marketplace checkout as well as affected plugin code', async () => {
+  test('native rollback accepts the exact unchanged captured checkout and prior code', async () => {
     await withCodexBinary(async home => {
       const snapshot = frozenSnapshot(home);
       writeCatalog(home, frozenSha, [demoId]); installPlugin(home, 'demo-plugin', demoId, true);
@@ -54,12 +54,42 @@ describe('codex native marketplace upgrade route', () => {
       writeFiles(checkout, { 'HEAD': 'prior checkout\n', 'catalog.json': 'prior catalog\n' });
       const prior = fingerprintTree(checkout);
       const prepared = await prepareUpdate(snapshot, createResolvedLifecyclePins([]));
-      await codexLifecycle.apply(prepared);
-      writeFiles(checkout, { 'HEAD': 'advanced checkout\n', 'new-file': 'candidate\n' });
       await codexLifecycle.rollback(prepared.handle);
       expect(fingerprintTree(checkout)).toBe(prior);
       codexLifecycle.verifyRollback(prepared.handle, await codexLifecycle.readback(prepared.handle));
     });
+  });
+  test('foreign checkout appearing after apply blocks every rollback restore write', async () => {
+    await withCodexBinary(async home => {
+      const snapshot = frozenSnapshot(home);
+      writeCatalog(home, frozenSha, [demoId]); installPlugin(home, 'demo-plugin', demoId, true);
+      const prepared = await prepareUpdate(snapshot, createResolvedLifecyclePins([]));
+      await codexLifecycle.apply(prepared);
+      const checkout = join(home, '.codex/.tmp/marketplaces/demo-market');
+      writeFiles(checkout, { 'foreign.txt': 'external owned content\n' });
+      const before = fingerprintTree(join(home, '.codex'));
+      let diagnostic = '';
+      try { await codexLifecycle.rollback(prepared.handle); } catch (error) { diagnostic = String(error); }
+      expect(diagnostic).toContain('refusing rollback before any restore write');
+      expect(fingerprintTree(join(home, '.codex'))).toBe(before);
+      expect(existsSync(join(home, '.codex/.plgnz-rollback', prepared.handle.attemptId, prepared.handle.operationId, 'manifest.json'))).toBe(true);
+    });
+  });
+  test('foreign cache and config changes block rollback before any restore write', async () => {
+    for (const surface of ['cache', 'config']) {
+      await withCodexBinary(async home => {
+        const snapshot = frozenSnapshot(home);
+        writeCatalog(home, frozenSha, [demoId]); installPlugin(home, 'demo-plugin', demoId, true);
+        const prepared = await prepareUpdate(snapshot, createResolvedLifecyclePins([]));
+        if (surface === 'cache') writeFiles(home, { '.codex/plugins/cache/demo-market/demo-plugin/1.0.0/foreign.txt': 'valuable external content\n' });
+        else writeFileSync(join(home, '.codex/config.toml'), readFileSync(join(home, '.codex/config.toml'), 'utf8').replace('enabled = true', 'enabled = false'));
+        const before = fingerprintTree(join(home, '.codex'));
+        let diagnostic = '';
+        try { await codexLifecycle.rollback(prepared.handle); } catch (error) { diagnostic = String(error); }
+        expect(diagnostic).toContain('refusing rollback before any restore write');
+        expect(fingerprintTree(join(home, '.codex'))).toBe(before);
+      });
+    }
   });
   test('refuses native marketplace upgrade unless the catalog is bound to the frozen SHA and every affected plugin is owned', async () => {
     await withHostEnvAsync('codex', async (home) => {

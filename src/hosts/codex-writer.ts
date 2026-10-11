@@ -706,6 +706,7 @@ function applyNativeMarketplaceUpgrade(prepared: PreparedActivationMutation): Mu
   });
   const stdout = decodeBytes(result.stdout);
   const stderr = decodeBytes(result.stderr).trim();
+  captureAttemptedMarketplace(prepared.handle);
   const parsed = parseUpgradeJson(stdout);
   const rewritten = fingerprintAffected(prepared.handle.affectedNativeIds);
   const errors = parsed?.errors ?? [];
@@ -995,6 +996,8 @@ function restoreCodexRollback(handle: DurableLifecycleOperation): MutationResult
   const manifestPath = join(bundle, 'manifest.json');
   if (!existsSync(manifestPath)) throw new Error(`codex lifecycle rollback bundle is missing: ${handle.operationId}`);
   const manifest = parseRollbackManifest(readFileSync(manifestPath, 'utf8'));
+  assertMarketplaceRollbackCurrent(handle);
+  if (handle.route === 'native') assertNativeRollbackSurfaces(handle, manifest, bundle);
   const before = rollbackSurface(manifest.installs.map((install) => install.nativeId));
   restorePluginTables(manifest.tables);
   for (const install of manifest.installs) {
@@ -1024,6 +1027,30 @@ function marketplaceCheckout(marketplace: string): string {
   return path;
 }
 
+function assertNativeRollbackSurfaces(handle: DurableLifecycleOperation, manifest: ReturnType<typeof parseRollbackManifest>, bundle: string): void {
+  const config = existsSync(configFile()) ? readFileSync(configFile(), 'utf8') : '';
+  for (const table of manifest.tables) {
+    if (extractPluginTable(config, table.nativeId) !== table.block) throw new Error('Codex affected plugin config changed outside the captured native attempt; refusing rollback before any restore write');
+  }
+  const projections = handle.affectedOperationIds.map(id => join(codexHome(), '.plgnz-lifecycle', `${handle.attemptId}:${id}`));
+  for (const install of manifest.installs) {
+    const projected = projections.find(path => existsSync(path) && readOwnership(path)?.pluginId === install.nativeId);
+    const desired = (path: string): boolean => {
+      const marker = readOwnership(path);
+      return projected !== undefined && (marker === null || (marker.pluginId === install.nativeId && marker.scopeId === handle.scopeId)) && sameTree(path, projected);
+    };
+    if (install.existed && existsSync(install.cachePath)) {
+      const saved = join(bundle, 'cache', install.saved);
+      if (fingerprintTree(install.cachePath) !== fingerprintTree(saved) && !desired(install.cachePath)) throw new Error('Codex prior cache changed outside the captured native attempt; refusing rollback before any restore write');
+    }
+    if (install.slot === null || !existsSync(install.slot)) continue;
+    for (const version of slotVersions(install.slot)) {
+      if (install.versions.includes(version)) continue;
+      if (!desired(join(install.slot, version))) throw new Error('Codex new cache version is not the proven attempt projection; refusing rollback before any restore write');
+    }
+  }
+}
+
 function captureMarketplaceRollback(projection: PinsAppliedProjection): void {
   const marketplace = marketplaceOf(projection.nativeId);
   if (marketplace === null) throw new Error('native Codex mutation has no bounded marketplace');
@@ -1036,6 +1063,44 @@ function captureMarketplaceRollback(projection: PinsAppliedProjection): void {
     if (fingerprintTree(snapshot) !== fingerprint || fingerprintTree(checkout) !== fingerprint) throw new Error('Codex marketplace checkout changed during rollback capture');
   }
   writeFileSync(join(bundle, 'marketplace.json'), JSON.stringify({ marketplace, fingerprint }));
+}
+
+/** Capture only a clean checkout of the exact immutable Source consumed by this call. */
+function captureAttemptedMarketplace(handle: DurableLifecycleOperation): void {
+  const metadata = join(rollbackBundle(handle.attemptId, handle.operationId), 'marketplace.json');
+  if (!existsSync(metadata)) return;
+  const marketplace = marketplaceOf(handle.nativeId);
+  if (marketplace === null || handle.sourceLocator === null) return;
+  const checkout = marketplaceCheckout(marketplace);
+  if (!existsSync(checkout)) return;
+  const git = (args: readonly string[]): string | null => {
+    const result = spawnSync(['git', '-C', checkout, ...args]);
+    return result.exitCode === 0 ? decodeBytes(result.stdout).trim() : null;
+  };
+  if (git(['rev-parse', 'HEAD']) !== handle.sourceRevision
+    || git(['config', '--get', 'remote.origin.url']) !== handle.sourceLocator
+    || git(['status', '--porcelain', '--untracked-files=all']) !== '') return;
+  const capture = JSON.parse(readFileSync(metadata, 'utf8')) as Record<string, unknown>;
+  writeFileSync(metadata, JSON.stringify({ ...capture, attemptedFingerprint: fingerprintTree(checkout) }));
+}
+
+/** Validate before any cache/config restoration, never overwrite a later foreign checkout. */
+function assertMarketplaceRollbackCurrent(handle: DurableLifecycleOperation): void {
+  const metadata = join(rollbackBundle(handle.attemptId, handle.operationId), 'marketplace.json');
+  if (!existsSync(metadata)) return;
+  const row = JSON.parse(readFileSync(metadata, 'utf8')) as Record<string, unknown>;
+  const marketplace = marketplaceOf(handle.nativeId);
+  if (marketplace === null || row['marketplace'] !== marketplace
+    || (row['fingerprint'] !== null && (typeof row['fingerprint'] !== 'string' || !/^[0-9a-f]{64}$/u.test(row['fingerprint'])))
+    || (row['attemptedFingerprint'] !== undefined && (typeof row['attemptedFingerprint'] !== 'string' || !/^[0-9a-f]{64}$/u.test(row['attemptedFingerprint'])))) throw new Error('invalid Codex marketplace rollback capture');
+  const checkout = marketplaceCheckout(marketplace);
+  const current = existsSync(checkout) ? fingerprintTree(checkout) : null;
+  if (current !== row['fingerprint'] && current !== row['attemptedFingerprint']) {
+    throw new Error('Codex marketplace checkout changed outside the captured native attempt; refusing rollback before any restore write');
+  }
+  if (row['fingerprint'] !== null && fingerprintTree(join(rollbackBundle(handle.attemptId, handle.operationId), 'marketplace')) !== row['fingerprint']) {
+    throw new Error('Codex retained marketplace rollback bytes drifted');
+  }
 }
 
 function restoreMarketplaceRollback(handle: DurableLifecycleOperation): void {
