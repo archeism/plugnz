@@ -26,6 +26,8 @@ and no real native installation writes.
   package: 5 passed, 62 assertions, 9.28 seconds. Log
   `/tmp/plugnz-kimi-same-root-final.log`. Preview and apply preserve both ledger
   and native stores on rejection.
+- The root independently reran that final public identity suite: 5 passed,
+  62 assertions, 10.52 seconds, exit 0 (terminal execution handle 58329).
 - Typecheck and diff check passed at the correction checkpoint.
 
 The historical provenance fixtures now use admitted Claude 2.1.295 and the
