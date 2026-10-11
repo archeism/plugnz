@@ -93,6 +93,8 @@ The final corrected source checkpoint `3040700` passed the full Bun 1.4.0 gate:
 659 passed, five skipped, zero failed, 4216 assertions across 664 tests in 61
 files, 167.76 seconds; typechecking passed. The retained log is
 `~/.local/state/plugnz-evidence/20261011/plugnz-3040700-lockfix-full-gate.log`.
+Its SHA-256 is
+`4cbbe0d984de7cac6d7e490cdee663cdd16ec5def974640c1ceb53531ac25d27`.
 
 ## Combined candidate verification
 
