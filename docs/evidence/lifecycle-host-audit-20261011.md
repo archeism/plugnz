@@ -129,3 +129,16 @@ no production timeout, fixture behavior, or assertion changes. The main-based
 candidate still requires independent review and a fresh full gate.
 The explicit-deadline focused run passed without a command-level override:
 3 tests, 16 assertions, 7.92 seconds; typecheck and diff checks passed.
+
+Frozen `95c7a26` then passed the unmodified full `bun test` command under
+Bun 1.4.0: 669 passed, 5 existing skips, 0 failed, 4416 assertions,
+234.87 seconds. `bun run check` passed. Independent different-model review
+approved both test-only deadline increments separately; production behavior,
+timeouts and assertions remain unchanged. This main-based integration does not
+contain the held Claude, ZCode resource/provenance, or receipt-contract changes.
+No npm publication or fleet pin/deployment accompanies it.
+
+| Retained log | SHA-256 |
+| --- | --- |
+| `plugnz-95c-deadline-full.log` | `ffead036f4bc482c6bbc3b306d36a5cccfa2987507f45cbdae6a309909b76fb9` |
+| `plugnz-95c-deadline-check.log` | `8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92` |
