@@ -21,6 +21,21 @@ import { createDeploymentScopeIdentity } from '../src/deployment-scope';
 
 const sourceBinding = { kind: 'local', locator: '/sources/personal' } as const;
 
+test('dry-run success validates the observed state without pretending a prospective mutation ran', () => {
+  const report = validReport();
+  report.command.dryRun = true;
+  report.outcomes[0]!.changed = false;
+  report.outcomes[0]!.resourceState = 'absent';
+  report.outcomes[0]!.activationState = 'inactive';
+  report.summary.mutationStarted = false;
+  report.summary.changed = false;
+  expect(parseLifecycleReport(report).outcomes[0]!.resourceState).toBe('absent');
+  report.outcomes[0]!.activationState = 'active-conforming';
+  let rejected = false;
+  try { parseLifecycleReport(report); } catch { rejected = true; }
+  expect(rejected).toBe(true);
+});
+
 function scope(target = 'dcode') {
   return createDeploymentScopeIdentity(sourceBinding, { kind: target, instance: 'default' });
 }

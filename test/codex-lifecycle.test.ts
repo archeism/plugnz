@@ -261,7 +261,9 @@ describe('codex lifecycle', () => {
     });
   });
 
-  test('keeps the new active slot when cleanup of an older owned version fails', async () => {
+  // OS-level immutable-file probe supplements portable executor cleanup-pending
+  // coverage in executor.test.ts; chflags is available only on macOS.
+  test.skipIf(process.platform !== 'darwin')('keeps the new active slot when cleanup of an older owned version fails', async () => {
     await withHostEnvAsync('codex', async home => {
       const incoming = source({ 'resources/value.txt': 'old\n' });
       writeFileSync(join(incoming.plugin.dir, 'plugin.json'), '{"name":"demo-plugin","version":"1.1.0"}');

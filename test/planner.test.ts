@@ -172,8 +172,8 @@ describe('lifecycle planner', () => {
       expect(journalOf(plan, 'alpha')).toEqual({ kind: 'required', action: 'retain-prior', mutation: false, readback: false });
       const retained = plan.report.outcomes.find((row) => row.package === 'alpha');
       expect(retained?.result).toBe('failed');
-      expect(retained?.resourceState).toBe('retained');
-      expect(retained?.activationState).toBe('retained-prior');
+      expect(retained?.resourceState).toBe('present');
+      expect(retained?.activationState).toBe('active-nonconforming');
       expect(retained?.changed).toBe(false);
       expect(plan.operations.some((row) => row.operation.action === 'retire-orphan')).toBe(false);
       expect(plan.scopes[0]?.prune).toBe('blocked');
@@ -211,7 +211,7 @@ describe('lifecycle planner', () => {
       expect(journalOf(plan, 'alpha')).toEqual({ kind: 'required', action: 'disable-nonconforming', mutation: true, readback: true });
       const contained = plan.report.outcomes.find((row) => row.package === 'alpha');
       expect(contained?.result).toBe('failed');
-      expect(contained?.resourceState).toBe('retained');
+      expect(contained?.resourceState).toBe('present');
       expect(contained?.activationState).toBe('active-nonconforming');
       expect(contained?.changed).toBe(false);
       expect(plan.operations.some((row) => row.operation.action === 'retire-orphan')).toBe(false);
@@ -340,7 +340,7 @@ describe('lifecycle planner', () => {
       };
       const dry = expectFrozen(await planLifecycle({ ...input, dryRun: true }));
       const live = expectFrozen(await planLifecycle({ ...input, dryRun: false }));
-      expect(actionMap(dry)).toEqual({ alpha: 'install', beta: 'retain-prior', gamma: 'unchanged', delta: 'retain-prior' });
+      expect(actionMap(dry)).toEqual({ alpha: 'install', beta: 'update', gamma: 'unchanged', delta: 'retain-prior' });
       expect(dry.operations.map((row) => row.operation.operationId)).toEqual(live.operations.map((row) => row.operation.operationId));
       expect(dry.attemptId).toBe(live.attemptId);
       expect(new Set(dry.operations.map((row) => row.operation.operationId)).size).toBe(4);
@@ -348,7 +348,9 @@ describe('lifecycle planner', () => {
       expect(dry.attemptId).toMatch(/^attempt-v1-[0-9a-f]{64}$/u);
       expect(journalOf(dry, 'gamma')).toEqual({ kind: 'required', action: 'unchanged', mutation: false, readback: false });
       expect(journalOf(dry, 'delta')).toEqual({ kind: 'required', action: 'retain-prior', mutation: false, readback: false });
-      expect(dry.operations.filter((row) => row.operation.package === 'beta' || row.operation.package === 'delta').map((row) => row.reason?.code)).toEqual(['capability.unsupported', 'capability.unsupported']);
+      expect(journalOf(dry, 'beta')).toEqual({ kind: 'required', action: 'update', mutation: true, readback: true });
+      expect(reasonOf(dry, 'beta')).toBe(null);
+      expect(reasonOf(dry, 'delta')?.code).toBe('capability.unsupported');
       expect(dry.report.plan).toEqual(dry.operations.map((row) => row.operation));
       expect(dry.report.command.name).toBe('sync');
       expect(dry.report.command.dryRun).toBe(true);

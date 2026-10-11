@@ -1,11 +1,131 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { bytesToText, snapshotTree, textToBytes, withLifecycleCliHarness } from './lifecycle-cli-harness';
+import { bytesToText, snapshotTree, textToBytes, withLifecycleCliHarness, type FakeNativeStep } from './lifecycle-cli-harness';
 import { createDeploymentScopeIdentity } from '../src/deployment-scope';
 import { parseLifecycleReport } from '../src/lifecycle-report';
+import { fingerprintTree } from '../src/fingerprint';
 
 describe('public lifecycle commands', () => {
+  test('a retired package can re-enroll from identical bytes and retire again without journal collisions', async () => {
+    await withLifecycleCliHarness((harness) => {
+      harness.writeHome({ '.cursor/.keep': '' });
+      const source = harness.source('reenrollment', { 'plugin.json': '{"name":"demo","version":"1.0.0"}\n', 'payload.txt': 'identical source\n' });
+      const cursor = harness.fakeNative('cursor', versionSteps(64));
+      const env = { OPEN_PLUGIN_CURSOR_BIN: cursor.path };
+      const ids: string[] = [];
+      for (const verb of ['sync', 'retire-source', 'sync', 'retire-source']) {
+        const result = harness.run([verb, source, '--target', 'cursor', '--json'], { env });
+        expect({ verb, report: parseLifecycleReport(JSON.parse(result.stdout)).outcomes.map((row) => ({ result: row.result, diagnostic: row.reason?.diagnostic ?? null })), exitCode: result.exitCode }).toEqual({ verb, report: [{ result: 'succeeded', diagnostic: null }], exitCode: 0 });
+        ids.push(parseLifecycleReport(JSON.parse(result.stdout)).plan[0]!.operationId);
+      }
+      expect(new Set(ids).size).toBe(4);
+      expect(existsSync(join(harness.storePath('cursor'), 'plugins/local/demo'))).toBe(false);
+    });
+  });
+  test('a corrupted retained snapshot in the last scope blocks all batch writes', async () => {
+    await withLifecycleCliHarness((harness) => {
+      harness.writeHome({ '.cursor/.keep': '' });
+      const alpha = harness.source('frozen-alpha', { 'plugin.json': '{"name":"alpha","version":"1.0.0"}\n' });
+      const beta = harness.source('frozen-beta', { 'plugin.json': '{"name":"beta","version":"1.0.0"}\n', 'payload.txt': 'reviewed\n' });
+      const cachedPayload = join(harness.home, 'cache/source-snapshots', fingerprintTree(beta), 'payload.txt');
+      const steps: FakeNativeStep[] = versionSteps(16);
+      steps[0] = { ...steps[0]!, writes: { [cachedPayload]: 'tampered after freeze\n' } };
+      const cursor = harness.fakeNative('cursor', steps);
+      const manifest = join(harness.source('frozen-batch', {}), 'manifest.json');
+      writeFileSync(manifest, JSON.stringify({ schemaVersion: 1, entries: [alpha, beta].map((locator) => ({ operation: 'sync', source: { kind: 'local', locator }, target: { kind: 'cursor', instance: 'default' } })) }));
+      const refused = harness.run(['sync', '--manifest', manifest, '--json'], { env: { OPEN_PLUGIN_CURSOR_BIN: cursor.path } });
+      const report = parseLifecycleReport(JSON.parse(refused.stdout));
+      expect(refused.exitCode).toBe(1);
+      expect(report.summary.mutationStarted).toBe(false);
+      expect(refused.state.after).toBeUndefined();
+      expect(refused.stores.cursor.after).toEqual(refused.stores.cursor.before);
+      expect(report.outcomes.every((row) => row.reason?.diagnostic === 'retained frozen source bytes drifted before apply')).toBe(true);
+    });
+  });
+  test('sync applies the preflight frozen bytes when the original source changes during a host probe', async () => {
+    await withLifecycleCliHarness((harness) => {
+      harness.writeHome({ '.cursor/.keep': '' });
+      const source = harness.source('sync-frozen-apply', {
+        'plugin.json': '{"name":"demo","version":"1.0.0"}\n',
+        'payload.txt': 'frozen reviewed bytes\n',
+      });
+      const steps: FakeNativeStep[] = versionSteps(16);
+      steps[0] = { ...steps[0]!, writes: { [join(source, 'payload.txt')]: 'later mutable bytes\n' } };
+      const cursor = harness.fakeNative('cursor', steps);
+      const applied = harness.run(['sync', source, '--target', 'cursor', '--json'], { env: { OPEN_PLUGIN_CURSOR_BIN: cursor.path } });
+      expect(applied.exitCode).toBe(0);
+      expect(bytesToText(applied.stores.cursor.after.files['plugins/local/demo/payload.txt']!)).toBe('frozen reviewed bytes\n');
+      expect(readFileSync(join(source, 'payload.txt'), 'utf8')).toBe('later mutable bytes\n');
+    });
+  });
+  test('a failed changed-byte sync keeps the prior activation, suppresses orphan pruning, and a clean retry converges', async () => {
+    await withLifecycleCliHarness((harness) => {
+      harness.writeHome({ '.cursor/.keep': '' });
+      const source = harness.source('sync-refresh-recovery', {
+        'demo/plugin.json': '{"name":"demo","version":"1.0.0"}\n',
+        'demo/payload.txt': 'old bytes\n',
+        'orphan/plugin.json': '{"name":"orphan","version":"1.0.0"}\n',
+        'orphan/payload.txt': 'retire only after convergence\n',
+      });
+      const good = harness.fakeNative('cursor-good', versionSteps(48));
+      const bad = harness.fakeNative('cursor-bad', versionSteps(24).map((step) => ({ ...step, divergeStagedReadback: 'corrupt candidate\n' })));
+      const env = { OPEN_PLUGIN_CURSOR_BIN: good.path };
+      expect(harness.run(['sync', source, '--target', 'cursor', '--json'], { env }).exitCode).toBe(0);
+      const active = join(harness.storePath('cursor'), 'plugins/local');
+      const before = snapshotTree(active);
+      writeFileSync(join(source, 'demo/payload.txt'), 'new bytes\n');
+      const args = ['sync', source, '--target', 'cursor', '--plugin', 'demo', '--json'];
+      const failed = harness.run(args, { env: { OPEN_PLUGIN_CURSOR_BIN: bad.path } });
+      const failure = parseLifecycleReport(JSON.parse(failed.stdout));
+      expect(failed.exitCode).toBe(1);
+      expect(failure.outcomes.map((row) => ({ package: row.package, action: row.action, result: row.result }))).toEqual([
+        { package: 'demo', action: 'update', result: 'pending' },
+        { package: 'orphan', action: 'retire-orphan', result: 'not-attempted' },
+      ]);
+      expect(snapshotTree(active)).toEqual(before);
+      const retried = harness.run(args, { env });
+      expect(parseLifecycleReport(JSON.parse(retried.stdout)).outcomes.map((row) => row.reason)).toEqual([null, null]);
+      expect({ exitCode: retried.exitCode, report: JSON.parse(retried.stdout).summary }).toEqual({ exitCode: 0, report: { result: 'converged', terminalPhase: 'complete', mutationStarted: true, changed: true, failureCategory: null, reason: null, recoveryId: null, readbackId: null } });
+      expect(parseLifecycleReport(JSON.parse(retried.stdout)).outcomes.map((row) => ({ package: row.package, action: row.action, result: row.result }))).toEqual([
+        { package: 'demo', action: 'update', result: 'succeeded' },
+        { package: 'orphan', action: 'retire-orphan', result: 'succeeded' },
+      ]);
+      expect(bytesToText(snapshotTree(active).files['demo/payload.txt']!)).toBe('new bytes\n');
+      expect(existsSync(join(active, 'orphan'))).toBe(false);
+    });
+  });
+  test('sync refreshes same-version changed bytes and leaves an unchanged sibling byte-identical', async () => {
+    await withLifecycleCliHarness((harness) => {
+      harness.writeHome({ '.cursor/.keep': '' });
+      const source = harness.source('sync-refresh', {
+        'demo/plugin.json': '{"name":"demo","version":"1.0.0"}\n',
+        'demo/payload.txt': 'old bytes\n',
+        'sibling/plugin.json': '{"name":"sibling","version":"1.0.0"}\n',
+        'sibling/payload.txt': 'unchanged bytes\n',
+      });
+      const cursor = harness.fakeNative('cursor', versionSteps(48));
+      const env = { OPEN_PLUGIN_CURSOR_BIN: cursor.path };
+      expect(harness.run(['sync', source, '--target', 'cursor', '--json'], { env }).exitCode).toBe(0);
+      writeFileSync(join(source, 'demo/payload.txt'), 'new bytes\n');
+      const preview = harness.run(['sync', source, '--target', 'cursor', '--dry-run', '--json'], { env });
+      expect(preview.exitCode).toBe(0);
+      expect(parseLifecycleReport(JSON.parse(preview.stdout)).plan.map((row) => ({ package: row.package, action: row.action }))).toEqual([
+        { package: 'demo', action: 'update' }, { package: 'sibling', action: 'unchanged' },
+      ]);
+      expect(preview.state.after).toEqual(preview.state.before);
+      expect(preview.stores.cursor.after).toEqual(preview.stores.cursor.before);
+      const applied = harness.run(['sync', source, '--target', 'cursor', '--json'], { env });
+      expect(applied.exitCode).toBe(0);
+      const report = parseLifecycleReport(JSON.parse(applied.stdout));
+      expect(report.outcomes.map((row) => ({ package: row.package, action: row.action, result: row.result }))).toEqual([
+        { package: 'demo', action: 'update', result: 'succeeded' }, { package: 'sibling', action: 'unchanged', result: 'succeeded' },
+      ]);
+      const files = applied.stores.cursor.after.files;
+      const payloads = Object.entries(files).filter(([path]) => path.endsWith('payload.txt')).map(([, bytes]) => bytesToText(bytes)).sort();
+      expect(payloads).toEqual(['new bytes\n', 'unchanged bytes\n']);
+    });
+  });
   test('sync dry-run prints a validated report whose outcomes cite the frozen plan', async () => {
     await withLifecycleCliHarness((harness) => {
       harness.writeAmbient({ 'sentinel.txt': 'outside the managed home\n' });
@@ -68,8 +188,8 @@ describe('public lifecycle commands', () => {
           action: 'install',
           route: 'managed',
           result: 'succeeded',
-          resourceState: 'present',
-          activationState: 'active-conforming',
+          resourceState: 'absent',
+          activationState: 'inactive',
           changed: false,
         }],
         summary: {
@@ -855,7 +975,7 @@ describe('public lifecycle commands', () => {
     });
   });
 
-  test('an unchanged re-sync exits 0, update and route-migrate are refused, and an ungated cursor instance is refused', async () => {
+  test('sync updates an independent pair while an unimplemented migration stays loud, and an ungated cursor instance is refused', async () => {
     await withLifecycleCliHarness((harness) => {
       harness.writeHome({ '.cursor/.keep': '' });
       const keptJson = '{"name":"kept","version":"1.0.0","description":"kept"}\n';
@@ -913,21 +1033,25 @@ describe('public lifecycle commands', () => {
           stderr: result.stderr,
           mutationStarted: report.summary.mutationStarted,
           changed: report.summary.changed,
-          capability: reasons.every((code) => code === 'capability.unsupported' || code === 'capability'),
+          capability: reasons.includes('capability.unsupported'),
           succeededMutation: report.outcomes.filter((outcome) => outcome.result === 'succeeded' && (outcome.action === 'update' || outcome.action === 'route-migrate')).map((outcome) => outcome.package),
-          store: snapshotTree(cursorStore),
-          state: readFileSync(statePath, 'utf8'),
         }).toEqual({
           label,
           exitCode: 1,
           stderr: '',
-          mutationStarted: false,
-          changed: false,
+          mutationStarted: label === 'apply',
+          changed: label === 'apply',
           capability: true,
-          succeededMutation: [],
-          store: storeBeforeRefusal,
-          state: stateBeforeRefusal,
+          succeededMutation: ['kept'],
         });
+        if (label === 'dry-run') {
+          expect(snapshotTree(cursorStore)).toEqual(storeBeforeRefusal);
+          expect(readFileSync(statePath, 'utf8')).toBe(stateBeforeRefusal);
+        } else {
+          expect(Object.entries(result.stores.cursor.after.files).filter(([path]) => path.endsWith('kept/plugin.json')).map(([, bytes]) => bytesToText(bytes))).toEqual([
+            '{"name":"kept","version":"1.0.0","description":"changed"}\n',
+          ]);
+        }
       };
       refused('dry-run', ['sync', '--manifest', manifest, '--dry-run', '--json']);
       refused('apply', ['sync', '--manifest', manifest, '--json']);
@@ -2162,6 +2286,51 @@ describe('public lifecycle commands', () => {
         dcodeStillThere: false,
         installed: '{"name":"demo","version":"1.0.0","description":"from planner"}\n',
       });
+    });
+  });
+
+  test('a legacy v2 removal refusal preserves ownership and records recoverable pending intent', async () => {
+    await withLifecycleCliHarness((harness) => {
+      harness.writeHome({ '.cursor/.keep': '', '.deepagents/.keep': '' });
+      const source = harness.source('legacy-remove-refusal', {
+        'plugin.json': '{"name":"demo","version":"1.0.0","description":"fixture"}\n',
+        'skills/demo/SKILL.md': '---\nname: demo\ndescription: fixture\n---\n\nDemo.\n',
+      });
+      const cursor = harness.fakeNative('cursor', versionSteps(24));
+      const dcode = harness.fakeNative('dcode', Array.from({ length: 12 }, () => ({
+        args: ['--version'], stdout: 'deepagents-code 0.1.83\n',
+      })));
+      const env = { OPEN_PLUGIN_CURSOR_BIN: cursor.path, OPEN_PLUGIN_DCODE_BIN: dcode.path };
+      expect(harness.run(['add', source, '--target', 'cursor', '--json'], { env }).exitCode).toBe(0);
+      expect(harness.run(['add', source, '--target', 'dcode', '--json'], { env }).exitCode).toBe(0);
+      const registryPath = join(harness.storePath('dcode'), '.state', 'installed_plugins.json');
+      const registry = JSON.parse(readFileSync(registryPath, 'utf8')) as { plugins: Record<string, Array<{ installPath: string }>> };
+      const installed = registry.plugins['demo@local']![0]!.installPath;
+      const marker = readFileSync(join(installed, '.plgnz-install.json'), 'utf8');
+      // The old writer refuses removal when the native ownership marker is gone.
+      rmSync(join(installed, '.plgnz-install.json'));
+      const result = harness.run(['remove', 'demo@local', '--target', 'dcode', '--json'], { env });
+      const report = parseLifecycleReport(JSON.parse(result.stdout));
+      const state = JSON.parse(bytesToText(result.state.after ?? [])) as {
+        activations: Array<{ nativeId: string; ownership: { kind: string }; pending?: { operation: string } }>;
+        attempts: Array<{ command: string; journal: Array<{ state: string }> }>;
+      };
+      const activation = state.activations.find((row) => row.nativeId === 'demo@local');
+      expect(result.exitCode === 0).toBe(false);
+      expect(report.outcomes[0]?.result).toBe('pending');
+      expect(activation?.ownership.kind).toBe('legacy-claim');
+      expect(activation?.pending?.operation).toBe('remove');
+      expect(state.attempts.some((attempt) => attempt.command === 'remove' && attempt.journal.some((row) => row.state === 'applying'))).toBe(true);
+      expect(existsSync(join(installed, 'plugin.json'))).toBe(true);
+      writeFileSync(join(installed, '.plgnz-install.json'), marker);
+      const retried = harness.run(['remove', 'demo@local', '--target', 'dcode', '--json'], { env });
+      const retryReport = parseLifecycleReport(JSON.parse(retried.stdout));
+      const finalized = JSON.parse(bytesToText(retried.state.after ?? [])) as typeof state;
+      expect(retried.exitCode).toBe(0);
+      expect(retryReport.plan[0]?.operationId).toBe(report.plan[0]?.operationId);
+      expect(finalized.attempts.some((attempt) => attempt.command === 'remove'
+        && attempt.journal.some((entry) => (entry as { operationId?: string }).operationId === retryReport.plan[0]?.operationId
+          && entry.state === 'completed'))).toBe(true);
     });
   });
 

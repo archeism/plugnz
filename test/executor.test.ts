@@ -258,7 +258,7 @@ describe('lifecycle executor', () => {
     });
   });
 
-  test('source drift is refused before a journal write', async () => {
+  test('retained snapshot drift is refused before a journal write', async () => {
     const root = temp('drift');
     const home = join(root, 'home');
     mkdirSync(home);
@@ -273,7 +273,8 @@ describe('lifecycle executor', () => {
         hosts: [codex.planner],
       }));
       const eventsBefore = codex.fake.events.length;
-      writeFileSync(join(alpha, 'skills', 'a', 'SKILL.md'), '# changed\n');
+      const frozen = [...plan.frozenSources.values()][0]!;
+      writeFileSync(join(frozen.snapshotDir, 'skills', 'a', 'SKILL.md'), '# changed\n');
 
       const executed = await executeLifecycle({ plan, hosts: [codex.planner], now });
 
@@ -282,7 +283,7 @@ describe('lifecycle executor', () => {
       expect(loaded.state.attempts).toEqual([]);
       expect(codex.fake.events.slice(eventsBefore).includes('stage')).toBe(false);
       expect(executed.exitCode).toBe(1);
-      expect(executed.report.outcomes[0]?.reason?.diagnostic).toBe("install 'alpha' source bytes drifted from the frozen snapshot");
+      expect(executed.report.outcomes[0]?.reason?.diagnostic).toBe('retained frozen source bytes drifted before apply');
     });
   });
 
