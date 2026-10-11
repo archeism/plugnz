@@ -30,9 +30,11 @@ describe('codex native marketplace upgrade route', () => {
       writeFiles(checkout, { 'HEAD': 'prior checkout\n' });
       const prepared = await prepareUpdate(snapshot, createResolvedLifecyclePins([]));
       writeFiles(checkout, { 'HEAD': 'external checkout\n' });
-      await expect(codexLifecycle.apply(prepared)).rejects.toThrow('checkout changed after rollback capture');
+      let diagnostic = '';
+      try { await codexLifecycle.apply(prepared); } catch (error) { diagnostic = String(error); }
+      expect(diagnostic).toContain('checkout changed after rollback capture');
       expect(readFileSync(join(checkout, 'HEAD'), 'utf8')).toBe('external checkout\n');
-      expect(readFileSync(join(home, 'codex-invocations.log'), 'utf8')).not.toContain('marketplace upgrade');
+      expect(readFileSync(join(home, 'codex-invocations.log'), 'utf8').includes('marketplace upgrade')).toBe(false);
     });
   });
   test('an obsolete ref_name field cannot establish native immutable binding', async () => {
