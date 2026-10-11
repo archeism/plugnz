@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { zcodeCliEvidenceProfiles, zcodeCliLifecycle, zcodeCliWriter } from '../src/hosts/zcode-cli-writer';
 import { fingerprintTree } from '../src/fingerprint';
-import { createFrozenPackageSnapshot, createLifecyclePlanCoverage, createResolvedLifecyclePins } from '../src/lifecycle-runtime';
+import { createFrozenPackageSnapshot, createLifecyclePlanCoverage, createResolvedLifecyclePins, hydrateDurableLifecycleOperation } from '../src/lifecycle-runtime';
 import { inventoryPackageSemantics } from '../src/semantic-inventory';
 import type { PluginSource } from '../src/source';
 
@@ -213,10 +213,51 @@ async function activate(home: string, action: 'install' | 'update', operationId:
   const directed = await zcodeCliLifecycle.applyLifecycleDirectives(staged);
   const pinned = await zcodeCliLifecycle.applyPins(directed);
   const prepared = await zcodeCliLifecycle.sealActivation(pinned);
-  return { decision, prepared, packageRoot };
+  return { decision, staged, prepared, packageRoot };
 }
 
 describe('ZCode CLI native activation', () => {
+  for (const phase of ['pre-seal', 'durable'] as const) {
+    test(`cleanup preserves a foreign replacement stage using ${phase} authority`, async () => {
+      await withHome(async (home) => {
+        writePackage(join(home, 'package'));
+        const prepared = await activate(home, 'install', `cleanup-${phase}`, `attempt-${phase}`);
+        const stage = join(prepared.staged.stagingRoot, '..', '..', '..');
+        const retained = join(home, 'retained-owned-stage');
+        renameSync(stage, retained); mkdirSync(stage);
+        const handle = hydrateDurableLifecycleOperation(JSON.parse(JSON.stringify(prepared.prepared.handle)));
+        const reference = phase === 'pre-seal' ? prepared.staged : handle;
+        writeFileSync(join(stage, 'stage-receipt.json'), JSON.stringify({ attemptId: handle.attemptId, operationId: handle.operationId, sourceRevision: 'forged', packageFingerprint: 'forged', projectedFingerprint: handle.projectedFingerprint }));
+        writeFileSync(join(stage, 'sentinel'), 'foreign user bytes');
+        let refused = false;
+        try { await zcodeCliLifecycle.cleanup(reference, 'aborted-preparation'); } catch { refused = true; }
+        expect(refused).toBe(true);
+        expect(readFileSync(join(stage, 'sentinel'), 'utf8')).toBe('foreign user bytes');
+        for (const changed of ['resource', 'marketplace', 'receipt-extra', 'plugin', 'outer-extra'] as const) {
+          rmSync(stage, { recursive: true }); cpSync(retained, stage, { recursive: true });
+          if (changed === 'resource') writeFileSync(join(stage, 'resources/skills/manual/notes.txt'), 'foreign resource');
+          if (changed === 'marketplace') writeFileSync(join(stage, 'marketplace/marketplace.json'), JSON.stringify({ name: 'foreign' }));
+          if (changed === 'receipt-extra') { const path = join(stage, 'stage-receipt.json'); const receipt = JSON.parse(readFileSync(path, 'utf8')); receipt.foreign = 'user bytes'; writeFileSync(path, JSON.stringify(receipt)); }
+          if (changed === 'plugin') writeFileSync(join(stage, 'marketplace/plugins/demo/plugin.json'), '{"name":"foreign"}');
+          if (changed === 'outer-extra') writeFileSync(join(stage, 'sentinel'), 'foreign extra');
+          const before = fingerprintTree(stage);
+          refused = false;
+          try { await zcodeCliLifecycle.cleanup(reference, 'aborted-preparation'); } catch { refused = true; }
+          expect({ changed, refused }).toEqual({ changed, refused: true });
+          expect(fingerprintTree(stage)).toBe(before);
+        }
+        rmSync(stage, { recursive: true }); symlinkSync(join(home, 'missing-foreign-root'), stage);
+        refused = false;
+        try { await zcodeCliLifecycle.cleanup(reference, 'aborted-preparation'); } catch { refused = true; }
+        expect(refused).toBe(true);
+        expect(lstatSync(stage).isSymbolicLink()).toBe(true);
+        rmSync(stage); renameSync(retained, stage);
+        await zcodeCliLifecycle.cleanup(reference, 'aborted-preparation');
+        expect(existsSync(stage)).toBe(false);
+        await zcodeCliLifecycle.cleanup(reference, 'aborted-preparation');
+      });
+    });
+  }
   test('installs a projected command and user-only skill, then reads the same bytes back', async () => {
     await withHome(async (home, cliRoot) => {
       const packageRoot = join(home, 'package');

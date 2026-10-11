@@ -84,3 +84,30 @@ The frozen `432b7d7` full suite finished with 723 passes, 5 skips, 1 failure,
 actual rollback assertion in 4.32 seconds. The parent independently reproduced
 both the deadline failure and the bounded passing diagnostic; neither result
 is characterized as a green full gate or solely concurrent-suite noise.
+
+## Cleanup authority review correction
+
+Independent Standards review found that the first deterministic staging receipt
+could be forged. The same regression on frozen `9ed82c4` reproduced deletion of
+foreign replacement stages for both pre-seal projections and hydrated durable
+handles (0 passes, 2 failures, 2.51 seconds). The retained isolated reproduction
+is `/tmp/plugnz-zcode-stage-red`; raw log is
+`/tmp/plugnz-zcode-stage-authority-red.log`.
+
+Pre-seal staging IDs now capture the actual whole-stage fingerprint. Durable
+cleanup checks actual plugin bytes against its sealed artifact, external
+resource bytes against the hashed plugin receipt, exact outer layout and
+generated marketplace/receipt fields, and canonical native resource binding.
+No mutable receipt's claimed fingerprint grants deletion authority. Changed
+plugin/resources/marketplace/receipt fields, extra foreign files and dangling
+replacement symlinks are retained with a loud failure. Intact stage cleanup
+remains repeatable after disposal. No public SPI or durable schema changed.
+
+The four-file dependent gate passed 20 tests, 2 existing platform skips, 0
+failures, 248 assertions in 100.07 seconds. The subsequent dangling-symlink
+negative passed both authority cases with 30 assertions; typecheck passed.
+The final ancestor guard's separate activation/retirement gate passed 11 tests,
+99 assertions in 21.63 seconds. Stable native-store symlink compatibility still
+needs review: home symlinks remain covered, but this guard refuses symlinked
+storage/CLI roots. None of these commands is a fresh full-suite or
+released-native Sandbox admission.

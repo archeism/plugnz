@@ -374,6 +374,34 @@ function activationStage(attemptId: string, operationId: string): string {
   return join(zcodeCliRoot(), '.plgnz-zcode-stage', sha256(`${attemptId}\n${operationId}`));
 }
 
+function assertStageCleanupAuthority(stage: string, reference: CleanupReference): void {
+  if (lstatSync(dirname(stage)).isSymbolicLink() || lstatSync(stage).isSymbolicLink()) throw new Error('ZCode cleanup stage is redirected');
+  assertNoSymlinks(stage);
+  const artifact = reference.artifactId;
+  if (artifact?.startsWith('stage-sha256:')) {
+    if (artifact !== `stage-sha256:${fingerprintTree(stage)}`) throw new Error('ZCode cleanup stage bytes changed');
+  } else if (!artifact?.startsWith('sha256:')) throw new Error('ZCode cleanup stage has no captured artifact authority');
+  const exactEntries = (root: string, expected: string[]) => {
+    if (canonicalJson(readdirSync(root).sort()) !== canonicalJson(expected.sort())) throw new Error('ZCode cleanup stage layout changed');
+  };
+  exactEntries(stage, ['marketplace', 'resources', 'stage-receipt.json']);
+  const market = join(stage, 'marketplace');
+  exactEntries(market, ['plugins', 'marketplace.json']);
+  const packages = readdirSync(join(market, 'plugins'));
+  if (packages.length !== 1) throw new Error('ZCode cleanup stage package identity changed');
+  const name = packages[0]!; assertName(name, 'staged package name');
+  const plugin = join(market, 'plugins', name);
+  const digest = fingerprintTree(plugin);
+  if (artifact.startsWith('sha256:') && artifact !== `sha256:${digest}`) throw new Error('ZCode cleanup stage plugin bytes changed');
+  const marker = readZcodeOwnership(plugin);
+  if (marker === null || marker.nativeId.split('@')[0] !== name || marker.resourceFingerprint !== fingerprintTree(join(stage, 'resources'))) throw new Error('ZCode cleanup stage resources changed');
+  if (marker.resourcePath !== join(realpathSync(zcodeCliRoot()), 'plgnz-resources', marketplaceName(marker.nativeId), marker.fingerprint)) throw new Error('ZCode cleanup stage native root was redirected');
+  const expectedReceipt = { attemptId: reference.attemptId, operationId: reference.operationId, sourceRevision: marker.source, packageFingerprint: marker.fingerprint, projectedFingerprint: digest };
+  if (canonicalJson(readJson(join(stage, 'stage-receipt.json'))) !== canonicalJson(expectedReceipt)) throw new Error('ZCode cleanup stage receipt changed');
+  const expectedMarket = { name: marketplaceName(marker.nativeId), plugins: [{ name, source: `./plugins/${name}` }] };
+  if (canonicalJson(readJson(join(market, 'marketplace.json'))) !== canonicalJson(expectedMarket)) throw new Error('ZCode cleanup stage marketplace changed');
+}
+
 function readConfigObject(): Record<string, unknown> | null {
   const file = join(zcodeCliConfigRoot(), 'config.json');
   if (!existsSync(file)) return null;
@@ -793,7 +821,7 @@ const zcodeCliLifecycleDefinition: LifecycleHostDefinition = {
     writeFileSync(join(marketStage, 'marketplace.json'), `${JSON.stringify({ name: market, plugins: [{ name: snapshot.packageName, source: `./plugins/${snapshot.packageName}` }] }, null, 2)}\n`);
     rejectCommandCollisions(marketStage, snapshot.nativeId, nativeById(snapshot.nativeId)?.installPath);
     writeFileSync(join(stage, 'stage-receipt.json'), JSON.stringify({ ...receipt, projectedFingerprint: fingerprintTree(pluginStage) }));
-    return { stagingId: `stage:${request.selection.attemptId}:${request.selection.operationId}`, stagingRoot: pluginStage };
+    return { stagingId: `stage-sha256:${fingerprintTree(stage)}`, stagingRoot: pluginStage };
   },
   applyLifecycleDirectives: async () => [],
   applyPins: async (projection) => {
@@ -937,12 +965,20 @@ const zcodeCliLifecycleDefinition: LifecycleHostDefinition = {
   },
   cleanup: async (reference: CleanupReference, _disposition: CleanupDisposition): Promise<CleanupResultData> => {
     const stage = activationStage(reference.attemptId, reference.operationId);
-    if (existsSync(stage)) {
-      if (lstatSync(dirname(stage)).isSymbolicLink() || lstatSync(stage).isSymbolicLink()) throw new Error('ZCode cleanup stage is redirected');
-      const receipt = readJson(join(stage, 'stage-receipt.json'));
-      if (receipt?.['attemptId'] !== reference.attemptId || receipt['operationId'] !== reference.operationId
-        || typeof receipt['sourceRevision'] !== 'string' || typeof receipt['packageFingerprint'] !== 'string'
-        || (reference.artifactId?.startsWith('sha256:') && reference.artifactId !== `sha256:${receipt['projectedFingerprint']}`)) throw new Error('ZCode cleanup stage ownership does not match operation');
+    for (const root of [dirname(zcodeCliRoot()), zcodeCliRoot(), dirname(stage)]) {
+      try {
+        if (lstatSync(root).isSymbolicLink()) throw new Error('ZCode cleanup ancestor is redirected');
+      } catch (error) {
+        if (!isObject(error) || error['code'] !== 'ENOENT') throw error;
+      }
+    }
+    let stagePresent = true;
+    try { lstatSync(stage); } catch (error) {
+      if (!isObject(error) || error['code'] !== 'ENOENT') throw error;
+      stagePresent = false;
+    }
+    if (stagePresent) {
+      assertStageCleanupAuthority(stage, reference);
       rmSync(stage, { recursive: true });
     }
     rmSync(join(zcodeCliRoot(), 'plgnz-lifecycle', reference.attemptId, reference.operationId), { recursive: true, force: true });
