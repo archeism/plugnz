@@ -77,7 +77,7 @@ export async function runOfflineLifecyclePin(host: HostWriter, plugin: Installed
     return { ...preview, changes: preview.changes.map(change => ({ ...change, file: activatedRoot === undefined ? change.file : join(activatedRoot, relative(plugin.path!, change.file)) })) };
   } catch (error) {
     if (!committed && handle !== undefined && applying) {
-      if (!(error instanceof LifecycleHostPhaseError && error.phase === 'apply-precondition')) {
+      if (!(error instanceof LifecycleHostPhaseError && error.mutationStarted === false)) {
         attempt.phase = 'recovery-required'; attempt.journal[0]!.state = 'rollback'; pending('rollback');
         try {
           await adapter.rollback(handle); adapter.verifyRollback(handle, await adapter.readback(handle));
