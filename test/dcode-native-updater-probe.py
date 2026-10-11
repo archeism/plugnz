@@ -6,8 +6,12 @@ registry parser, cache writer, manifest parser, lock and loader are real.
 import json
 import os
 import tempfile
+from importlib.metadata import version
 from pathlib import Path
 from unittest.mock import patch
+
+released_version = version("deepagents-code")
+assert released_version == "0.1.83", released_version
 
 with tempfile.TemporaryDirectory(prefix="plugnz-dcode-updater-") as directory:
     root = Path(directory)
@@ -43,4 +47,4 @@ with tempfile.TemporaryDirectory(prefix="plugnz-dcode-updater-") as directory:
     assert "managed@proof" in store.load_enabled_plugin_ids(strict=True)
     loaded = discovery.discover_plugins()
     assert any(plugin.plugin_id == "managed@proof" for plugin in loaded.plugins), loaded
-    print(json.dumps({"releasedVersion": "0.1.83", "updated": updated, "managedRegistryVersion": installed["managed@proof"].version, "managedPayload": "frozen old bytes", "managedEnabled": True, "discoveryType": type(loaded).__name__}))
+    print(json.dumps({"releasedVersion": released_version, "updated": updated, "managedRegistryVersion": installed["managed@proof"].version, "managedPayload": "frozen old bytes", "managedEnabled": True, "discoveryType": type(loaded).__name__}))
