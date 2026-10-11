@@ -58,11 +58,15 @@ revision follows the separate Claude proof's measured 3.77 GiB inherited physica
 base; it does not assert that this fresh Codex base will have that same size.
 Include native tools, Source cache, both homes, rollback artifacts and archive
 scratch. Refuse further growth at either cap. Native tools are shared read-only
-between homes. Combined concurrent lineage ceiling is **11.7 GiB**: Claude's
-explicit 7.25 GiB lineage plus this 4.25 GiB active filesystem and at most 200 MiB
+between homes. Combined concurrent lineage ceiling is **11.75 GiB**: Claude's
+explicit 7.25 GiB lineage plus this 4.25 GiB active filesystem and at most 250 MiB
 local Codex archive/restore scratch. Retain every failed attempt.
-Local compressed evidence and restore scratch
-are each bounded to 100 MiB; existing archives/snapshots are not deleted.
+Local compressed evidence is bounded to 100 MiB and complete restore scratch to
+150 MiB. The restore cap was explicitly revised before extraction: the first
+actual proof tree measured 107,224 KiB, exceeding the earlier 100 MiB estimate.
+Concurrent lineage accounting therefore allows 250 MiB local Codex storage,
+not the earlier 200 MiB, for a rounded **11.75 GiB** total ceiling. Existing
+archives/snapshots are not deleted.
 
 No new snapshot is required for this experiment. Verify archive inventory,
 hashes and a real restore, and obtain independent evidence review before ending
@@ -98,3 +102,44 @@ Official API authority: [release-pinned plugin CLI](https://github.com/openai/co
 and [release-pinned Git operations](https://github.com/openai/codex/blob/c1382380de69521303b416720a52f42d51af6248/codex-rs/core-plugins/src/marketplace_upgrade/git.rs).
 The latter pins a full SHA directly and sets `GIT_OPTIONAL_LOCKS=0`; it does not
 establish a native whole-marketplace mutation lock. Skills remain unchanged.
+
+## First actual runtime checkpoint — not final rollback acceptance
+
+Official installation completed with scripts disabled. The first supplier
+verification failed because the platform dependency is an npm alias:
+`@openai/codex-linux-x64` resolves to `@openai/codex@0.162.0-linux-x64`.
+Correction `24b1ac1` uses the lockfile's actual supplier name and cross-checks
+installed name/version, official registry metadata, tarball URL and integrity.
+It verifies the already-installed supplier without repeating installation.
+Both installer versions and original installation streams are retained.
+
+Actual native executable: 294,410,952 bytes, SHA256
+`50ed828f357c655a3c82054d346cab8434f24901f14ec19b8267571bdd008b38`;
+version output `codex-cli 0.162.0`. Physical baseline was 3,585,212 KiB and
+post-install usage 4,210,384 KiB, both inside the frozen budget.
+
+Public Managed V1 bootstrap in the rollback home reported converged, with
+completed durable journals. Actual SDK discovery returned exactly one enabled
+`lifecycle-probe:probe` at the expected native cache path. The initial proof
+controller then failed its cleanup gate: terminating only the JavaScript launcher
+did not immediately close the native child's inherited pipes. The failed script
+and SDK response remain retained. Correction `94f66b2`, independently reviewed,
+starts a separate process group and kills that group with a bounded close wait.
+Explicit bootstrap-only `resume-discovery` skips marketplace setup/product sync,
+reuses the original report and writes a distinct SDK response. That retry passed:
+237 ms wall, controller 57,938 user / 35,278 system microseconds; all five
+capability sets zero, NoNewPrivs enabled, physical disk 4,321,412 KiB after.
+The recorded before/after hashes for this retry are **discovery retry surfaces**,
+not reconstructed pre-deployment hashes. No V2 refresh or V3 failure is claimed.
+
+Complete first-attempt proof state, supplier metadata, authored scripts, original
+failures, original and resumed SDK replies, public report and journal are archived
+at `~/.local/state/plugnz-evidence/20261011/codex-final-first-attempt.tar.gz`.
+SHA256 `003b79f70414de3a70980bd6a38c546ab608044b15028c28982c175421ad4e80`;
+allocated archive 54,748 KiB. A real complete extraction at
+`/tmp/plugnz-codex-final-first-restore.wSaKhh` uses 117,760 KiB, below the explicitly
+revised 150 MiB restore cap. Independent controller checks reproduced all four
+recorded native surface hashes, completed journals/no pending activations, and
+the exact enabled native SDK skill. Supplier executable reconstruction uses
+retained official immutable tarball metadata/integrity plus the binary hash;
+the 294 MB binary body is not duplicated in this evidence archive.
