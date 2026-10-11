@@ -221,3 +221,33 @@ reappearance negatives; release-failure retry after artifact disposal; exact
 remaining-journal completeness regression; strict consumer precommand receipt
 admission/composed public proof; independent review and frozen full/packed gates.
 No production pin advancement or real-home deployment has occurred.
+
+## Reviewed blocker correction checkpoint
+
+Independent review found three correctness gaps in the runtime checkpoint:
+unsealed applying intent could fail report parsing, legacy unknown accepted
+intent could claim successful settlement, and current retirement proof/absence
+checks ran after sibling operations rather than before current apply.
+
+Historical pending receipts now preserve original uncertainty without claiming
+that this retry mutated native state. Existing current pending-outcome mutation
+invariants remain strict. Public applying/unsealed intent returns valid loud JSON
+and leaves ledger/native bytes unchanged; incomplete legacy proof cannot settle
+as a completed modern accepted intent.
+
+The executor globally validates every readback-only retirement ownership proof
+and fresh native absence before any current native/ledger write, then rechecks at
+the retirement boundary. Missing retained tombstone proof is a command-global
+refusal, not a failed row that permits sibling writes. Global refusal preserves
+its actionable summary diagnostic and all current pair outcomes as not attempted.
+
+Public mixed-sync fixtures produce authentic cleanup-pending retirement plus a
+sibling: no recorded original command is rewritten. Missing-tombstone and foreign
+reappearance after recovery both block a requested sibling update, preserve its
+actual native manifest bytes and ledger fingerprint, and retain the completed
+historical recovery receipt. Foreign sentinel bytes remain intact. Intermediate
+fixture failures were retained diagnostically; they are not acceptance evidence.
+
+Frozen focused gate: 54 passed, 364 assertions, 0 failed, 72.51 seconds across the
+same six files; `bun run check` passed. Remaining acceptance work above remains
+open, including consumer integration and full/packed gates. Skills unchanged.

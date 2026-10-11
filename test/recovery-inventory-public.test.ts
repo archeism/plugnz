@@ -3,6 +3,34 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { withLifecycleCliHarness } from './lifecycle-cli-harness';
 import type { LifecycleStateV2 } from '../src/state';
+import { parseLifecycleReport } from '../src/lifecycle-report';
+
+test('applying modern unsealed intent returns loud valid JSON without claiming this retry mutated', async () => {
+  await withLifecycleCliHarness(harness => {
+    harness.writeHome({ '.cursor/.keep': '' });
+    const source = harness.source('unsealed-applying', { 'plugin.json': '{"name":"demo","version":"1.0.0"}\n' });
+    const cursor = harness.fakeNative('cursor', Array.from({ length: 16 }, () => ({ args: ['--version'], stdout: '2.4.0\n' })));
+    const env = { OPEN_PLUGIN_CURSOR_BIN: cursor.path };
+    expect(harness.run(['sync', source, '--target', 'cursor', '--json'], { env }).exitCode).toBe(0);
+    const file = join(harness.home, 'state.json');
+    const state: LifecycleStateV2 = JSON.parse(readFileSync(file, 'utf8'));
+    const attempt = state.attempts[0]!;
+    attempt.phase = 'applying'; attempt.mutationStarted = true;
+    const row = attempt.journal[0]!;
+    row.state = 'applying'; delete row.sealedOperation; delete row.settlement;
+    writeFileSync(file, JSON.stringify(state));
+    const result = harness.run(['sync', source, '--target', 'cursor', '--json'], { env });
+    expect(result.exitCode).toBe(1);
+    const report = parseLifecycleReport(JSON.parse(result.stdout));
+    expect(report.summary.mutationStarted).toBe(false);
+    expect(report.summary.changed).toBe(false);
+    expect(report.summary.reason!.diagnostic).toContain('no durable sealed operation');
+    expect(report.recovery!.receipts[0]!.original.operationId).toBe(row.operationId);
+    expect(report.recovery!.receipts[0]!.status).toBe('pending');
+    expect(result.state.after).toEqual(result.state.before);
+    expect(result.stores.cursor.after).toEqual(result.stores.cursor.before);
+  });
+}, 20_000);
 import { projectRecoveryOperationProof } from '../src/recovery-proof';
 
 test('sealed proof rejects an explicit legacy route instead of upgrading it', async () => {

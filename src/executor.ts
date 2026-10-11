@@ -81,6 +81,11 @@ async function executeFrozen(
         return refusalReport(plan, createLifecycleReason('internal', 'internal.invariant', 'retained frozen source bytes drifted before apply'));
       }
     }
+    for (const row of plan.operations) {
+      if (row.completedRetirement === undefined) continue;
+      const checked = await readbackCompletedRetirement(plan, row.operation, row.completedRetirement, hosts);
+      if (checked.reason !== null) return refusalReport(plan, checked.reason, true);
+    }
   } catch (error) {
     return refusalReport(plan, thrownReason(error));
   }
@@ -1267,7 +1272,7 @@ function filesystemDenial(error: unknown): boolean {
   return code === 'EACCES' || code === 'EPERM' || code === 'EROFS' || code === 'ENOSPC';
 }
 
-function refusalReport(plan: FrozenPlan, reason: LifecycleReason): ExecuteLifecycleResult {
+function refusalReport(plan: FrozenPlan, reason: LifecycleReason, globalNotAttempted = false): ExecuteLifecycleResult {
   const [first, ...rest] = plan.operations;
   if (first === undefined) {
     return finish(parseLifecycleReport({
@@ -1287,13 +1292,14 @@ function refusalReport(plan: FrozenPlan, reason: LifecycleReason): ExecuteLifecy
       },
     }));
   }
-  const outcomes = [stop(first.operation, reason).outcome, ...rest.map((row) => notAttempted(row.operation, reason))];
+  const outcomes = globalNotAttempted ? plan.operations.map(row => notAttempted(row.operation, reason))
+    : [stop(first.operation, reason).outcome, ...rest.map((row) => notAttempted(row.operation, reason))];
   return finish(parseLifecycleReport({
     schemaVersion: 1,
     command: plan.report.command,
     plan: plan.report.plan,
     outcomes,
-    summary: summaryFor(outcomes),
+    summary: { ...summaryFor(outcomes), ...(globalNotAttempted ? { reason, failureCategory: reason.category } : {}) },
   }));
 }
 

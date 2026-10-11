@@ -294,7 +294,8 @@ function parseRecoveryReceipts(value: unknown, dryRun: boolean): LifecycleRecove
       || item['mutationStarted'] || item['changed'] || item['readbackVerified'] || item['resourceState'] !== 'unknown' || item['activationState'] !== 'unknown')) {
       throw contradiction('unattempted recovery cannot claim observations, settlement, or mutation');
     }
-    if (item['settlement'] === 'not-attempted' && (original.sealed || original.journalState !== 'pending'
+    if (item['settlement'] === 'not-attempted' && (original.command === 'legacy-recovery' || original.package === null || original.nativeId === null
+      || original.sealed || original.journalState !== 'pending'
       || item['status'] !== 'completed' || item['mutationStarted'] || item['changed'] || item['readbackVerified']
       || item['resourceState'] !== 'unknown' || item['activationState'] !== 'unknown')) throw contradiction('accepted-intent settlement cannot claim native apply');
     if (item['readbackVerified'] && !isKnownSafeReadbackState(item['resourceState'], item['activationState'])) {
@@ -566,7 +567,7 @@ function assertSummary(summary: Record<string, unknown>, outcomes: readonly Reco
   }
   const claimsRecoveryRequired = recoveryRequiredOutcomes.length > 0 ||
     (isObject(reason) && reason['code'] === 'recovery.required');
-  if (claimsRecoveryRequired && summary['mutationStarted'] !== true) {
+  if (claimsRecoveryRequired && pendingReceipts.length === 0 && summary['mutationStarted'] !== true) {
     throw contradiction('recovery.required work requires mutationStarted=true');
   }
   if (claimsRecoveryRequired && pendingReceipts.length === 0 && !recoveryRequiredOutcomes.some((outcome) =>

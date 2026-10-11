@@ -126,6 +126,19 @@ test('empty additive recovery envelope is valid but never changes aggregate fact
   expect(parseLifecycleReport(report)).toEqual(report);
 });
 
+test('legacy unknown intent cannot masquerade as a completed modern accepted settlement', () => {
+  const report = validReport();
+  report.recovery = { schemaVersion: 1, receipts: [{
+    original: { attemptId: 'legacy-attempt', command: 'legacy-recovery', operationId: 'legacy-operation',
+      scope: scope(), package: null, nativeId: null, action: 'install', route: null, journalState: 'pending', sealed: false },
+    status: 'completed', settlement: 'not-attempted', finalJournalState: 'not-attempted', resourceState: 'unknown', activationState: 'unknown',
+    mutationStarted: false, changed: false, readbackVerified: false, reason: null,
+  }] };
+  let rejected = false;
+  try { parseLifecycleReport(report); } catch { rejected = true; }
+  expect(rejected).toBe(true);
+});
+
 describe('lifecycle report contract', () => {
   test('pins schema version and orthogonal machine-readable fields', () => {
     expect({

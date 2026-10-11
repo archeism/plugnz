@@ -130,7 +130,7 @@ export async function recoverLifecycleJournals(plan: Extract<LifecyclePlan, { ki
     const reason = createLifecycleReason('recovery', 'recovery.required', `cross-process recovery of operation '${pending.operationId}' remains pending: ${unknownErrorDiagnostic(error)}`);
     const persisted = state.attempts.flatMap(attempt => attempt.journal).find(row => row.operationId === pending.operationId && row.scopeId === pending.scopeId);
     receipts[pendingIndex] = { original: receipts[pendingIndex]!.original, status: 'pending', settlement,
-      finalJournalState: persisted?.state ?? pending.state, changed, mutationStarted: mutationStarted || pending.sealedOperation !== undefined,
+      finalJournalState: persisted?.state ?? pending.state, changed, mutationStarted,
       readbackVerified, resourceState: changed && !readbackVerified ? 'potentially-changed' : resourceState, activationState, reason };
     return { reason, receipts };
   }
