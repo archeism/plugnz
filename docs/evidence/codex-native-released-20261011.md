@@ -92,3 +92,22 @@ Restored public rollback report matches separately copied SHA-256
 `e39a8e943718fd42e244981f4bf113dc3b4178d66e5958d5a995755983a2eaa5`.
 The fixture branch is not a product integration branch. Probe source syntax
 checks passed; native proof did not use an LLM API. No skill revision was made.
+
+### Retention and stopped-compute verification
+
+The controller independently rechecked the final and primitive archive hashes
+above and streamed `codex-native-proof/public-01/rollback-report.json` from the
+final archive: it matches the separately retained report hash exactly. Durable
+copies now live at
+`~/.local/state/plugnz-evidence/20261011/codex-native-final-archive.tar.gz` and
+`~/.local/state/plugnz-evidence/20261011/codex-native-primitive-archive.tar.gz`.
+The five retained probe scripts passed `node --check`.
+
+Authenticated project inspection confirmed `charfeng1s-projects/workspace-agent-lab`,
+project `prj_OhbHIc572xq4SROh5r7vAvnycCKR`. A fresh read-only
+`sandbox list --all --name-prefix plugnz-codex-native-20261011 --project
+workspace-agent-lab --scope charfeng1s-projects` confirmed this owned Sandbox
+is stopped, with no snapshot, 58.638 seconds CPU, 19 MiB outbound and 175 MiB
+inbound network. No proof roots or snapshots were deleted. These checks preserve
+the earlier evidence; they do not satisfy the unproven native-exit failure or
+foreign-mutation acceptance gates for a later adapter candidate.
