@@ -53,3 +53,49 @@ follow-up; no noncontrolled-repository changes were authorized or made here.
 
 The Addy debugging/API and Matt TDD/review skills were used unchanged. These
 product checks do not constitute a skill A/B experiment or skill improvement.
+
+## Combined candidate verification
+
+Candidate `fda9912` includes dcode lifecycle, selective package retirement,
+zero-mutation precondition protection, recovery resource release and protective
+disable execution. Bun 1.4.0 passed the full local suite: 648 passed, five
+skipped, zero failed, 4096 assertions in 179.37 seconds. Typechecking passed.
+An earlier Bun 1.3.14 run failed only the explicitly versioned YAML grammar
+contract; it was not treated as an acceptable full gate.
+
+The same immutable candidate passed the full Vercel Sandbox suite: 648 passed,
+five skipped, zero failed, 4096 assertions in 54.07 seconds; typechecking passed.
+The default sandbox process runs as uid 1000 but has all effective/ambient Linux
+capabilities, including permission bypass. The initial full run therefore failed
+ten permission-injection tests (638 passed, five skipped); those results were
+retained. The acceptance run kept every assertion and used:
+
+```sh
+setpriv --bounding-set=-all --inh-caps=-all --ambient-caps=-all --no-new-privs bash -lc 'bun test --timeout 30000 && bun run check'
+```
+
+The capability observation after dropping privileges showed empty effective,
+bounding and ambient sets. Shell timing reported 54.080 seconds wall, 36.670 user
+and 10.080 system. Peak RSS remains unmeasured. The 30-second test deadline covers
+multi-subprocess scenarios; no failed assertions were skipped or relaxed.
+
+The sandbox also installed released `deepagents-code==0.1.83` into an isolated
+Python 3.13.15 environment. The actual native updater probe passed: the managed
+null-version entry remained enabled, discoverable and byte-identical while its
+normally versioned sibling advanced. Six public CLI tests with the real native
+lock interpreter passed 39 assertions in 5.14 seconds. Native environment, source
+checkout and Bun tools used 291 MB, 37 MB and 78 MB respectively (406 MB total,
+excluding the package-manager cache and downloaded Python runtime).
+
+Raw evidence is retained outside Git under
+`/home/charlesfengyc/.local/state/plugnz-evidence/20261011/`:
+
+- `plugnz-unprivileged-full-gate.log`, SHA-256
+  `8030e00554627c28a4b1605e7c705a1dad4cc6c5e4021e2d7c88ece382668099`.
+- `plugnz-native-deps.txt`, SHA-256
+  `81b77af4446bfbe61d51727b599e0cb8b603137a93ae9c631593728feab06c66`.
+- `plugnz-privileged-full-gate.log`, the failed permission-injection run.
+
+These gates do not close the outstanding offline-pin and recovery-edge reviews,
+route migration or final published consumer verification. The five skips are
+explicit platform/real-loader prerequisites, not evidence of those native routes.
