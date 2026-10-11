@@ -2289,27 +2289,31 @@ describe('public lifecycle commands', () => {
     });
   });
 
-  test('a legacy v2 removal refusal preserves ownership and records recoverable pending intent', async () => {
+  test('a legacy cleanup removal refusal preserves ownership and records recoverable pending intent', async () => {
     await withLifecycleCliHarness((harness) => {
-      harness.writeHome({ '.cursor/.keep': '', '.deepagents/.keep': '' });
       const source = harness.source('legacy-remove-refusal', {
         'plugin.json': '{"name":"demo","version":"1.0.0","description":"fixture"}\n',
         'skills/demo/SKILL.md': '---\nname: demo\ndescription: fixture\n---\n\nDemo.\n',
       });
-      const cursor = harness.fakeNative('cursor', versionSteps(24));
-      const dcode = harness.fakeNative('dcode', Array.from({ length: 12 }, () => ({
-        args: ['--version'], stdout: 'deepagents-code 0.1.83\n',
-      })));
-      const env = { OPEN_PLUGIN_CURSOR_BIN: cursor.path, OPEN_PLUGIN_DCODE_BIN: dcode.path };
-      expect(harness.run(['add', source, '--target', 'cursor', '--json'], { env }).exitCode).toBe(0);
-      expect(harness.run(['add', source, '--target', 'dcode', '--json'], { env }).exitCode).toBe(0);
-      const registryPath = join(harness.storePath('dcode'), '.state', 'installed_plugins.json');
-      const registry = JSON.parse(readFileSync(registryPath, 'utf8')) as { plugins: Record<string, Array<{ installPath: string }>> };
-      const installed = registry.plugins['demo@local']![0]!.installPath;
-      const marker = readFileSync(join(installed, '.plgnz-install.json'), 'utf8');
-      // The old writer refuses removal when the native ownership marker is gone.
+      // A genuine retained standalone install exercises the cleanup-only writer;
+      // no unsupported new standalone installation is requested.
+      const scope = createDeploymentScopeIdentity({ kind: 'local', locator: source }, { kind: 'pi', instance: 'default' });
+      const installed = join(harness.storePath('pi'), 'skills', 'local___demo');
+      const marker = JSON.stringify({ source, pluginId: 'demo@local', fingerprint: 'legacy' });
+      harness.writeHome({
+        '.pi/agent/skills/local___demo/.plgnz-install.json': marker,
+        '.pi/agent/skills/local___demo/plugin.json': '{"name":"demo","version":"1.0.0"}\n',
+        'state.json': JSON.stringify({
+          version: 2, stateGeneration: 1,
+          scopes: [{ ...scope, authority: 'legacy-import', lifecycle: 'active', selectorMode: 'legacy-unknown' }],
+          activations: [{ scopeId: scope.id, packageId: 'demo@local', nativeId: 'demo@local', sourceRelativeDir: '.',
+            sourceRevision: 'legacy', route: { kind: 'legacy-unverified' }, ownership: { kind: 'legacy-claim', prior: 'plgnz' },
+            fingerprints: {}, activationState: 'unknown', readbackState: 'unverified', pins: [] }],
+          attempts: [], tombstones: [],
+        }),
+      });
       rmSync(join(installed, '.plgnz-install.json'));
-      const result = harness.run(['remove', 'demo@local', '--target', 'dcode', '--json'], { env });
+      const result = harness.run(['remove', 'demo@local', '--target', 'pi', '--json']);
       const report = parseLifecycleReport(JSON.parse(result.stdout));
       const state = JSON.parse(bytesToText(result.state.after ?? [])) as {
         activations: Array<{ nativeId: string; ownership: { kind: string }; pending?: { operation: string } }>;
@@ -2323,7 +2327,7 @@ describe('public lifecycle commands', () => {
       expect(state.attempts.some((attempt) => attempt.command === 'remove' && attempt.journal.some((row) => row.state === 'applying'))).toBe(true);
       expect(existsSync(join(installed, 'plugin.json'))).toBe(true);
       writeFileSync(join(installed, '.plgnz-install.json'), marker);
-      const retried = harness.run(['remove', 'demo@local', '--target', 'dcode', '--json'], { env });
+      const retried = harness.run(['remove', 'demo@local', '--target', 'pi', '--json']);
       const retryReport = parseLifecycleReport(JSON.parse(retried.stdout));
       const finalized = JSON.parse(bytesToText(retried.state.after ?? [])) as typeof state;
       expect(retried.exitCode).toBe(0);
