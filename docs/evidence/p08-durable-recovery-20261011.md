@@ -152,3 +152,50 @@ Retained artifacts in the same evidence directory:
 | --- | --- |
 | `plugnz-9e-successful-recovery-accounting.test.ts` | `b6e7a131de3e8ea940c1512b64cbaf3c034acccd6bca5fc181c99304331eb6ba` |
 | `plugnz-9e-successful-recovery-accounting-04.log` | `93d50df9e1aa3c499bb119b5cd4b85109d682d49399a955d54f75e84001742d6` |
+
+## Combined gate and bounded test-budget correction
+
+Frozen integration `3f6c651` passed typecheck but its unmodified `bun test`
+terminated with 667 passes, five skips and two failures (4415 assertions,
+224.31 seconds). Both failures hit Bun's default five-second deadline in the
+existing ZCode multi-CLI activation scenarios. The exact same file passed in
+isolation without a timeout override: five tests, 35 assertions, 13.55 seconds;
+the affected cases took 2.71 and 3.48 seconds. This is not a green full gate and
+is not attributed to a native capability defect from timeout alone.
+
+Only those two multi-CLI test deadlines are now explicitly bounded at 20 seconds;
+assertions and production subprocess timeouts are unchanged. Focused recheck:
+five tests, 35 assertions, 13.52 seconds; typecheck and diff check passed. A fresh
+unmodified full suite on the corrected frozen tree remains required before main.
+
+| Retained log | SHA-256 |
+| --- | --- |
+| `plugnz-3f6-integration-full-timeout.log` | `04886a6c64d9112d4af3498ae8e0337a6e0571ee7f053c6ee8f4b2fe1b46b72c` |
+| `plugnz-3f6-zcode-isolated.log` | `88a698ad077550780e69b6f44a13cf167a9665abe58dab0cc1f8c1042de9f0a3` |
+
+The next frozen tree, `3f18c2f`, passed both ZCode cases but its full suite
+terminated with 668 passes, five skips, one failure and one subsequent error
+(4413 assertions, 214.51 seconds). The dcode cache-rename SIGKILL test hit its
+default five-second deadline; Bun killed its active CLI, and the test's
+continuation subsequently observed a null subprocess status. The exact test
+passed isolated without an override: 12 assertions, 3.81 seconds. Its explicit
+deadline is now 30 seconds, matching other multi-process recovery tests. Focused
+recheck passed all 12 assertions in 4.06 seconds; typecheck passed. Native process
+timeouts, crash injection and assertions are unchanged; another frozen full gate
+is required, not inferred from the focused success.
+
+| Retained log | SHA-256 |
+| --- | --- |
+| `plugnz-3f18-integration-full-timeout.log` | `31494c011f75cebd97f6614030321ae59f858f37dd04773197e10face7527d6d` |
+| `plugnz-3f18-dcode-kill-isolated.log` | `2ef65add1a4d4dec93a6f2210ec6002d8526948d3eda23ab7f2e9268bb86e9b4` |
+
+The final frozen integration `6d4b551239f1fc293a3772049aa60118e4e422d7`
+passed the unmodified full `bun test` under Bun 1.4.0: 669 passes, five existing
+skips, zero failures, 4416 assertions across 674 tests in 62 files (245.69
+seconds). `bun run check` also passed on that exact commit. Independent reviews
+approved the bounded failure-accounting changes and both test-only deadline
+corrections. This accepts the bounded checkpoint, not the outstanding successful
+recovery aggregate/changed-intent receipt contract or complete P08 program.
+
+Retained full log: `plugnz-6d4-integration-full.log`, SHA-256
+`eff578733a373d7b72fc84601f5ebc67737196218b9afd39021a7ee84337641c`.
