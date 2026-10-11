@@ -649,7 +649,7 @@ type AddTargetSplit =
   | { readonly kind: 'usage'; readonly diagnostic: string; readonly code?: Extract<LifecycleReasonCode, `usage.${string}`> }
   | { readonly kind: 'refused'; readonly report: LifecycleReport }
   | { readonly kind: 'empty' }
-  | { readonly kind: 'ready'; readonly planner: readonly string[]; readonly writers: readonly HostWriter[] };
+  | { readonly kind: 'ready'; readonly planner: readonly string[]; readonly writers: readonly HostWriter[]; readonly inactive: readonly ConsumerProfile[] };
 
 function splitAddTargets(requested: readonly string[], dryRun: boolean): AddTargetSplit {
   if (requested.length > 0) {
@@ -675,9 +675,13 @@ function splitAddTargets(requested: readonly string[], dryRun: boolean): AddTarg
       }
       return { kind: 'refused', report: reportFor('add', dryRun, [], [], { terminalPhase: 'preflight', mutationStarted: false, reason: failure }) };
     }
+    const writerIds = new Set(writers.map((writer) => writer.id));
+    const inactive = profiles.selected.filter((profile) => !writerIds.has(profile.id));
+    const activeIds = profiles.selected.filter((profile) => writerIds.has(profile.id)).map((profile) => profile.id);
+    if (activeIds.length === 0) return { kind: 'ready', planner: [], writers: [], inactive };
     let present: ReturnType<typeof select<HostWriter>>;
     try {
-      present = select(writers, profiles.selected.map((profile) => profile.id));
+      present = select(writers, activeIds);
     } catch (error) {
       return { kind: 'refused', report: reportFor('add', dryRun, [], [], {
         terminalPhase: 'preflight',
@@ -686,11 +690,12 @@ function splitAddTargets(requested: readonly string[], dryRun: boolean): AddTarg
       }) };
     }
     if (present.error !== undefined) return { kind: 'usage', diagnostic: present.error, code: 'usage.invalid-selection' };
-    if (present.selected.length === 0) return { kind: 'empty' };
+    if (present.selected.length === 0 && inactive.length === 0) return { kind: 'empty' };
     return {
       kind: 'ready',
       planner: present.selected.filter((writer) => usesRegisteredPlanner(writer)).map((writer) => writer.id),
       writers: present.selected.filter((writer) => !usesRegisteredPlanner(writer)),
+      inactive,
     };
   }
   let detected: HostWriter[];
@@ -708,7 +713,45 @@ function splitAddTargets(requested: readonly string[], dryRun: boolean): AddTarg
     kind: 'ready',
     planner: detected.filter((writer) => usesRegisteredPlanner(writer)).map((writer) => writer.id),
     writers: detected.filter((writer) => !usesRegisteredPlanner(writer)),
+    inactive: [],
   };
+}
+
+function inactiveProfileAdd(source: string, profiles: readonly ConsumerProfile[], flags: VerbFlags): LifecycleReport {
+  let resolved;
+  try {
+    resolved = resolveSource(source);
+  } catch (error) {
+    return reportFor('add', flags.dryRun, [], [], {
+      terminalPhase: 'resolve',
+      mutationStarted: false,
+      reason: reason('runtime', 'runtime.operation-failed', unknownErrorDiagnostic(error)),
+    });
+  }
+  const pluginSelection = selectPlugins(resolved.plugins, flags.plugins);
+  if (pluginSelection.error !== undefined) return usageReport('add', flags.dryRun, pluginSelection.error, 'usage.invalid-selection');
+  const sourceSnapshotId = 'source-0';
+  const sourceSnapshots = resolved.snapshot === undefined ? [] : [{ id: sourceSnapshotId, reference: resolved.snapshot }];
+  const incompatible = compatibilityOutcomes(
+    profiles,
+    pluginSelection.selected.map((plugin) => plugin.name),
+    'install',
+    resolved.snapshot?.binding ?? sourceBindingForArgument(source),
+    resolved.snapshot === undefined ? null : sourceSnapshotId,
+  );
+  if (incompatible === undefined) {
+    return reportFor('add', flags.dryRun, [], [], {
+      terminalPhase: 'preflight',
+      mutationStarted: false,
+      reason: reason('internal', 'internal.invariant', 'a target without a writer was admitted for install'),
+      sourceSnapshots,
+    });
+  }
+  return reportFor('add', flags.dryRun, incompatible.plan, incompatible.outcomes, {
+    terminalPhase: 'preflight',
+    mutationStarted: false,
+    sourceSnapshots,
+  });
 }
 
 async function runAdd(argv: string[], mode: MutationOutputMode): Promise<number> {
@@ -741,6 +784,7 @@ async function runAdd(argv: string[], mode: MutationOutputMode): Promise<number>
     }), mode);
   }
   const reports: LifecycleReport[] = [];
+  if (split.inactive.length > 0) reports.push(inactiveProfileAdd(source, split.inactive, flags));
   if (split.writers.length > 0) reports.push(await runWriterAdd(source, split.writers, flags, mode));
   if (split.planner.length > 0) reports.push(await runPlannerAdd(source, binding, split.planner, flags));
   return emitAddReport(reports.length === 1 ? reports[0]! : mergeAddReports(reports), mode);
