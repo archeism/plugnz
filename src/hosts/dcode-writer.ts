@@ -160,6 +160,19 @@ async function lockPreparation(binding: DcodeBinding, attemptId: string, operati
   if (observed.observationId !== expectedObservationId) throw new Error('dcode native inventory changed before locked preparation; refusing stale rollback authority');
 }
 
+async function captureOwnedPreparation<T>(binding: DcodeBinding, attemptId: string, operationId: string, expectedObservationId: string, capture: () => T): Promise<T> {
+  try {
+    await lockPreparation(binding, attemptId, operationId, expectedObservationId);
+    return capture();
+  } catch (error) {
+    // No handle has reached the executor yet: this boundary owns the lock
+    // even when inventory/readback/snapshot capture refuses preparation.
+    try { await releaseNativeLock(attemptId, operationId); }
+    catch (releaseError) { throw new Error(`${error instanceof Error ? error.message : String(error)}; dcode preparation lock release failed: ${releaseError instanceof Error ? releaseError.message : String(releaseError)}`); }
+    throw error;
+  }
+}
+
 function preflightAdoption(request: NativeProjectionRequest): void {
   if (request.operation !== 'install' && request.operation !== 'update') return;
   const snapshot = request.snapshot;
@@ -251,13 +264,11 @@ const dcodeDefinition: LifecycleHostDefinition = {
   },
   captureDisablePreparation: async request => {
     const binding = { adapterId: 'dcode', ...request.activation };
-    await lockPreparation(binding, request.attemptId, request.operationId, request.selection.targetObservationId);
-    return { prior: dcodeLifecycleReadback(binding), rollbackReference: captureDcodeRollback(binding, request.attemptId, request.operationId), rollbackCoverageOperationIds: request.selection.affectedOperationIds, transition: { requirement: 'restart', status: 'effective' } };
+    return captureOwnedPreparation(binding, request.attemptId, request.operationId, request.selection.targetObservationId, () => ({ prior: dcodeLifecycleReadback(binding), rollbackReference: captureDcodeRollback(binding, request.attemptId, request.operationId), rollbackCoverageOperationIds: request.selection.affectedOperationIds, transition: { requirement: 'restart' as const, status: 'effective' as const } }));
   },
   captureRetirementPreparation: async request => {
     const binding = { adapterId: 'dcode', ...request.activation };
-    await lockPreparation(binding, request.attemptId, request.operationId, request.selection.targetObservationId);
-    return { prior: dcodeLifecycleReadback(binding), rollbackReference: captureDcodeRollback(binding, request.attemptId, request.operationId), rollbackCoverageOperationIds: request.selection.affectedOperationIds, transition: { requirement: 'none', status: 'effective' } };
+    return captureOwnedPreparation(binding, request.attemptId, request.operationId, request.selection.targetObservationId, () => ({ prior: dcodeLifecycleReadback(binding), rollbackReference: captureDcodeRollback(binding, request.attemptId, request.operationId), rollbackCoverageOperationIds: request.selection.affectedOperationIds, transition: { requirement: 'none' as const, status: 'effective' as const } }));
   },
   apply: async prepared => {
     await acquireNativeLock(prepared.handle.attemptId, prepared.handle.operationId);

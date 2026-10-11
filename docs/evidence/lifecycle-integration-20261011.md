@@ -45,14 +45,36 @@ retirement. This is candidate evidence, not published-consumer acceptance.
 
 ## Scope still open
 
-Protective disable execution, recovery resource release, durable offline pinning,
-route migration, pending-recovery reconstruction, final producer/consumer release
+Route migration, pending-recovery reconstruction, final producer/consumer release
 verification and the complete requirement audit remain open. Released dcode
 command/agent/invocation-policy limitations remain loud and human-owned upstream
 follow-up; no noncontrolled-repository changes were authorized or made here.
 
 The Addy debugging/API and Matt TDD/review skills were used unchanged. These
 product checks do not constitute a skill A/B experiment or skill improvement.
+
+## Offline pin and physical-context checkpoint
+
+Candidate `9631eaa` adds protective disable/recovery durability, offline immutable
+dcode pinning and frozen physical target contexts. The full Bun 1.4.0 gate passed
+657 tests, skipped five, failed none, and recorded 4200 assertions in 167.27
+seconds; typechecking passed. The packed Node public dcode suite using the real
+released 0.1.83 Python interpreter passed 12 tests and 97 assertions in 25.44
+seconds. The five existing platform/native-loader skips are not native proof.
+
+Personal's real-producer two-Hermes-context lifecycle gate passed 31 assertions
+in 13.80 seconds against this candidate. This is not published-artifact or fleet
+deployment evidence.
+
+Independent different-model review (Codex, gpt-6-astra) found one blocker:
+disable/retirement preparation could emit its refusal but retain the native
+lock. Both public regressions were first red (timeout, no process exit).
+The capture boundary now releases its lock before propagating any preparation
+failure. Independent verification passed both regressions, 16 assertions, in
+2.85 seconds: exit 1, original actionable diagnostic, concurrent native bytes
+unchanged, no false pending intent. Focused recovery/precondition/disable checks
+passed nine tests and 83 assertions in 18.27 seconds; typechecking passed.
+The reviewer approved the corrected checkpoint. No skills were modified.
 
 ## Combined candidate verification
 
