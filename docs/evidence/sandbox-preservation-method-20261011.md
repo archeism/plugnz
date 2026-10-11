@@ -57,3 +57,36 @@ fixture/control boundary, not by weakening trial byte/mode checks. Final focused
 test/typecheck command results are recorded with the checkpoint. Independent
 review/restore is still required; NativeGit gates and durable identity migration
 remain separate outstanding work.
+
+## Independent 97e427e verification
+
+The parent independently restored all four literal archive hashes with
+`/tmp/plugnz-preservation-independent-restore.mjs` into fresh directories
+`/tmp/plugnz-preservation-independent-EeqBal`, `a4cIW7`, `RsBNEf`, `0rYJHC`
+(failure, parent-exit, disk, deadline respectively), checking all inventory bytes,
+modes, links and exact helper source hashes. All four restores exited zero.
+Its live read-only scan of UIDs 21010–21013 found zero experiment writers. It
+confirmed the exact Sandbox stopped near its actual 600-second expiry; this is
+not called an early stop. No snapshot was deleted. Frozen method received
+independent Astra review approval for bounded workflow wiring, not Native route
+admission.
+
+## Missing supplier integrity correction
+
+Review of acquisition exposed a dependent gap: missing expected supplier files
+aborted archival, while hash-only supplier inventories omitted unknown/partial
+bytes without replay proof. The corrected method omits only individually
+prebound matching bodies, retains every other declared supplier byte and verifies
+those bytes after restore. Acquisition alone has a separately approved 512 MiB
+cap/640 MiB remote reserve/3 GiB local headroom; Native arm cap remains 100 MiB.
+
+Actual tiny probe `plugnz-preservation-supplier-20261011` used a declared fixture,
+not a Native supplier. It wrote one matching body, one wrong partial body, one
+unknown file, left an expected file missing, then exited42. Trial and wrong/unknown
+supplier bytes were archived/restored; only the matching body was omitted.
+Original manifests and streams are retained in
+`/tmp/plugnz-preservation-supplier-partial-01` (also copied to the durable evidence
+directory). Archive: 1319 bytes, SHA256
+`7bb10aa499256f1bbd071e9b254ff3b1e8c6e9ea744908203964210e0e44a6e0`.
+This probe does not prove whole supplier reconstruction, large-install throughput,
+the 512 MiB transport worst-case, or official Native behavior.

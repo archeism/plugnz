@@ -52,7 +52,7 @@ function fileHash(path) {
   finally { closeSync(fd); }
   return hash.digest('hex');
 }
-function inventoryFor(base) {
+function inventoryFor(base, hashFiles = true) {
   const inventory = [];
   const walk = (relative = '') => {
     for (const name of readdirSync(join(base, relative)).sort()) {
@@ -62,11 +62,29 @@ function inventoryFor(base) {
       else if (stat.isSymbolicLink()) inventory.push({ path, kind: 'symlink', target: readlinkSync(absolute) });
       else {
         assert.ok(stat.isFile(), `Archive boundary contains a special file: ${path}`);
-        inventory.push({ path, kind: 'file', bytes: stat.size, mode: stat.mode & 0o777, sha256: fileHash(absolute) });
+        inventory.push({ path, kind: 'file', bytes: stat.size, mode: stat.mode & 0o777, ...(hashFiles ? { sha256: fileHash(absolute) } : {}) });
       }
     }
   };
   walk(); return inventory;
+}
+function supplierState(supplier, hashFiles = true) {
+  assert.ok(resolve(supplier.root).startsWith('/vercel/sandbox/native/'));
+  assert.ok(supplier.locator && supplier.revision && supplier.integrityFiles.length > 0);
+  const checked = supplier.integrityFiles.map(file => {
+    assert.ok(!file.path.startsWith('/') && !file.path.split('/').includes('..'));
+    assert.match(file.sha256, /^[a-f0-9]{64}$/u);
+    const path = join(supplier.root, file.path);
+    const actual = existsSync(path) && lstatSync(path).isFile() ? fileHash(path) : null;
+    return { ...file, actual, verifiedImmutableBody: actual === file.sha256 };
+  });
+  if (existsSync(supplier.root)) assert.ok(lstatSync(supplier.root).isDirectory() && !lstatSync(supplier.root).isSymbolicLink(), 'Supplier root redirected');
+  const inventory = existsSync(supplier.root) ? inventoryFor(supplier.root, hashFiles) : [];
+  return { ...supplier, integrityFiles: checked, inventory,
+    acquisition: checked.every(row => row.verifiedImmutableBody) ? 'verified-bodies' : 'incomplete',
+    // Only the individually prebound, matching body may be replayed from its
+    // frozen locator/revision. All other supplier bytes MUST be archived.
+    omittedPaths: checked.filter(row => row.verifiedImmutableBody).map(row => row.path) };
 }
 
 if (action === 'run') {
@@ -75,6 +93,11 @@ if (action === 'run') {
   assert.deepEqual(ownedPids(), [], 'Experiment UID already occupied; refuse adoption');
   mkdirSync(root, { recursive: false });
   chownSync(root, config.experimentUid, config.experimentUid);
+  if (config.supplierScratchRoot !== undefined) {
+    assert.equal(config.supplierScratchRoot, '/vercel/sandbox/native');
+    mkdirSync(config.supplierScratchRoot, { recursive: false });
+    chownSync(config.supplierScratchRoot, config.experimentUid, config.experimentUid);
+  }
   const baseline = config.baselineUsedBytes;
   assert.ok(Number.isSafeInteger(baseline) && baseline > 0);
   const before = used();
@@ -115,6 +138,13 @@ if (action === 'run') {
       const allocated = used(); measurements.push({ at: Date.now(), allocated });
       // Whole filesystem includes package caches, compiler scratch and archives.
       if (allocated - baseline >= config.diskGrowthBytes - config.diskReserveBytes) stop('disk-budget');
+      const suppliers = (config.suppliers ?? []).map(supplier => supplierState(supplier, false));
+      const unknownBytes = suppliers.reduce((sum, supplier) => sum + supplier.inventory
+        .filter(row => row.kind === 'file' && !supplier.omittedPaths.includes(row.path))
+        .reduce((bytes, row) => bytes + row.bytes, 0), 0);
+      // Reserve space for trial diagnostics and one interval's growth. Never
+      // grow unknown supplier bodies beyond a recoverable archive budget.
+      if (unknownBytes >= config.archiveBytes * 0.75) stop('supplier-retention-budget');
     } catch (error) { stopped = String(error); stop('measurement-failed'); }
   }, 500);
   let result;
@@ -138,29 +168,28 @@ if (action === 'run') {
   assert.deepEqual(ownedPids(), [], 'Archive requires zero live experiment writers');
   // Supplier bytes may be reconstructed, but only with a frozen acquisition
   // identity and complete stopped-state inventory. Native homes are NOT suppliers.
-  const suppliers = [];
-  for (const supplier of config.suppliers ?? []) {
-    assert.ok(resolve(supplier.root).startsWith('/vercel/sandbox/native/'));
-    assert.ok(supplier.locator && supplier.revision && supplier.integrityFiles.length > 0);
-    for (const file of supplier.integrityFiles) {
-      assert.ok(!file.path.startsWith('/') && !file.path.split('/').includes('..'));
-      assert.match(file.sha256, /^[a-f0-9]{64}$/u);
-      assert.equal(fileHash(join(supplier.root, file.path)), file.sha256);
-    }
-    suppliers.push({ ...supplier, inventory: inventoryFor(supplier.root) });
-  }
+  const suppliers = (config.suppliers ?? []).map(supplier => supplierState(supplier));
   write('reconstructible-suppliers.json', suppliers);
   const inventory = inventoryFor(root);
-  assert.ok(inventory.reduce((sum, row) => sum + (row.bytes ?? 0), 0) <= config.archiveBytes,
+  const retainedSupplierBytes = suppliers.reduce((sum, supplier) => sum + supplier.inventory
+    .filter(row => row.kind === 'file' && !supplier.omittedPaths.includes(row.path))
+    .reduce((bytes, row) => bytes + row.bytes, 0), 0);
+  assert.ok(inventory.reduce((sum, row) => sum + (row.bytes ?? 0), 0) + retainedSupplierBytes <= config.archiveBytes,
     'Evidence exceeds archive budget; never silently omit trial files');
   write('inventory.json', inventory);
   const archive = `${root}.tar.gz`;
   assert.ok(!existsSync(archive), 'Archive cannot be overwritten');
   // Two explicit namespaces prevent trial-controlled files replacing privileged
   // metadata, without following or deleting any trial-created link.
+  const supplierArgs = suppliers.flatMap((supplier, index) => {
+    if (!existsSync(supplier.root)) return [];
+    const name = basename(supplier.root);
+    return ['--transform', `s,^${name},suppliers/${index},`, ...supplier.omittedPaths.flatMap(path => ['--exclude', `${name}/${path}`]),
+      '-C', resolve(supplier.root, '..'), name];
+  });
   const tar = spawnSync('tar', ['-czf', archive,
     '--transform', `s,^${basename(root)},trial,`, '-C', '/vercel/sandbox/proof', basename(root),
-    '-C', controlParent, 'control'], { encoding: 'utf8', timeout: 40_000 });
+    '-C', controlParent, 'control', ...supplierArgs], { encoding: 'utf8', timeout: 40_000 });
   assert.equal(tar.status, 0, tar.stderr);
   assert.ok(lstatSync(archive).size <= config.archiveBytes);
   console.log(JSON.stringify({ archive, bytes: lstatSync(archive).size,
