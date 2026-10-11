@@ -39,7 +39,7 @@ function diskUsage(label) {
   const baseline = JSON.parse(readFileSync(join(base, 'baseline-disk.json'), 'utf8'));
   assert(Number.isSafeInteger(baseline.usedKiB) && baseline.usedKiB > 0);
   writeFileSync(join(root, `${phase}-${label}-disk.json`), JSON.stringify({ usedKiB, baselineKiB: baseline.usedKiB, raw: result.stdout }));
-  assert(usedKiB <= 4.25 * 1024 * 1024, `whole Sandbox filesystem exceeds 4.25 GiB: ${usedKiB} KiB`);
+  assert(usedKiB <= 4.75 * 1024 * 1024, `whole Sandbox filesystem exceeds 4.75 GiB: ${usedKiB} KiB`);
   assert(usedKiB - baseline.usedKiB <= 1.5 * 1024 * 1024, 'experiment growth exceeds 1.5 GiB');
   return usedKiB;
 }

@@ -51,21 +51,22 @@ worktree and reproduced the exact `d82ecd…` hash below. Another worktree's mut
 ## Budget before launch
 
 Bound new experiment growth to **1.5 GiB** and the **entire active Sandbox physical
-filesystem to 4.25 GiB**. These are separate checks: inherited OS bytes are not
+filesystem to 4.75 GiB**. These are separate checks: inherited OS bytes are not
 free or silently excluded. Before native installation record whole `du`/`df` and
 freeze the measured base; check both caps before each phase and after it. This
 revision follows the separate Claude proof's measured 3.77 GiB inherited physical
 base; it does not assert that this fresh Codex base will have that same size.
 Include native tools, Source cache, both homes, rollback artifacts and archive
 scratch. Refuse further growth at either cap. Native tools are shared read-only
-between homes. Combined concurrent lineage ceiling is **11.75 GiB**: Claude's
-explicit 7.25 GiB lineage plus this 4.25 GiB active filesystem and at most 250 MiB
+between homes. Combined concurrent lineage ceiling is **12.5 GiB**: Claude's
+explicit 7.25 GiB lineage plus this 4.75 GiB active filesystem and at most 500 MiB
 local Codex archive/restore scratch. Retain every failed attempt.
-Local compressed evidence is bounded to 100 MiB and complete restore scratch to
-150 MiB. The restore cap was explicitly revised before extraction: the first
+Local compressed evidence, including retained first/final archives, is bounded
+to 200 MiB total and complete restore scratch to 300 MiB. The first-attempt
+restore cap was explicitly revised before extraction to 150 MiB: the first
 actual proof tree measured 107,224 KiB, exceeding the earlier 100 MiB estimate.
-Concurrent lineage accounting therefore allows 250 MiB local Codex storage,
-not the earlier 200 MiB, for a rounded **11.75 GiB** total ceiling. Existing
+Concurrent lineage accounting now allows 500 MiB local Codex storage,
+not the earlier 200 MiB, for a rounded **12.5 GiB** total ceiling. Existing
 archives/snapshots are not deleted.
 
 No new snapshot is required for this experiment. Verify archive inventory,
@@ -73,6 +74,16 @@ hashes and a real restore, and obtain independent evidence review before ending
 compute. Record any product-created rollback artifacts that remain pending.
 If complete recoverability needs a larger archive or snapshot, stop and revise
 the explicit budget rather than silently growing loose copies.
+
+Before the second home or V2/V3 writes, the whole active cap was explicitly revised
+from 4.25 to 4.75 GiB, retaining the independent 1.5 GiB new-growth cap. Actual
+whole `du` was 3,034,512 KiB and `df` used 4,375,608 KiB after the retained first
+archive, still below the original cap. The second home's measured first-home
+analogue needs roughly 107 MiB of authored/native stores plus transient native
+allocation. Final Source snapshots and complete first/final archive retention
+are budgeted before launch rather than removed from accounting. The local caps
+above cover both homes and both archives; the earlier first-attempt archive and
+115 MiB restore remain retained. No old archives or snapshots are deleted.
 
 ## Public acceptance sequence
 
