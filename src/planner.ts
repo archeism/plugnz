@@ -381,7 +381,7 @@ async function planSync(
       requiredCapabilities: [...requiredSemanticsForOperation(inventory, 'install')].sort(),
       adoptionRequested: selected.adoptionRequested,
     });
-    const row = await classifyDesired(item, selected, inventory, nativeId, attemptId, state, command === 'add' || command === 'update', command === 'update');
+    const row = await classifyDesired(item, selected, inventory, nativeId, attemptId, state, command === 'update');
     if (row.kind === 'defect') return row;
     classified.push(row);
   }
@@ -407,7 +407,6 @@ async function classifyDesired(
   nativeId: string,
   attemptId: string,
   state: LifecycleStateV2,
-  applyUpdates: boolean,
   reapplyMatchingUpdate: boolean,
 ): Promise<Classified | Defect> {
   const operationId = operationIdentity('desired-pair', item.scope.id, selected.plugin.name, nativeId, item.frozen.snapshot.fingerprint);
@@ -461,7 +460,7 @@ async function classifyDesired(
   const plannedOperationId = action === 'update' && matchingBytes && reapplyMatchingUpdate
     ? operationIdentity('desired-pair', item.scope.id, selected.plugin.name, nativeId, `${item.frozen.snapshot.fingerprint}\0${state.stateGeneration}`)
     : operationId;
-  if (action === 'route-migrate' || (action === 'update' && !applyUpdates)) {
+  if (action === 'route-migrate') {
     return classified(
       operationId,
       'desired-pair',
