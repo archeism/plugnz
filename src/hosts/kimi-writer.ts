@@ -1,5 +1,5 @@
 /** Transactional native Kimi Code plugin writer. */
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createCapabilityEvidenceProfile, type CapabilityEvidenceProfile } from '../capability-evidence';
@@ -19,6 +19,7 @@ import { homeRoot } from '../paths';
 import { validateSourceBinding } from '../source-reference';
 import type { PluginSource, ResolvedSource } from '../source';
 import type { CapabilityOperation, PackageSemantic } from '../semantic-inventory';
+import type { PlannerHost } from '../planner';
 import { normalizeCommandSources } from '../conversion';
 import { kimi, mcpCandidates, pluginsDir } from './kimi';
 import { pinPluginMcpFiles } from '../mcp-write';
@@ -32,6 +33,30 @@ declare const Response: any;
 const MARKER = '.plgnz-install.json';
 type Ownership = { source: string; pluginId: string; fingerprint: string; scopeId?: string; sourceType?: 'local' | 'git'; sourceRevision?: string; sourceLocator?: string | null };
 type Registry = { version: 1; plugins: Array<Record<string, unknown>> };
+
+/** Kimi's native registry uses a bare name; the marketplace suffix is marker metadata. */
+export const samePhysicalKimiNativeIdentity: NonNullable<PlannerHost['samePhysicalNativeIdentity']> = (plugin, prior, observation) => {
+  if (plugin.marketplace === undefined || prior.nativeId !== plugin.name || prior.packageId !== plugin.name) return null;
+  const observed = observation.installations.filter(row => row.packageName === plugin.name && row.presence === 'present');
+  if (observed.length !== 1) return null;
+  const installation = observed[0]!;
+  if (installation.nativeId !== prior.nativeId || installation.ownership.kind !== 'owned'
+    || installation.ownership.scopeId !== prior.scopeId || installation.installedFingerprint === null
+    || installation.contentRoots.length !== 1) return null;
+  const managed = managedPluginPath(plugin.name);
+  const registryFile = join(pluginsDir(), 'installed.json');
+  assertKimiManaged(plugin.name, managed, registryFile);
+  if (!existsSync(managed)) return null;
+  const rows = readRegistry(registryFile).plugins.filter(row => row.id === plugin.name || sameRoot(row.root, managed));
+  if (rows.length !== 1 || rows[0]!.id !== plugin.name || rows[0]!.enabled !== true || !sameRoot(rows[0]!.root, managed)) return null;
+  const root = installation.contentRoots[0]!;
+  const marker = readOwnership(managed);
+  if (!sameRoot(root.path, managed) || root.fingerprint !== installation.installedFingerprint
+    || marker?.pluginId !== prior.nativeId || marker.scopeId !== prior.scopeId
+    || fingerprintTree(managed) !== installation.installedFingerprint) return null;
+  return { priorNativeId: prior.nativeId, plannedNativeId: kimiWriter.plannedNativeId(plugin),
+    observedRoot: root.path, physicalRoot: realpathSync(managed), currentFingerprint: installation.installedFingerprint };
+};
 
 export const kimiWriter: HostWriter = {
   ...kimi,

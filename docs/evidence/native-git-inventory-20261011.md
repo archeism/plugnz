@@ -292,3 +292,45 @@ log `/tmp/plugnz-historical-native-id-complete-node22.log`, SHA256
 This fixes duplicate-install containment only. The proven, durable two-physical-ID
 migration, Native Git admission and fresh released-native proofs remain required;
 the earlier `53e40bb` full GREEN is not attributed to this later guard.
+
+The exact frozen `f873a33` full gate exposed one real compatibility regression:
+748 pass / 5 skip / 1 fail / 5154 assertions across 754 tests and 69 files,
+399.78 seconds; typecheck passed. The failed existing Kimi test repairs a bare
+marker ID to its marketplace-qualified ID in the **same** native registry root.
+The guard incorrectly treated this as a two-physical-ID migration. Retained log
+`/tmp/plugnz-f873-combined-full.log`, SHA256
+`303c43e468bb15d05c3dde39e00c7c5ffef6cd25073e53cd1b5d7971af74c0bd`.
+
+The private `PlannerHost.samePhysicalNativeIdentity` contract now permits an
+adapter to supply concrete prior/planned IDs, observed and canonical physical
+roots, and current native fingerprint. Only Kimi supplies it. Its helper requires
+the exact marketplace/bare-ID relation, a single observed package, owned marker
+in the same Scope, one enabled registry row at its actual managed directory,
+matching marker ID and current tree/content-root fingerprints. Foreign roots or
+duplicate registry mappings cannot establish equivalence. The generic planner
+checks that the supplied evidence matches its frozen owned inventory before
+bypassing physical-ID containment. This does not grant Source ownership, change
+capabilities, authorize a ZCode alias, stage during dry-run, or extend a public
+report or durable schema. Existing frozen target-observation revalidation and
+normal Source semantic checks still apply.
+
+The new isolated public same-root positive was RED before this correction:
+2 pass / 1 fail / 28 assertions, 5.47 seconds, with foreign-root and duplicate-row
+negative controls already passing. Log `/tmp/plugnz-kimi-same-physical-red.log`,
+SHA256 `62b666ab23426cc3519ace2bf409d1ddcb20f89c93be027fb3e4b36a5622c9e9`.
+Focused correction gate: 43 pass / 0 fail / 312 assertions in 34.38 seconds,
+including the original full-suite failure, all six historical physical-ID
+containment cases and the new public same-root/foreign-root/ambiguous-registry
+controls; typecheck passed. Log `/tmp/plugnz-kimi-same-physical-focused.log`,
+SHA256 `f1d307175ecdef7f2f6b9aa79a1c9d9abbddc8ec0d49f2e615641c78e09264ce`.
+The foundation scan covered the planner-host factory, command, executor and
+recovery callers, planner/executor test literals and all host registrations.
+The callback is optional, defaults to no exception and is registered only for
+Kimi; no fake adapter, public command input or durable-state field was extended.
+Packed Node 22.23.1/dependent gate: 35 pass / 0 fail / 433 assertions in
+35.79 seconds (same-physical identity, historical identity, public preconditions,
+planner and mutation-contract files). CLI-harness subprocesses used the built
+Node artifact; direct planner tests remained Bun 1.4.0. Artifact SHA256
+`efe017a6fb28c84a7d2f762d2ed875f0494bf962cc3c2cfe31f3eeaf2d4cebf2`;
+log `/tmp/plugnz-kimi-same-physical-node22.log`, SHA256
+`0eee0af2c7cc8a8eb0ad9d048c7582631eea6352548072b6976480b4814059f5`.

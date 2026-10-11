@@ -103,7 +103,17 @@ export interface PlannerHost {
   readonly kinds: readonly string[];
   readonly adapter: LifecycleHostAdapter;
   readonly plannedNativeId: (plugin: PluginSource) => string;
+  /** Private, read-only physical identity correlation; never grants Source ownership. */
+  readonly samePhysicalNativeIdentity?: (plugin: PluginSource, prior: ActivationRecord, observation: TargetInventoryObservation) => SamePhysicalNativeIdentityEvidence | null;
   readonly announceDryRun?: (operation: LifecyclePlanOperation) => void;
+}
+
+export interface SamePhysicalNativeIdentityEvidence {
+  readonly priorNativeId: string;
+  readonly plannedNativeId: string;
+  readonly observedRoot: string;
+  readonly physicalRoot: string;
+  readonly currentFingerprint: string;
 }
 
 export interface PlanLifecycleInput {
@@ -197,8 +207,25 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
     for (const selected of item.selected) {
       const nativeId = plannedNativeIdFor(item, selected.plugin);
       if (nativeId instanceof Error) return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.defect', unknownErrorDiagnostic(nativeId)));
+      const samePhysicalIds = new Set<string>();
+      try {
+        if (item.observation !== null && item.host?.samePhysicalNativeIdentity !== undefined) {
+          for (const row of loaded.state.activations) {
+            if (row.scopeId !== item.scope.id || row.nativeId === nativeId) continue;
+            const proof = item.host.samePhysicalNativeIdentity(selected.plugin, row, item.observation);
+            const observed = item.observation.installations.find(installation => installation.nativeId === row.nativeId);
+            if (proof !== null && proof.priorNativeId === row.nativeId && proof.plannedNativeId === nativeId
+              && proof.physicalRoot.length > 0 && observed?.presence === 'present'
+              && observed.packageName === selected.plugin.name && observed.ownership.kind === 'owned'
+              && observed.ownership.scopeId === item.scope.id && observed.installedFingerprint === proof.currentFingerprint
+              && observed.contentRoots.some(root => root.path === proof.observedRoot && root.fingerprint === proof.currentFingerprint)) samePhysicalIds.add(row.nativeId);
+          }
+        }
+      } catch (error) {
+        return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.defect', unknownErrorDiagnostic(error)));
+      }
       const prior = loaded.state.activations.find(row => {
-        if (row.scopeId !== item.scope.id || row.nativeId === nativeId) return false;
+        if (row.scopeId !== item.scope.id || row.nativeId === nativeId || samePhysicalIds.has(row.nativeId)) return false;
         const observed = item.observation?.installations.find(installation => installation.nativeId === row.nativeId && installation.presence === 'present');
         if (row.packageId === selected.plugin.name) return row.ownership.kind !== 'legacy-claim' || observed !== undefined;
         // This correlation only refuses mutation; it grants no alias ownership.
@@ -207,7 +234,7 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
       });
       if (prior !== undefined) return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.invariant', `recorded native identity '${prior.nativeId}' differs from planned '${nativeId}'; a proven identity migration is required`));
       const ambiguousPrior = loaded.state.activations.find(row => row.scopeId === item.scope.id
-        && row.nativeId !== nativeId && row.ownership.kind === 'legacy-claim'
+        && row.nativeId !== nativeId && !samePhysicalIds.has(row.nativeId) && row.ownership.kind === 'legacy-claim'
         && item.observation?.installations.some(installation => installation.nativeId === row.nativeId
           && installation.presence === 'present' && installation.packageName === selected.plugin.name));
       if (ambiguousPrior !== undefined) return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.invariant', `historical native identity '${ambiguousPrior.nativeId}' has unverified Source correspondence with planned '${nativeId}'; a proven identity migration is required`));
