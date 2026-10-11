@@ -393,6 +393,16 @@ if (typeof step.divergeStagedReadback === 'string') {
       writeFileSync(join(stage, 'readback-extra.txt'), step.divergeStagedReadback);
     }
   }
+  const claudeHome = process.env.OPEN_PLUGIN_CLAUDE_CODE_ROOT ?? (process.env.OPEN_PLUGIN_HOME === undefined ? undefined : join(process.env.OPEN_PLUGIN_HOME, '.claude'));
+  const claudePrepare = claudeHome === undefined ? '' : join(claudeHome, 'plugins', '.plgnz-lifecycle');
+  if (claudePrepare !== '' && existsSync(claudePrepare)) {
+    for (const attempt of readdirSync(claudePrepare)) {
+      for (const operation of readdirSync(join(claudePrepare, attempt))) {
+        const stage = join(claudePrepare, attempt, operation);
+        if (existsSync(join(stage, '.claude-plugin', 'plugin.json'))) writeFileSync(join(stage, 'readback-extra.txt'), step.divergeStagedReadback);
+      }
+    }
+  }
 }
 if (step.stdout) process.stdout.write(step.stdout);
 if (step.stderr) process.stderr.write(step.stderr);

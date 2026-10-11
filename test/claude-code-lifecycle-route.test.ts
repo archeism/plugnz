@@ -332,13 +332,7 @@ describe('claude-code lifecycle route', () => {
 
   test('writes Claude marketplace autoUpdate and does not claim a private marker', async () => {
     await withClaude(async (root) => {
-      mkdirSync(join(root, 'plugins'), { recursive: true });
-      writeFileSync(join(root, 'plugins/known_marketplaces.json'), `${JSON.stringify({
-        market: { source: { source: 'github', repo: 'example/plugins' }, installLocation: '/tmp/market' },
-      })}\n`);
-      writeFileSync(join(root, 'settings.json'), `${JSON.stringify({
-        extraKnownMarketplaces: { market: { source: { source: 'github', repo: 'example/plugins' } } },
-      })}\n`);
+      seedMarketplace(root, true);
       const host = createClaudeCodeLifecycleHost();
       const installed = await activate(host, updateSnapshot(root, 'autoupdate', '1.2.0', '6'.repeat(40), 'install'));
       const marketplaces = JSON.parse(readFileSync(join(root, 'plugins/known_marketplaces.json'), 'utf8')) as {
@@ -501,16 +495,20 @@ describe('claude-code lifecycle route', () => {
 });
 
 function seedMarketplace(root: string, autoUpdate: boolean): void {
+  const catalog = join(root, 'plugins/marketplaces/.plgnz-market');
+  mkdirSync(join(catalog, '.claude-plugin'), { recursive: true });
+  writeFileSync(join(catalog, '.plgnz-install.json'), JSON.stringify({ source: 'plgnz-wrapper', pluginId: 'marketplace@market', fingerprint: '' }));
+  writeFileSync(join(catalog, '.claude-plugin/marketplace.json'), JSON.stringify({ name: 'market', owner: { name: 'plgnz' }, plugins: [] }));
   mkdirSync(join(root, 'plugins'), { recursive: true });
   writeFileSync(join(root, 'plugins/installed_plugins.json'), `${JSON.stringify({ version: 2, plugins: {} })}\n`);
   writeFileSync(join(root, 'plugins/known_marketplaces.json'), `${JSON.stringify({
-    market: { source: { source: 'github', repo: 'example/plugins' }, installLocation: '/tmp/market', autoUpdate },
+    market: { source: { source: 'directory', path: catalog }, installLocation: catalog, autoUpdate },
   })}\n`);
   writeFileSync(join(root, 'settings.json'), `${JSON.stringify({
     theme: 'dark',
     enabledPlugins: {},
     extraKnownMarketplaces: {
-      market: { source: { source: 'github', repo: 'example/plugins' }, autoUpdate },
+      market: { source: { source: 'directory', path: catalog }, autoUpdate },
     },
   })}\n`);
 }
