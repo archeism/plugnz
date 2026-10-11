@@ -10,6 +10,7 @@ import { pinPluginMcpFiles } from '../mcp-write';
 
 import { createCapabilityEvidenceProfile, type CapabilityEvidenceProfile, type CapabilityStatus } from '../capability-evidence';
 import { fingerprintTree } from '../fingerprint';
+import { recordedPriorSource } from '../prior-source-proof';
 import { createLifecycleHostAdapter, createTargetInventoryObservation, selectLifecycleRoute } from '../lifecycle-runtime';
 import type {
   DurableLifecycleOperation,
@@ -819,6 +820,20 @@ function nativeProjection(
   request: NativeProjectionRequest,
   detectedVersion: string | undefined,
 ): NativeProjectionData {
+  if ('snapshot' in request) {
+    const proof = recordedPriorSource(request.snapshot);
+    if (proof !== undefined) {
+      const installed = request.targetObservation.installations.find(row => row.nativeId === request.snapshot.nativeId);
+      for (const root of installed?.contentRoots ?? []) {
+        const marker = readOwnership(root.path);
+        if (marker === null || marker.pluginId !== proof.nativeId || marker.scopeId !== proof.scopeId
+          || marker.source !== proof.revision || marker.fingerprint !== proof.sourceFingerprint) {
+          throw new Error('Claude historical Git marker does not match recorded prior Source proof');
+        }
+      }
+      return { kind: 'requires-managed', reasonId: 'recorded-prior-origin-repair' };
+    }
+  }
   const evidence = claudeRouteEvidence(contracts, routeFacts(request, detectedVersion));
   switch (evidence.route) {
     case 'native':

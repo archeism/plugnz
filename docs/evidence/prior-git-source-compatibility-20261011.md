@@ -26,14 +26,26 @@ Each adapter additionally validates its exact historical marker format. Null
 inventory provenance is an observation, never authority. An absent ledger,
 rebound Source or changed prior bytes refuses globally before host/state writes.
 Same-byte sync must still plan an update to end the broken metadata lifecycle.
+Named physical contexts, when recorded, must match the actual observed target;
+older default-target ledgers without that field remain bound by exact owned
+native roots and installed-byte proof, not a guessed context.
 
-Public regression gate: `bun test test/prior-git-source-public.test.ts` — 12 tests,
-82 assertions; `bun run check` passed. Separate actual Python 0.1.83 lock-backed
+Public regression gate: `bun test test/prior-git-source-public.test.ts` covers
+genuine captured producer stores for Hermes, dcode, Codex, Claude, Cursor and OMP,
+plus fresh-process recovery after a readback fault and SIGKILL before apply.
+`test/prior-git-pin-public.test.ts` proves offline dcode pin preserves its recorded
+Source and repairs the historical origin without fetching. `bun run check`
+passed. Separate actual Python 0.1.83 lock-backed
 public runs reproduced and repaired Hermes and dcode. The portable regression
 gate uses a lock-boundary double, not an assertion of released native behavior.
 
-This checkpoint covers Hermes and dcode, not every dependent. Codex, Claude,
-Cursor and OMP historical markers, offline pin, and cross-process recovery must
-be checked before declaring the compatibility foundation complete. Native
-update admission/proof and the dcode registry-version acceptance discrepancy
-remain separate work; this evidence does not resolve either.
+Additional genuine producer captures are retained at
+`/tmp/plugnz-old-git-proof-DyKdFu` (six hosts; 1.5 MB) and
+`/tmp/plugnz-old-git-proof-68KCRi` (dcode MCP/offline pin). Tracked JSON fixtures
+preserve their original native bytes and ledger, substituting isolated home
+paths and symlink targets only. The CLI-version probes are boundary doubles;
+these tests do not establish released Native update capability.
+
+Native update admission/proof, truthful migration preflight and the dcode
+registry-version acceptance discrepancy remain separate work; this evidence
+does not resolve those questions.

@@ -4,7 +4,7 @@ import type { DeploymentScopeIdentity } from './deployment-scope';
 import type { DurableLifecycleOperation, FrozenPackageSnapshot, PinsAppliedProjection, TargetInstallationData } from './lifecycle-host';
 import { sameSourceBinding } from './scope-inventory';
 import type { ActivationRecord, DeploymentScopeRecord } from './state';
-import { canonicalTargetContextBytes, parsePersistedTargetIdentity } from './target-identity';
+import { canonicalTargetContextBytes } from './target-identity';
 
 export interface PriorSourceProof {
   readonly scopeId: string;
@@ -13,6 +13,7 @@ export interface PriorSourceProof {
   readonly revision: string;
   readonly sourceFingerprint: string;
   readonly installedFingerprint: string;
+  readonly route: 'managed' | 'native';
 }
 
 const snapshots = new WeakMap<FrozenPackageSnapshot, PriorSourceProof>();
@@ -30,7 +31,8 @@ export function bindRecordedPriorSource(
     || recordedScope?.authority !== 'authoritative' || recordedScope.lifecycle !== 'active'
     || recordedScope.id !== scope.id || !sameSourceBinding(recordedScope.source, scope.source)
     || recordedScope.target.kind !== scope.target.kind || recordedScope.target.instance !== scope.target.instance
-    || canonicalTargetContextBytes(recordedScope.target.context) !== canonicalTargetContextBytes(parsePersistedTargetIdentity(scope.target, 'prior Source target').context)
+    || (recordedScope.target.context !== undefined
+      && canonicalTargetContextBytes(recordedScope.target.context) !== canonicalTargetContextBytes(snapshot.target.context))
     || activation?.scopeId !== scope.id || activation.nativeId !== snapshot.nativeId
     || activation.packageId !== snapshot.packageName || activation.pending !== undefined
     || activation.readbackState !== 'verified' || activation.ownership.kind === 'legacy-claim'
@@ -45,7 +47,7 @@ export function bindRecordedPriorSource(
   for (const root of observed.contentRoots) if (fingerprintTree(root.path) !== root.fingerprint) return false;
   snapshots.set(snapshot, Object.freeze({ scopeId: scope.id, nativeId: snapshot.nativeId,
     locator: scope.source.locator, revision: activation.sourceRevision,
-    sourceFingerprint: activation.fingerprints.source, installedFingerprint: activation.fingerprints.installed }));
+    sourceFingerprint: activation.fingerprints.source, installedFingerprint: activation.fingerprints.installed, route: activation.route.kind }));
   return true;
 }
 

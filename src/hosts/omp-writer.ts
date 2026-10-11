@@ -25,6 +25,7 @@ import type {
 } from '../lifecycle-host';
 import { createLifecycleHostAdapter, createTargetInventoryObservation } from '../lifecycle-runtime';
 import { pinPluginMcpFiles } from '../mcp-write';
+import { recordedPriorSource } from '../prior-source-proof';
 import { CryptoHasher, spawnSync, which } from '../runtime';
 import { PACKAGE_SEMANTICS, type PackageSemantic } from '../semantic-inventory';
 import { omp, mcpCandidates, ompUpgradeMutationScope, ompUpgradeProjection, pluginsDir, type OmpNativeUpgradeCandidate } from './omp';
@@ -267,7 +268,23 @@ const ompLifecycleDefinition: LifecycleHostDefinition = {
   probeVersion: (target) => probeOmpVersion(target),
   observeTarget: (target) => observeInventory(target),
   observeNativeMutationScope: (request) => Promise.resolve(ompUpgradeMutationScope(unprovenCandidate(request.nativeId), request.nativeId)),
-  observeNativeProjection: (request) => Promise.resolve(ompUpgradeProjection(unprovenCandidate(nativeIdOfProjection(request)))),
+  observeNativeProjection: async request => {
+    if ('snapshot' in request) {
+      const proof = recordedPriorSource(request.snapshot);
+      if (proof !== undefined) {
+        const installed = request.targetObservation.installations.find(row => row.nativeId === request.snapshot.nativeId);
+        for (const root of installed?.contentRoots ?? []) {
+          const marker = ownership(root.path);
+          if (marker === null || marker.pluginId !== proof.nativeId || marker.scopeId !== proof.scopeId
+            || marker.source !== proof.revision || marker.fingerprint !== proof.sourceFingerprint
+            || marker.sourceType !== 'git' || marker.sourceRevision !== proof.revision || marker.sourceLocator != null) {
+            throw new Error('OMP historical Git marker does not match recorded prior Source proof');
+          }
+        }
+      }
+    }
+    return ompUpgradeProjection(unprovenCandidate(nativeIdOfProjection(request)));
+  },
   revalidateTargetPrecondition: async (handle) => ({
     version: await probeOmpVersion(handle.target),
     targetObservationId: createTargetInventoryObservation('omp', await observeInventory(handle.target)).observationId,

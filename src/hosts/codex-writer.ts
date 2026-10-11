@@ -13,6 +13,7 @@ import { parse as parseToml } from 'smol-toml';
 import { createCapabilityEvidenceProfile, type CapabilityEvidenceProfile, type CapabilityStatus } from '../capability-evidence';
 import { projectPluginForCodex } from '../conversion';
 import { fingerprintSourceTree, fingerprintTree } from '../fingerprint';
+import { capturePriorSourceRepair, priorSourceRepairAllows, recordedPriorSource, releasePriorSourceRepair, type PriorSourceProof } from '../prior-source-proof';
 import type { AddOptions, HostWriter, InstalledPlugin, PinOptions, PinOutcome } from '../host';
 import type {
   ActivationPreparationCapture,
@@ -398,23 +399,27 @@ function bytesKey(path: string): string {
   return Array.from(read(path)).join(',');
 }
 
-function assertNoWinningForeignVersion(slot: string, requested: string, id: string, source: string): void {
+function assertNoWinningForeignVersion(slot: string, requested: string, id: string, source: string, handle?: DurableLifecycleOperation): void {
   for (const version of readdirSync(slot)) {
     const candidate = join(slot, version);
     if (!statSync(candidate).isDirectory() || version === requested) continue;
     const marker = readOwnership(candidate);
-    if (wins(version, requested) && (marker?.pluginId !== id || marker.source !== source)) {
+    if (wins(version, requested) && (marker?.pluginId !== id || marker.source !== source)
+      && !(handle !== undefined && marker !== null && fingerprintTree(candidate) === handle.prior.installedFingerprint
+        && priorSourceRepairAllows(handle, proof => historicalGitMarker(marker, proof)))) {
       throw new Error(`foreign Codex cache version ${version} would remain active over ${requested}`);
     }
   }
 }
 
-function cleanupOwnedVersions(slot: string, active: string, id: string, source: string): void {
+function cleanupOwnedVersions(slot: string, active: string, id: string, source: string, handle?: DurableLifecycleOperation): void {
   for (const version of readdirSync(slot)) {
     const candidate = join(slot, version);
     if (candidate === active || !statSync(candidate).isDirectory()) continue;
     const marker = readOwnership(candidate);
-    if (marker?.pluginId === id && marker.source === source) rmSync(candidate, { recursive: true, force: true });
+    if (marker?.pluginId === id && (marker.source === source || (handle !== undefined
+      && fingerprintTree(candidate) === handle.prior.installedFingerprint
+      && priorSourceRepairAllows(handle, proof => historicalGitMarker(marker, proof))))) rmSync(candidate, { recursive: true, force: true });
   }
 }
 
@@ -603,6 +608,7 @@ function captureCodexActivation(projection: PinsAppliedProjection, projectedFing
     packageName: projection.packageName,
     nativeId: projection.nativeId,
   });
+  capturePriorSourceRepair(projection, prior.installedFingerprint);
   saveCodexRollback(projection.attemptId, projection.operationId, projection.affectedNativeIds);
   if (projection.route === 'native') captureMarketplaceRollback(projection);
   return {
@@ -667,9 +673,10 @@ function applyManagedCodexActivation(prepared: PreparedActivationMutation): Muta
   mkdirSync(slot, { recursive: true });
   assertNoSymlinks(slot);
   const source = readOwnership(stagingRoot)?.source ?? handle.sourceLocator ?? handle.sourceRevision;
-  assertNoWinningForeignVersion(slot, version, handle.nativeId, source);
+  assertNoWinningForeignVersion(slot, version, handle.nativeId, source, handle);
   const marker = readOwnership(targetDir);
-  if (marker !== null && (marker.source !== source || marker.pluginId !== handle.nativeId)) {
+  if (marker !== null && (marker.source !== source || marker.pluginId !== handle.nativeId)
+    && !(fingerprintTree(targetDir) === handle.prior.installedFingerprint && priorSourceRepairAllows(handle, proof => historicalGitMarker(marker, proof)))) {
     throw new Error(`codex cache slot ${targetDir} has a different owned source identity; refusing to replace it`);
   }
   const before = cacheFingerprint(handle.nativeId);
@@ -683,7 +690,7 @@ function applyManagedCodexActivation(prepared: PreparedActivationMutation): Muta
     throw error;
   }
   activation.commit();
-  cleanupOwnedVersions(slot, targetDir, handle.nativeId, source);
+  cleanupOwnedVersions(slot, targetDir, handle.nativeId, source, handle);
   return {
     receiptId: `apply:${handle.attemptId}:${handle.operationId}`,
     changed: before !== cacheFingerprint(handle.nativeId),
@@ -809,6 +816,7 @@ function readCodexInstall(handle: DurableLifecycleOperation): LifecycleReadbackD
 }
 
 function cleanupCodexStage(reference: CleanupReference): CleanupResultData {
+  releasePriorSourceRepair(reference);
   const stage = resolve(join(codexHome(), '.plgnz-lifecycle', `${reference.attemptId}:${reference.operationId}`));
   if (existsSync(stage)) rmSync(stage, { recursive: true, force: true });
   const rollback = rollbackBundle(reference.attemptId, reference.operationId);
@@ -1295,12 +1303,23 @@ function installationRecord(plugin: InstalledPlugin): TargetInstallationData {
     installedFingerprint,
     installedVersion: plugin.version ?? null,
     source: owned?.pluginId === plugin.id && owned.sourceType !== undefined && owned.sourceRevision !== undefined
-      ? { type: owned.sourceType, immutableRevision: owned.sourceRevision, locator: owned.sourceType === 'git' ? owned.source : null } : null,
+      ? { type: owned.sourceType, immutableRevision: owned.sourceRevision, locator: owned.sourceType === 'git' && owned.source !== `scope:${owned.scopeId}` ? owned.source : null } : null,
     contentRoots: [{ label: 'plugin', path: plugin.path, fingerprint: installedFingerprint }],
   };
 }
 
 function nativeProjection(request: NativeProjectionRequest): NativeProjectionData {
+  if ('snapshot' in request) {
+    const proof = recordedPriorSource(request.snapshot);
+    if (proof !== undefined) {
+      const installed = request.targetObservation.installations.find(row => row.nativeId === request.snapshot.nativeId);
+      for (const root of installed?.contentRoots ?? []) {
+        const marker = readOwnership(root.path);
+        if (marker === null || !historicalGitMarker(marker, proof)) throw new Error('Codex historical Git marker does not match recorded prior Source proof');
+      }
+      return { kind: 'requires-managed', reasonId: 'recorded-prior-origin-repair' };
+    }
+  }
   if (!('snapshot' in request) || request.operation !== 'update') {
     return { kind: 'requires-managed', reasonId: 'native-upgrade-update-only' };
   }
@@ -1323,6 +1342,11 @@ function nativeProjection(request: NativeProjectionRequest): NativeProjectionDat
     return { kind: 'equivalent', proofId: `codex-marketplace:${binding.marketplace}:${binding.sha}` };
   }
   return { kind: 'requires-managed', reasonId: catalogRefusal(binding, git) };
+}
+
+function historicalGitMarker(marker: CodexOwnership, proof: Readonly<PriorSourceProof>): boolean {
+  return marker.source === `scope:${proof.scopeId}` && marker.scopeId === proof.scopeId && marker.pluginId === proof.nativeId
+    && marker.fingerprint === proof.sourceFingerprint && marker.sourceType === 'git' && marker.sourceRevision === proof.revision && marker.route === proof.route;
 }
 
 function catalogBinding(marketplace: string): CodexCatalogBinding {
