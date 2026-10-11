@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fingerprintTree } from '../src/fingerprint';
 import { codexLifecycle, codexMarketplaceCheckoutRollback } from '../src/hosts/codex-writer';
@@ -22,6 +23,44 @@ const otherId = 'other-plugin@demo-market';
 const foreignId = 'foreign-plugin@other-market';
 
 describe('codex native marketplace upgrade route', () => {
+  test('a failed native call with exact native metadata restores the prior full checkout', async () => {
+    await withCodexBinary(async home => {
+      const original = frozenSnapshot(home);
+      const checkout = join(home, '.codex/.tmp/marketplaces/demo-market');
+      cpSync(original.snapshotRoot, checkout, { recursive: true });
+      const git = (args: string[]): string => {
+        const result = spawnSync('git', ['-C', checkout, '-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', ...args], { encoding: 'utf8' });
+        if (result.status !== 0) throw new Error(result.stderr);
+        return result.stdout.trim();
+      };
+      git(['init']); git(['config', 'remote.origin.url', sourceLocator]);
+      writeFileSync(join(checkout, 'packages/demo-plugin/plugin.json'), '{"name":"demo-plugin","version":"prior"}\n');
+      git(['add', '.']); git(['commit', '-m', 'prior']);
+      const priorRevision = git(['rev-parse', 'HEAD']);
+      cpSync(original.snapshotRoot, checkout, { recursive: true });
+      git(['add', '.']); git(['commit', '-m', 'candidate']);
+      const revision = git(['rev-parse', 'HEAD']);
+      git(['checkout', '--detach', priorRevision]);
+      const prior = fingerprintTree(checkout);
+      const snapshot = createFrozenPackageSnapshot({ ...original, immutableRevision: revision, nativeGit: { locator: sourceLocator, resolvedRevision: revision } });
+      if (!isUpdateSnapshot(snapshot)) throw new Error('fixture action drift');
+      writeCatalog(home, revision, [demoId]); installPlugin(home, 'demo-plugin', demoId, true);
+      writeFiles(home, {
+        '.codex/upgrade-mode': 'checkout-metadata-failure\n',
+        '.codex/candidate-revision': revision,
+        '.codex/candidate-metadata.json': JSON.stringify({ source_type: 'git', source: sourceLocator, ref_name: revision, sparse_paths: [], revision }),
+      });
+      const prepared = await prepareUpdate(snapshot, createResolvedLifecyclePins([]));
+      expect(prepared.handle.route).toBe('native');
+      let diagnostic = '';
+      try { await codexLifecycle.apply(prepared); } catch (error) { diagnostic = String(error); }
+      expect(diagnostic).toContain('native cache permission failure');
+      expect(git(['rev-parse', 'HEAD'])).toBe(revision);
+      await codexLifecycle.rollback(prepared.handle);
+      expect(fingerprintTree(checkout)).toBe(prior);
+      expect(git(['rev-parse', 'HEAD'])).toBe(priorRevision);
+    });
+  });
   test('a checkout changed after preparation blocks before any native mutation', async () => {
     await withCodexBinary(async home => {
       const snapshot = frozenSnapshot(home);
@@ -520,6 +559,13 @@ if [ -n "$CODEX_HOME" ] && [ -f "$CODEX_HOME/upgrade-mode" ]; then
 fi
 if [ "$mode" = "stderr" ]; then
   echo 'Failed to upgrade marketplace \`demo-market\`: simulated stderr failure' >&2
+  exit 1
+fi
+if [ "$mode" = "checkout-metadata-failure" ]; then
+  checkout="$CODEX_HOME/.tmp/marketplaces/demo-market"
+  git -C "$checkout" checkout --detach "$(cat "$CODEX_HOME/candidate-revision")" || exit 2
+  cp "$CODEX_HOME/candidate-metadata.json" "$checkout/.codex-marketplace-install.json"
+  echo 'native cache permission failure' >&2
   exit 1
 fi
 if [ "$mode" = "partial" ]; then

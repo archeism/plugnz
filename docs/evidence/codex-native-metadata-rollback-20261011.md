@@ -59,5 +59,16 @@ No real fleet deployment or external repository write was performed.
   against the exact corrected packed artifact.
 - Full combined suite and typecheck before main integration.
 
+## Host-route regression checkpoint
+
+The route regression creates actual isolated Git prior/candidate commits, invokes
+the fixture CLI boundary which checks out the candidate and writes exact native
+metadata before returning failure, then calls the actual adapter rollback. With
+the previous raw Source comparison restored temporarily, it fails with the same
+`checkout changed outside the captured native attempt` diagnostic (three
+assertions reached). Restoring the correction passes all five assertions,
+including the exact prior full-tree fingerprint and prior Git HEAD. This does
+not replace the still-required released-native trial.
+
 Skills unchanged; these results establish product regression evidence, not a
 causal skill-improvement claim.
