@@ -315,10 +315,10 @@ describe('isolated lifecycle CLI harness', () => {
 
       const result = harness.run(['add', source, '--target', 'cursor', '--json']);
       const report = parseLifecycleReport(JSON.parse(result.stdout));
-      const state = JSON.parse(bytesToText(result.state.after!)) as StateDocument;
+      const state = projectedState(result.state.after!);
       const repeated = harness.run(['add', source, '--target', 'cursor', '--json']);
       const repeatedReport = parseLifecycleReport(JSON.parse(repeated.stdout));
-      const repeatedState = JSON.parse(bytesToText(repeated.state.after!)) as StateDocument;
+      const repeatedState = projectedState(repeated.state.after!);
 
       expect({
         exitCode: result.exitCode,
@@ -354,7 +354,8 @@ describe('isolated lifecycle CLI harness', () => {
       });
       const initial = harness.run(['add', source, '--target', 'cursor', '--json']);
       expect(initial.exitCode).toBe(0);
-      const historical = JSON.parse(bytesToText(initial.state.after!)) as StateDocument;
+      const historical = projectedState(initial.state.after!);
+      historical.version = 1;
       historical.installs[0] = { ...historical.installs[0]!, id: 'demo@personal' };
       harness.writeHome({
         'state.json': JSON.stringify(historical),
@@ -367,7 +368,7 @@ describe('isolated lifecycle CLI harness', () => {
 
       const updated = harness.run(['update', 'demo', '--target', 'cursor', '--json']);
       const report = parseLifecycleReport(JSON.parse(updated.stdout));
-      const state = JSON.parse(bytesToText(updated.state.after!)) as StateDocument;
+      const state = projectedState(updated.state.after!);
 
       expect({
         exitCode: updated.exitCode,
@@ -397,13 +398,14 @@ describe('isolated lifecycle CLI harness', () => {
       });
       const initial = harness.run(['add', source, '--target', 'codex', '--json']);
       expect(initial.exitCode).toBe(0);
-      const historical = JSON.parse(bytesToText(initial.state.after!)) as StateDocument;
+      const historical = projectedState(initial.state.after!);
+      historical.version = 1;
       historical.installs[0] = { ...historical.installs[0]!, id: 'demo', pending: 'install' };
       harness.writeHome({ 'state.json': JSON.stringify(historical) });
 
       const migrated = harness.run(['add', source, '--target', 'codex', '--json']);
       const migratedReport = parseLifecycleReport(JSON.parse(migrated.stdout));
-      const migratedState = JSON.parse(bytesToText(migrated.state.after!)) as StateDocument;
+      const migratedState = projectedState(migrated.state.after!);
       expect({
         exitCode: migrated.exitCode,
         planned: migratedReport.plan.map(({ nativeId }) => nativeId),
@@ -417,7 +419,7 @@ describe('isolated lifecycle CLI harness', () => {
       });
 
       const ambiguous: StateDocument = {
-        ...migratedState,
+        version: 1,
         installs: [
           ...migratedState.installs,
           { ...migratedState.installs[0]!, id: 'demo', pending: 'install' },
@@ -481,7 +483,8 @@ describe('isolated lifecycle CLI harness', () => {
       });
       const initial = harness.run(['add', source, '--target', 'codex', '--json']);
       expect(initial.exitCode).toBe(0);
-      const historical = JSON.parse(bytesToText(initial.state.after!)) as StateDocument;
+      const historical = projectedState(initial.state.after!);
+      historical.version = 1;
       historical.installs[0] = { ...historical.installs[0]!, id: 'demo' };
       const historicalBytes = JSON.stringify(historical);
       harness.writeHome({ 'state.json': historicalBytes });
@@ -502,7 +505,7 @@ describe('isolated lifecycle CLI harness', () => {
 
       const updated = harness.run(['update', 'demo', '--target', 'codex', '--json']);
       const report = parseLifecycleReport(JSON.parse(updated.stdout));
-      const state = JSON.parse(bytesToText(updated.state.after!)) as StateDocument;
+      const state = projectedState(updated.state.after!);
       expect({
         exitCode: updated.exitCode,
         planned: report.plan.map(({ nativeId }) => nativeId),
@@ -516,7 +519,7 @@ describe('isolated lifecycle CLI harness', () => {
       });
 
       const ambiguous: StateDocument = {
-        ...state,
+        version: 1,
         installs: [...state.installs, { ...state.installs[0]!, id: 'demo' }],
       };
       harness.writeHome({ 'state.json': JSON.stringify(ambiguous) });
@@ -553,9 +556,9 @@ describe('isolated lifecycle CLI harness', () => {
       });
       const initial = harness.run(['add', source, '--target', 'codex', '--json']);
       expect(initial.exitCode).toBe(0);
-      const canonical = JSON.parse(bytesToText(initial.state.after!)) as StateDocument;
+      const canonical = projectedState(initial.state.after!);
       const ambiguous: StateDocument = {
-        ...canonical,
+        version: 1,
         installs: [...canonical.installs, { ...canonical.installs[0]!, id: 'demo' }],
       };
       const ambiguousBytes = JSON.stringify(ambiguous);
@@ -596,9 +599,9 @@ describe('isolated lifecycle CLI harness', () => {
       });
       const initial = harness.run(['add', source, '--target', 'codex', '--json']);
       expect(initial.exitCode).toBe(0);
-      const canonical = JSON.parse(bytesToText(initial.state.after!)) as StateDocument;
+      const canonical = projectedState(initial.state.after!);
       const legacy = { ...canonical.installs[0]!, id: 'demo' };
-      const ambiguous: StateDocument = { ...canonical, installs: [...canonical.installs, legacy] };
+      const ambiguous: StateDocument = { version: 1, installs: [...canonical.installs, legacy] };
       harness.writeHome({ 'state.json': JSON.stringify(ambiguous) });
 
       const rejected = harness.run(['remove', 'demo', '--target', 'codex', '--json']);
@@ -623,10 +626,10 @@ describe('isolated lifecycle CLI harness', () => {
         storeUnchanged: true,
       });
 
-      harness.writeHome({ 'state.json': JSON.stringify({ ...canonical, installs: [legacy] }) });
+      harness.writeHome({ 'state.json': JSON.stringify({ version: 1, installs: [legacy] }) });
       const removed = harness.run(['remove', 'demo', '--target', 'codex', '--json']);
       const removedReport = parseLifecycleReport(JSON.parse(removed.stdout));
-      const finalState = JSON.parse(bytesToText(removed.state.after!)) as StateDocument;
+      const finalState = projectedState(removed.state.after!);
       expect({
         exitCode: removed.exitCode,
         planned: removedReport.plan.map(({ nativeId }) => nativeId),
@@ -651,9 +654,9 @@ describe('isolated lifecycle CLI harness', () => {
       });
       const initial = harness.run(['add', source, '--target', 'codex', '--json']);
       expect(initial.exitCode).toBe(0);
-      const canonical = JSON.parse(bytesToText(initial.state.after!)) as StateDocument;
+      const canonical = projectedState(initial.state.after!);
       const historical: StateDocument = {
-        ...canonical,
+        version: 1,
         installs: [{ ...canonical.installs[0]!, id: 'demo' }],
       };
       const historicalBytes = JSON.stringify(historical);
@@ -679,7 +682,7 @@ describe('isolated lifecycle CLI harness', () => {
 
       const removed = harness.run(['remove', 'demo@local', '--target', 'codex', '--json']);
       const removedReport = parseLifecycleReport(JSON.parse(removed.stdout));
-      const finalState = JSON.parse(bytesToText(removed.state.after!)) as StateDocument;
+      const finalState = projectedState(removed.state.after!);
       expect({
         exitCode: removed.exitCode,
         planned: removedReport.plan.map(({ nativeId }) => nativeId),
@@ -704,9 +707,9 @@ describe('isolated lifecycle CLI harness', () => {
       });
       const initial = harness.run(['add', source, '--target', 'codex', '--json']);
       expect(initial.exitCode).toBe(0);
-      const canonical = JSON.parse(bytesToText(initial.state.after!)) as StateDocument;
+      const canonical = projectedState(initial.state.after!);
       const historical: StateDocument = {
-        ...canonical,
+        version: 1,
         installs: [{ ...canonical.installs[0]!, id: 'demo' }],
       };
       const historicalBytes = JSON.stringify(historical);
@@ -748,9 +751,9 @@ describe('isolated lifecycle CLI harness', () => {
       });
       const initial = harness.run(['add', source, '--target', 'codex', '--json']);
       expect(initial.exitCode).toBe(0);
-      const canonical = JSON.parse(bytesToText(initial.state.after!)) as StateDocument;
+      const canonical = projectedState(initial.state.after!);
       const ambiguous: StateDocument = {
-        ...canonical,
+        version: 1,
         installs: [...canonical.installs, { ...canonical.installs[0]!, id: 'demo' }],
       };
       const ambiguousBytes = JSON.stringify(ambiguous);
@@ -801,9 +804,9 @@ describe('isolated lifecycle CLI harness', () => {
       expect(rootInstall.exitCode).toBe(0);
       const marketplaceInstall = harness.run(['add', marketplaceSource, '--target', 'codex', '--json']);
       expect(marketplaceInstall.exitCode).toBe(0);
-      const canonical = JSON.parse(bytesToText(marketplaceInstall.state.after!)) as StateDocument;
+      const canonical = projectedState(marketplaceInstall.state.after!);
       const historical: StateDocument = {
-        ...canonical,
+        version: 1,
         installs: canonical.installs.map((record) => record.id === 'demo@local'
           ? { ...record, id: 'demo' }
           : record),
@@ -1341,7 +1344,7 @@ exec "$real_git" "\${args[@]}"
         { env: { OPEN_PLUGIN_GIT_BIN: git } },
       );
       const stateText = bytesToText(result.state.after!);
-      const state = JSON.parse(stateText) as { installs: Array<{ source: string; sourceSha: string; sourceDir: string }> };
+      const state = projectedState(result.state.after!);
 
       const report = parseLifecycleReport(JSON.parse(result.stdout));
 
