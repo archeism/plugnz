@@ -25,11 +25,12 @@ type DcodeBinding = { adapterId: string; target: LifecycleTargetIdentity; scopeI
 // by plugnz. A held subprocess releases on stdin EOF, including parent crash.
 const NATIVE_LOCK_SCRIPT = `import sys\nfrom importlib.metadata import version\nfrom filelock import FileLock\nif version('deepagents-code') != '0.1.83':\n raise RuntimeError('unverified dcode lock runtime')\nwith FileLock(sys.argv[1]).acquire(timeout=10):\n print('DCODE_LOCK_0.1.83', flush=True)\n sys.stdin.read()\n`;
 type LockChild = {
-  stdin: { end(): void }; stdout: { on(event: 'data', callback: (data: Uint8Array) => void): void };
-  stderr: { on(event: 'data', callback: (data: Uint8Array) => void): void };
+  stdin: { end(): void; unref(): void }; stdout: { on(event: 'data', callback: (data: Uint8Array) => void): void; unref(): void };
+  stderr: { on(event: 'data', callback: (data: Uint8Array) => void): void; unref(): void };
   on(event: 'error', callback: (error: Error) => void): void;
   on(event: 'exit', callback: (code: number | null) => void): void;
   kill(signal?: string): void;
+  unref(): void;
 };
 const nativeLocks = new Map<string, { child: LockChild; exited: Promise<number | null>; isAlive(): boolean }>();
 
@@ -73,6 +74,10 @@ async function acquireNativeLock(attemptId: string, operationId: string): Promis
     child.on('error', error => finish(new Error(`dcode native lock failed: ${error.message}`)));
     child.on('exit', code => finish(new Error(`dcode native lock failed (${code}): ${diagnostic.trim()}`)));
   });
+  // A failed rollback verification deliberately retains its durable snapshot.
+  // It must not retain this CLI's event loop too: normal awaited work still
+  // holds the lock, while parent exit closes stdin and releases it natively.
+  child.unref(); child.stdin.unref(); child.stdout.unref(); child.stderr.unref();
   nativeLocks.set(key, { child, exited, isAlive: () => alive });
 }
 
