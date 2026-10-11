@@ -104,3 +104,56 @@ The final finder data refinement additionally requires each mapping/namespace
 path to be the canonical source-relative path for its module name, rather than
 an arbitrary different subtree. The actual official loader/launcher proof was
 rerun after that refinement. Typecheck and packaged build passed.
+
+## Venv configuration and sourceless-import correction after `09c55a3`
+
+Independent review found two remaining static-observation admission holes.
+The old regex accepted a false config line even when a later duplicate enabled
+system-site packages, and it ignored `bin/pyvenv.cfg`. Source-only shadow checks
+also missed Python's sourceless and extension loaders.
+
+Primary runtime evidence is CPython 3.13.14's
+[site.venv](https://github.com/python/cpython/blob/v3.13.14/Lib/site.py#L542-L589):
+site initialization checks the executable-directory config before the parent
+config and assigns each encountered key in order. Its
+[import loader list](https://github.com/python/cpython/blob/v3.13.14/Lib/importlib/_bootstrap_external.py#L1669-L1686)
+includes platform extension, source and sourceless bytecode loaders. This is
+why matching one false line or examining only `.py` files is insufficient.
+
+Nine fresh public actual-add regressions reproduced exit 0 on `09c55a3` before
+the correction: conflicting config keys, duplicate identical keys, bin config
+precedence, site sourceless modules, bin tagged extensions, site extension
+customization, source sourceless customization, venv-helper extensions and
+editable-finder sourceless files. Command:
+`bun test test/host-profile-admission-public.test.ts --test-name-pattern 'config|sourceless|extension'`.
+RED result: nine failed, one existing config-only case passed, 4.08 seconds.
+
+Admission now requires an unambiguous, unique-key root config explicitly
+disabling system-site packages and refuses a bin config as an unproved layout.
+All examined bin/site/source shadow roots reject package directories, `.py`,
+`.pyc`, and plain/tagged `.so`/`.pyd` files, retaining only the specifically
+attested source package and helper source files. The same guards protect
+editable finder and venv helper names. No Python execution or dynamically
+evaluated suffix discovery was added; this is conservative layout recognition,
+not a new compatible release interval or an assertion of incompatibility.
+Both proved revisions and actual official launcher forms remain admitted.
+
+Verification:
+
+- `bun test test/host-profile-admission-public.test.ts test/doctor-imports.test.ts test/hermes-lifecycle-route.test.ts test/hermes-batch-public.test.ts`:
+  31 passed, 235 assertions, 17.42 seconds; after the additional conservative
+  debug-extension suffix recurrence check, 32 passed, 241 assertions, 19.79 seconds.
+- `bun run check` and `bun run build`: passed.
+- `HERMES_SOURCE_ROOT=/tmp/plugnz-hermes-source-proof OPEN_PLUGIN_TEST_PACKED_NODE=/usr/bin/node bun test test/hermes-native-loader.test.ts test/host-profile-admission-public.test.ts test/hermes-batch-public.test.ts`:
+  24 passed, 164 assertions, 21.45 seconds, including official isolated loader,
+  launcher forms and complete source/venv no-write digests. The final debug
+  extension suffix candidate also passed: 25 tests, 170 assertions, 35.44
+  seconds (focused and packed gates overlapped in that rerun).
+- Allocated source plus worktree remains 242 MiB under the approved 400 MiB
+  ceiling. No real installed launcher, Python or installed-checkout Git call
+  was used for this correction. Earlier object-cache uncertainty is unchanged.
+
+The native/finder/console template hashes above are unchanged. No skill files
+were revised; these are product regression checks, not skill-improvement scores.
+Independent frozen-candidate review and the separate full/all-host Native gate
+remain required.

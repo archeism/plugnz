@@ -7,6 +7,39 @@ import { hermesPublicRuntime, nativeHermesFixtureLauncher } from './hermes-runti
 import { initGitRepo, writeFiles } from './util';
 import { hermesEditableFinderBody } from '../src/hosts/hermes-launcher-templates';
 
+for (const [name, files] of [
+  ['conflicting config', { '.venv/pyvenv.cfg': 'include-system-site-packages = false\ninclude-system-site-packages = true\n' }],
+  ['duplicate config', { '.venv/pyvenv.cfg': 'include-system-site-packages = false\ninclude-system-site-packages = false\n' }],
+  ['bin config precedence', { '.venv/bin/pyvenv.cfg': 'include-system-site-packages = true\n' }],
+  ['site sourceless module', { '.venv/lib/python3.13/site-packages/hermes_cli.pyc': 'foreign bytecode' }],
+  ['bin extension module', { '.venv/bin/hermes_cli.cpython-313-x86_64-linux-gnu.so': 'foreign extension' }],
+  ['site extension customization', { '.venv/lib/python3.13/site-packages/sitecustomize.abi3.so': 'foreign extension' }],
+  ['source sourceless customization', { 'usercustomize.pyc': 'foreign bytecode' }],
+  ['virtualenv extension shadow', { '.venv/lib/python3.13/site-packages/_virtualenv.so': 'foreign extension' }],
+  ['finder sourceless shadow', { '.venv/lib/python3.13/site-packages/__editable___hermes_agent_0_21_4_finder.pyc': 'foreign bytecode' }],
+  ['debug extension shadow', { '.venv/lib/python3.13/site-packages/hermes_cli_d.pyd': 'foreign extension' }],
+] as const) {
+  test(`editable Hermes refuses ${name} with no writes`, async () => {
+    await withLifecycleCliHarness(harness => {
+      const runtime = hermesPublicRuntime(harness);
+      writeFiles(runtime.sourceRoot, files);
+      harness.writeHome({ '.hermes/config.yaml': 'model: preserved\n' });
+      const source = harness.source('plugin', {
+        'plugin.json': '{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"demo","version":"1.0.0"}\n',
+        'skills/demo/SKILL.md': '---\nname: demo\ndescription: Demo\n---\nDemo.\n',
+      });
+      const before = snapshotTree(runtime.sourceRoot);
+      const result = harness.run(['add', source, '--target', 'hermes', '--json']);
+      expect(result.exitCode).toBe(1);
+      expect(parseLifecycleReport(JSON.parse(result.stdout)).outcomes[0]?.reason?.code).toBe('capability.unverified');
+      expect(snapshotTree(runtime.sourceRoot)).toEqual(before);
+      expect(result.stores.hermes.after).toEqual(result.stores.hermes.before);
+      expect(result.state.after).toEqual(result.state.before);
+      expect(result.ambient.after).toEqual(result.ambient.before);
+    });
+  });
+}
+
 for (const form of ['native-middle', 'console-prelude'] as const) {
   test(`lookalike Hermes ${form} cannot substitute a foreign import source`, async () => {
     await withLifecycleCliHarness(harness => {

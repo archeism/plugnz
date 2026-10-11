@@ -62,7 +62,12 @@ literal source-root substitution. The editable finder algorithm is pinned to
 the source's setuptools 83.0.0 backend; only validated literal root-contained
 mapping/namespace data and its distribution version may vary. Editable admission
 also rejects ambient `PYTHONHOME`/`PYTHONPATH`, system-site inclusion, shadow
-modules/customization files, and unknown `.pth` hooks. The observed uv venv hook
+modules/customization files, and unknown `.pth` hooks. Its root `pyvenv.cfg`
+must have unique keys and explicitly disable system-site packages; an additional
+`bin/pyvenv.cfg` is an unverified layout rather than silently ignored. Shadow
+checks cover package directories, source, sourceless `.pyc`, and plain or tagged
+`.so`/`.pyd` extensions in the examined bin, site-packages and source roots,
+including customization modules and editable/venv helpers. The observed uv venv hook
 is allowed only with its exact verified helper bytes. Other installer bodies,
 hook revisions and layouts stay visibly unverified, not proven incompatible;
 select the actual executable with `OPEN_PLUGIN_HERMES_BIN` and retain its

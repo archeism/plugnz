@@ -308,6 +308,29 @@ function verifiedEditableFinder(text: string, root: string, version: string): bo
     .replaceAll(`__editable__.hermes_agent-${version}.finder`, '__EDITABLE_NAME__') === hermesEditableFinderBody;
 }
 
+/** Only the proved root-level, unambiguous venv configuration is admitted. */
+function isolatedVenvConfig(text: string): boolean {
+  const values = new Map<string, string>();
+  for (const line of text.split(/\r?\n/u)) {
+    if (line.trim() === '' || line.trimStart().startsWith('#')) continue;
+    const row = /^\s*([^=]+?)\s*=\s*(.*?)\s*$/u.exec(line);
+    if (row === null) return false;
+    const key = row[1]!.trim().toLowerCase();
+    if (key === '' || values.has(key)) return false;
+    values.set(key, row[2]!.toLowerCase());
+  }
+  return values.get('include-system-site-packages') === 'false';
+}
+
+/** Python imports packages, source, sourceless bytecode and platform extensions.
+ * Conservatively refuse tagged extension suffixes without executing Python to
+ * discover the selected interpreter's dynamic import suffix list. */
+function hasImportShadow(directory: string, modules: string[], allowed: string[] = []): boolean {
+  return readdirSync(directory).some(entry => !allowed.includes(entry) && modules.some(module =>
+    entry === module || entry === `${module}_d.pyd` || (entry.startsWith(`${module}.`)
+      && /\.(?:py|pyc|so|pyd)$/u.test(entry))));
+}
+
 /** Read the selected launcher's actual import binding; mere comments/markers do not qualify. */
 function hermesExecutableSource(binary: string, depth = 0): string | undefined {
   if (depth > 4 || !isAbsolute(binary) || !existsSync(binary)) return undefined;
@@ -341,18 +364,16 @@ function hermesExecutableSource(binary: string, depth = 0): string | undefined {
     || text.slice(text.indexOf('\n') + 1) !== hermesUvConsoleBody) return undefined;
   const venv = dirname(dirname(executable));
   if (dirname(interpreter) !== join(venv, 'bin') || !existsSync(join(venv, 'pyvenv.cfg'))) return undefined;
-  if (!/^include-system-site-packages\s*=\s*false$/mu.test(readFileSync(join(venv, 'pyvenv.cfg'), 'utf8'))
+  if (existsSync(join(venv, 'bin', 'pyvenv.cfg')) || !isolatedVenvConfig(readFileSync(join(venv, 'pyvenv.cfg'), 'utf8'))
     || process.env['PYTHONHOME'] || process.env['PYTHONPATH']) return undefined;
-  for (const name of ['hermes_cli', 'hermes_cli.py', 'sitecustomize.py', 'usercustomize.py', '_virtualenv.py']) {
-    if (existsSync(join(venv, 'bin', name))) return undefined;
-  }
+  if (hasImportShadow(join(venv, 'bin'), ['hermes_cli', 'sitecustomize', 'usercustomize', '_virtualenv'])) return undefined;
   const lib = join(venv, 'lib');
   if (!existsSync(lib)) return undefined;
   const roots: string[] = [];
   for (const python of readdirSync(lib).filter(name => /^python\d+\.\d+$/u.test(name))) {
     const packages = join(lib, python, 'site-packages');
     if (!existsSync(packages)) continue;
-    if (['hermes_cli', 'hermes_cli.py', 'sitecustomize.py', 'usercustomize.py'].some(name => existsSync(join(packages, name)))) return undefined;
+    if (hasImportShadow(packages, ['hermes_cli', 'sitecustomize', 'usercustomize', '_virtualenv'], ['_virtualenv.py'])) return undefined;
     for (const name of readdirSync(packages).filter(name => /^hermes_agent-[^/]+\.dist-info$/u.test(name))) {
       const distribution = join(packages, name);
       const metadata = join(distribution, 'direct_url.json');
@@ -364,9 +385,11 @@ function hermesExecutableSource(binary: string, depth = 0): string | undefined {
         || !('editable' in direct.dir_info) || direct.dir_info.editable !== true || !direct.url.startsWith('file:///')) continue;
       const root = decodeURIComponent(direct.url.slice('file://'.length));
       if (!isAbsolute(root) || !existsSync(join(root, 'hermes_cli', 'main.py'))) continue;
-      if (['sitecustomize.py', 'usercustomize.py'].some(name => existsSync(join(root, name)))) return undefined;
+      if (hasImportShadow(root, ['hermes_cli', 'sitecustomize', 'usercustomize', '_virtualenv'], ['hermes_cli'])) return undefined;
       const version = name.slice('hermes_agent-'.length, -'.dist-info'.length);
       const finder = `__editable___hermes_agent_${version.replace(/[^a-zA-Z0-9]/gu, '_')}_finder`;
+      if (hasImportShadow(packages, [finder], [`${finder}.py`])
+        || hasImportShadow(join(venv, 'bin'), [finder]) || hasImportShadow(root, [finder])) return undefined;
       let binding = false;
       for (const pthName of readdirSync(packages).filter(name => name.endsWith('.pth'))) {
         const pth = readFileSync(join(packages, pthName), 'utf8').trim();
