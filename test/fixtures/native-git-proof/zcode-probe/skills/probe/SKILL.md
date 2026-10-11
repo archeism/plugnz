@@ -2,4 +2,4 @@
 name: probe
 description: Controlled ZCode discovery probe
 ---
-ZCode ordinary skill payload V1.
+ZCode ordinary skill payload V2.
