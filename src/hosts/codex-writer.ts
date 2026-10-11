@@ -6,7 +6,7 @@
  * code (AGENTS.md: doctor is read-only by construction;
  * test/doctor-imports.test.ts pins it).
  */
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { parse as parseToml } from 'smol-toml';
@@ -1135,6 +1135,8 @@ function restoreMarketplaceRollback(handle: DurableLifecycleOperation): void {
   const scratch = mkdtempSync(join(parent, '.plgnz-marketplace-restore-'));
   try {
     cpSync(snapshot, scratch, { recursive: true });
+    // cpSync into an existing mkdtemp directory retains its 0700 root mode.
+    chmodSync(scratch, statSync(snapshot).mode & 0o777);
     if (fingerprintTree(scratch) !== row['fingerprint']) throw new Error('Codex marketplace restore staging drifted');
     activate(scratch, checkout, parent).commit();
     if (fingerprintTree(checkout) !== row['fingerprint']) throw new Error('Codex marketplace rollback did not verify');

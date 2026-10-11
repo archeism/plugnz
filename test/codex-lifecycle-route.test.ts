@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fingerprintTree } from '../src/fingerprint';
@@ -41,6 +41,7 @@ describe('codex native marketplace upgrade route', () => {
       git(['add', '.']); git(['commit', '-m', 'candidate']);
       const revision = git(['rev-parse', 'HEAD']);
       git(['checkout', '--detach', priorRevision]);
+      chmodSync(checkout, 0o755);
       const prior = fingerprintTree(checkout);
       const snapshot = createFrozenPackageSnapshot({ ...original, immutableRevision: revision, nativeGit: { locator: sourceLocator, resolvedRevision: revision } });
       if (!isUpdateSnapshot(snapshot)) throw new Error('fixture action drift');
@@ -59,6 +60,7 @@ describe('codex native marketplace upgrade route', () => {
       await codexLifecycle.rollback(prepared.handle);
       expect(fingerprintTree(checkout)).toBe(prior);
       expect(git(['rev-parse', 'HEAD'])).toBe(priorRevision);
+      expect(statSync(checkout).mode & 0o777).toBe(0o755);
     });
   });
   test('a checkout changed after preparation blocks before any native mutation', async () => {

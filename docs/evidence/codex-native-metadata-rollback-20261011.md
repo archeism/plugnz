@@ -72,3 +72,24 @@ not replace the still-required released-native trial.
 
 Skills unchanged; these results establish product regression evidence, not a
 causal skill-improvement claim.
+
+## Released-native correction trial: second defect
+
+Fresh owned Sandbox `plugnz-codex-metadata-a6ecb91` ran official 0.162.0
+with frozen artifact SHA256
+`685041e13e31e331c7dfb8caea57b03a392ddb5289f4b4f66e8105f1e22b6ea3`.
+Both bootstrap SDK discovery and same-version Native V2 refresh passed.
+Foreign V3 post-call changes remained untouched with exact sealed pending
+recovery. Clean V3 permission failure restored the prior Git HEAD and settled
+runtime failure with no pending recovery, but the full surface oracle failed:
+checkout root mode changed from 0755 to 0700.
+
+`cpSync` into an existing `mkdtemp` restore directory preserves that directory's
+0700 mode. The restore now copies the retained root permission mode explicitly
+before activation. The actual host-route regression reproduces the mode bug
+(expected 493, received 448), then passes all six assertions after correction.
+Released-native reacceptance is still required; the failed oracle is retained.
+
+The full run launched on a6ecb91 was still live when this permission correction
+was discovered and applied. Its result must not be presented as a frozen gate
+for the corrected source; a fresh full gate is required after this increment.
