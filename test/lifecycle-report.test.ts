@@ -137,6 +137,18 @@ test('legacy unknown intent cannot masquerade as a completed modern accepted set
   let rejected = false;
   try { parseLifecycleReport(report); } catch { rejected = true; }
   expect(rejected).toBe(true);
+  for (const settlement of ['commit', 'rollback'] as const) {
+    report.recovery = { schemaVersion: 1, receipts: [{
+      original: { attemptId: 'legacy-sealed-attempt', command: 'legacy-recovery', operationId: 'legacy-sealed-operation',
+        scope: scope(), package: 'addy', nativeId: 'addy@personal', action: 'install', route: 'managed', journalState: 'cleanup-pending', sealed: true },
+      status: 'completed', settlement, finalJournalState: settlement === 'commit' ? 'completed' : 'rolled-back',
+      resourceState: settlement === 'commit' ? 'present' : 'retained', activationState: settlement === 'commit' ? 'active-conforming' : 'retained-prior',
+      mutationStarted: false, changed: false, readbackVerified: true, reason: null,
+    }] };
+    let rejected = false;
+    try { parseLifecycleReport(report); } catch { rejected = true; }
+    expect(rejected).toBe(true);
+  }
 });
 
 describe('lifecycle report contract', () => {

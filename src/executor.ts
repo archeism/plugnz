@@ -1273,7 +1273,10 @@ function filesystemDenial(error: unknown): boolean {
 }
 
 function refusalReport(plan: FrozenPlan, reason: LifecycleReason, globalNotAttempted = false): ExecuteLifecycleResult {
-  const [first, ...rest] = plan.operations;
+  const normalized = (operation: LifecyclePlanOperation): LifecyclePlanOperation => globalNotAttempted && operation.action === 'retain-prior'
+    ? { ...operation, action: 'not-attempted', route: 'none' } : operation;
+  const operations = plan.operations.map(row => ({ ...row, operation: normalized(row.operation) }));
+  const [first, ...rest] = operations;
   if (first === undefined) {
     return finish(parseLifecycleReport({
       schemaVersion: 1,
@@ -1292,12 +1295,12 @@ function refusalReport(plan: FrozenPlan, reason: LifecycleReason, globalNotAttem
       },
     }));
   }
-  const outcomes = globalNotAttempted ? plan.operations.map(row => notAttempted(row.operation, reason))
+  const outcomes = globalNotAttempted ? operations.map(row => notAttempted(row.operation, reason))
     : [stop(first.operation, reason).outcome, ...rest.map((row) => notAttempted(row.operation, reason))];
   return finish(parseLifecycleReport({
     schemaVersion: 1,
     command: plan.report.command,
-    plan: plan.report.plan,
+    plan: plan.report.plan.map(normalized),
     outcomes,
     summary: { ...summaryFor(outcomes), ...(globalNotAttempted ? { reason, failureCategory: reason.category } : {}) },
   }));

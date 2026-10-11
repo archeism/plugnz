@@ -251,3 +251,13 @@ fixture failures were retained diagnostically; they are not acceptance evidence.
 Frozen focused gate: 54 passed, 364 assertions, 0 failed, 72.51 seconds across the
 same six files; `bun run check` passed. Remaining acceptance work above remains
 open, including consumer integration and full/packed gates. Skills unchanged.
+
+Further strict-boundary review found retain-prior rows were not normalized in
+the global executor refusal, and sealed-looking legacy proof could still claim
+commit/rollback. Global refusal now changes both current plan and outcome to
+not-attempted/no-route consistently. All legacy successful or verified settlement
+authority is rejected, not only accepted-intent settlement. The authentic public
+foreign-reappearance case now also covers a capability-refused retained sibling;
+valid loud JSON preserves its native bytes and exact current pair. Focused
+receipt/report gate: 34 passed, 111 assertions, 0 failed, 11.41 seconds; typecheck
+passed. This is a small correction gate, not full consumer/runtime acceptance.

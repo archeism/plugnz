@@ -58,7 +58,7 @@ test('successful recovery reports a real native change separately from unchanged
   });
 }, 30_000);
 
-for (const failure of ['missing-tombstone', 'foreign-reappearance'] as const) {
+for (const failure of ['missing-tombstone', 'foreign-reappearance', 'foreign-reappearance-retained'] as const) {
   test(`completed retirement ${failure} blocks sibling update before current apply`, async () => {
     await withLifecycleCliHarness(harness => {
       harness.writeHome({ '.deepagents/.keep': '' });
@@ -99,6 +99,10 @@ for (const failure of ['missing-tombstone', 'foreign-reappearance'] as const) {
         chmodSync(operations, 0o755);
         rmSync(demo, { recursive: true });
         writeFileSync(join(sibling, 'plugin.json'), '{"name":"sibling","version":"2.0.0"}');
+        if (failure === 'foreign-reappearance-retained') {
+          mkdirSync(join(sibling, 'commands'));
+          writeFileSync(join(sibling, 'commands/unsupported.md'), '---\ndescription: unsupported\n---\nunsupported\n');
+        }
         const manifest = join(harness.root, 'current.json');
         writeFileSync(manifest, JSON.stringify({ schemaVersion: 1, entries: [
           { operation: 'retire-source', scopeId: demoScope.id, target: { kind: 'dcode', instance: 'default' } },
@@ -111,7 +115,7 @@ for (const failure of ['missing-tombstone', 'foreign-reappearance'] as const) {
         registry.plugins['demo@local'] = [{ installPath: foreignRoot }];
         // Inventory does not itself invoke --version. Call 2 is the fresh sibling
         // route probe after recovery, before the global current-operation check.
-        const injected = harness.fakeNative('reappearance', steps().map((step, index) => failure === 'foreign-reappearance' && index === 2
+        const injected = harness.fakeNative('reappearance', steps().map((step, index) => failure !== 'missing-tombstone' && index === 2
           ? { ...step, writes: { [registryFile]: JSON.stringify(registry), [foreignManifest]: '{"name":"demo","version":"foreign"}' } } : step));
         const resumed = harness.run(['sync', '--manifest', manifest, '--json'], { env: { ...env, OPEN_PLUGIN_DCODE_BIN: injected.path } });
         const report = parseLifecycleReport(JSON.parse(resumed.stdout));
@@ -124,7 +128,11 @@ for (const failure of ['missing-tombstone', 'foreign-reappearance'] as const) {
         const after: LifecycleStateV2 = JSON.parse(bytesToText(resumed.state.after!));
         expect(after.activations.find(row => row.packageId === 'sibling')!.fingerprints.installed).toBe(siblingRoot);
         expect(readFileSync(siblingNativeManifest, 'utf8')).toBe(siblingNativeBytes);
-        if (failure === 'foreign-reappearance') expect(readFileSync(foreignManifest, 'utf8')).toContain('foreign');
+        if (failure !== 'missing-tombstone') expect(readFileSync(foreignManifest, 'utf8')).toContain('foreign');
+        if (failure === 'foreign-reappearance-retained') {
+          expect(report.plan.find(row => row.package === 'sibling')!.action).toBe('not-attempted');
+          expect(report.plan.find(row => row.package === 'sibling')!.route).toBe('none');
+        }
       } finally { chmodSync(operations, 0o755); }
     });
   }, 30_000);

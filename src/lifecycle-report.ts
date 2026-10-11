@@ -276,6 +276,9 @@ function parseRecoveryReceipts(value: unknown, dryRun: boolean): LifecycleRecove
       || typeof item['mutationStarted'] !== 'boolean' || typeof item['changed'] !== 'boolean' || typeof item['readbackVerified'] !== 'boolean'
       || !(item['reason'] === null || isObject(item['reason']))) throw invalid('recovery receipt contains invalid or missing fields');
     if (item['reason'] !== null) assertReason(item['reason'] as Record<string, unknown>);
+    if (original.command === 'legacy-recovery' && (item['status'] === 'completed' || item['settlement'] !== null)) {
+      throw contradiction('legacy recovery proof cannot authorize successful or verified settlement');
+    }
     if (item['changed'] && !item['mutationStarted']) throw contradiction('changed recovery receipt requires mutationStarted');
     if (item['status'] === 'completed') {
       if (item['reason'] !== null || item['settlement'] === null) throw contradiction('completed recovery requires a successful settlement');
