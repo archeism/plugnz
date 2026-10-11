@@ -10,7 +10,8 @@ import { repoRoot } from './util';
 test('a later recovery failure reports earlier verified rollback receipts and aggregate native changes', async () => {
   await withLifecycleCliHarness(harness => {
     harness.writeHome({ '.deepagents/.keep': '' });
-    const sources = ['demo', 'sibling'].map(name => harness.source(`multi-${name}`, { 'plugin.json': JSON.stringify({ name, version: '1.0.0' }) }));
+    const names = ['demo', 'sibling', 'remaining'];
+    const sources = names.map(name => harness.source(`multi-${name}`, { 'plugin.json': JSON.stringify({ name, version: '1.0.0' }) }));
     const steps = () => Array.from({ length: 64 }, () => ({ args: ['--version'], stdout: 'deepagents-code 0.1.83\n' }));
     const native = harness.fakeNative('normal', steps());
     const env = { OPEN_PLUGIN_DCODE_BIN: native.path, OPEN_PLUGIN_DCODE_PYTHON_BIN: fakeDcodeLockInterpreter(harness.root) };
@@ -27,7 +28,7 @@ test('a later recovery failure reports earlier verified rollback receipts and ag
       const failing = harness.fakeNative(`failing-${index}`, steps().map((step, call) => call === 2 ? { ...step, writes: { [fault]: 'fault\n' } } : step));
       const failed = harness.run(['sync', source, '--target', 'dcode', '--json'], { env: { ...env, OPEN_PLUGIN_DCODE_BIN: failing.path } });
       const pending = parseLifecycleReport(JSON.parse(failed.stdout)).outcomes.find(row => row.result === 'pending')!;
-      expect(pending.package).toBe(index === 0 ? 'demo' : 'sibling');
+      expect(pending.package).toBe(names[index]);
       originalOperations.push(pending.operationId);
       rmSync(fault);
     }
@@ -35,10 +36,15 @@ test('a later recovery failure reports earlier verified rollback receipts and ag
     writeFileSync(join(registry.plugins['sibling@local']![0]!.installPath, 'plugin.json'), '{"name":"sibling","version":"foreign"}');
     const manifest = join(harness.root, 'multi-resume.json');
     writeFileSync(manifest, JSON.stringify({ schemaVersion: 1, entries: sources.map(source => ({ operation: 'sync', source: { kind: 'local', locator: source }, target: { kind: 'dcode', instance: 'default' } })) }));
+    const inventory = JSON.parse(harness.run(['scopes', '--json']).stdout);
     const resumed = harness.run(['sync', '--manifest', manifest, '--json'], { env });
     const report = parseLifecycleReport(JSON.parse(resumed.stdout));
     expect(resumed.exitCode).toBe(1);
-    expect(report.outcomes).toHaveLength(2);
+    expect(report.outcomes).toHaveLength(3);
+    expect(report.recovery!.receipts).toHaveLength(3);
+    const originals = inventory.scopes.flatMap((scope: { openJournals: { operations: import('../src/recovery-proof').RecoveryOperationProof[] } }) => scope.openJournals.operations);
+    const byId = (left: import('../src/recovery-proof').RecoveryOperationProof, right: import('../src/recovery-proof').RecoveryOperationProof) => left.operationId.localeCompare(right.operationId);
+    expect(report.recovery!.receipts.map(row => row.original).sort(byId)).toEqual(originals.sort(byId));
     expect(report.outcomes.every(row => row.result === 'not-attempted' && !row.changed)).toBe(true);
     const restored = report.recovery!.receipts.find(row => row.original.package === 'demo')!;
     expect(restored.original.operationId).toBe(originalOperations[0]);
@@ -51,12 +57,19 @@ test('a later recovery failure reports earlier verified rollback receipts and ag
     expect(unresolved.original.operationId).toBe(originalOperations[1]);
     expect(unresolved.status).toBe('pending');
     expect(unresolved.changed).toBe(false);
+    const remaining = report.recovery!.receipts.find(row => row.original.package === 'remaining')!;
+    expect(remaining.original.operationId).toBe(originalOperations[2]);
+    expect(remaining.status).toBe('not-attempted');
+    expect(remaining.finalJournalState).toBe(remaining.original.journalState);
+    expect(remaining.changed).toBe(false);
+    expect(remaining.mutationStarted).toBe(false);
     expect(report.summary.changed).toBe(true);
     expect(report.summary.recoveryId).toBe(originalOperations[1]);
     expect(report.summary.readbackId).toBe(originalOperations[0]);
     const after: import('../src/state').LifecycleStateV2 = JSON.parse(bytesToText(resumed.state.after!));
     expect(after.attempts.flatMap(attempt => attempt.journal).find(row => row.operationId === originalOperations[0])!.state).toBe('rolled-back');
     expect(after.attempts.flatMap(attempt => attempt.journal).find(row => row.operationId === originalOperations[1])!.state).toBe('rollback');
+    expect(after.attempts.flatMap(attempt => attempt.journal).find(row => row.operationId === originalOperations[2])!.state).toBe('rollback');
     expect(readFileSync(join(registry.plugins['sibling@local']![0]!.installPath, 'plugin.json'), 'utf8')).toContain('foreign');
   });
 }, 30_000);

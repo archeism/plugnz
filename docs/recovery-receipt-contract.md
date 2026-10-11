@@ -1,7 +1,9 @@
 # Recovery receipt contract — frozen proposal
 
-Status: contract-first proposal; no runtime changes in this checkpoint.
-Base: `3f6c651`. Scope: P08 recovery reporting and its strict Personal consumer.
+Status: contract implemented in the isolated producer lane; remaining consumer
+integration and final acceptance gates are explicitly open below.
+Original contract-only proposal: `e35a244` / `0076f80`, base `3f6c651`.
+Scope: P08 recovery reporting and its strict Personal consumer.
 
 ## Why a separate contract
 
@@ -261,3 +263,31 @@ foreign-reappearance case now also covers a capability-refused retained sibling;
 valid loud JSON preserves its native bytes and exact current pair. Focused
 receipt/report gate: 34 passed, 111 assertions, 0 failed, 11.41 seconds; typecheck
 passed. This is a small correction gate, not full consumer/runtime acceptance.
+
+## Remaining producer acceptance checkpoint
+
+Public retry tests now cover changed intent with an independent sibling Source,
+three original open journals with completed/pending/unattempted receipts, and a
+release fault after cleanup has disposed its artifacts. The latter preserves a
+discoverable cleanup-pending journal and retries without repeating native apply.
+Current Desired/retirement outcomes remain separate and exact; historical receipt
+identity is compared with the precommand read-only inventory.
+
+Verified COMMIT receipts also enforce the original action's terminal state:
+retire/remove is absent/inactive, install/update/route migration is
+present/active-conforming, and disable is retained/inactive. Rollback does not
+infer prior state from the original action. Positive and contradictory-state
+parser cases include a nonempty current Desired report. The independent pure
+parser RED on 977a874 is retained at
+`/home/charlesfengyc/.local/state/plugnz-evidence/20261011/recovery-commit-state-parser-red-977a874.md`
+(SHA256 `0a801b37e3dbd22b9774ccbff647066e9ccb0106249ec2fb21ee2c93fd97982e`);
+it is not native or composed consumer evidence.
+
+Frozen increment command: designated Bun 1.4 `bun test
+test/lifecycle-report.test.ts test/recovery-receipts-public.test.ts
+test/recovery-public.test.ts --timeout 30000` followed by `bun run check`.
+Result: 47 passed, 361 assertions, 0 failed, 56.30 seconds; typecheck passed.
+Earlier public-only gate: 16 passed, 289 assertions, 0 failed, 57.23 seconds;
+typecheck passed. Strict consumer integration, composed proof, independent review
+and final full/packed gates remain open. No production pin or real-home changes;
+skills unchanged.

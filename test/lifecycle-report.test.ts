@@ -151,6 +151,29 @@ test('legacy unknown intent cannot masquerade as a completed modern accepted set
   }
 });
 
+test('verified COMMIT receipt must match original native action, without inferring rollback prior state', () => {
+  for (const action of ['retire-orphan', 'remove', 'install', 'update', 'route-migrate', 'disable-nonconforming'] as const) {
+    const report = validReport();
+    const retirement = action === 'retire-orphan' || action === 'remove';
+    const disabled = action === 'disable-nonconforming';
+    report.recovery = { schemaVersion: 1, receipts: [{
+      original: { attemptId: 'original-attempt', command: action === 'remove' ? 'remove' : action === 'retire-orphan' ? 'retire-source' : 'sync',
+        operationId: 'original-operation', scope: scope(), package: 'addy', nativeId: 'addy@personal', action,
+        route: 'managed', journalState: 'cleanup-pending', sealed: true },
+      status: 'completed', settlement: 'commit', finalJournalState: 'completed',
+      resourceState: retirement ? 'absent' : disabled ? 'retained' : 'present',
+      activationState: retirement || disabled ? 'inactive' : 'active-conforming',
+      mutationStarted: false, changed: false, readbackVerified: true, reason: null,
+    }] };
+    expect(parseLifecycleReport(report)).toEqual(report);
+    const wrong = { ...report, recovery: { schemaVersion: 1, receipts: report.recovery.receipts.map(row => ({ ...row,
+      resourceState: retirement || disabled ? 'present' : 'absent', activationState: retirement || disabled ? 'active-conforming' : 'inactive' })) } };
+    let rejected = false;
+    try { parseLifecycleReport(wrong); } catch { rejected = true; }
+    expect(rejected).toBe(true);
+  }
+});
+
 describe('lifecycle report contract', () => {
   test('pins schema version and orthogonal machine-readable fields', () => {
     expect({

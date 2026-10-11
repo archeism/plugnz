@@ -293,6 +293,15 @@ function parseRecoveryReceipts(value: unknown, dryRun: boolean): LifecycleRecove
       if (!original.sealed || !item['readbackVerified']) throw contradiction('verified recovery settlement requires sealed authority and readback');
       if (item['status'] === 'pending' && item['finalJournalState'] !== 'cleanup-pending') throw contradiction('verified pending recovery must remain durably cleanup-pending');
     }
+    if (item['settlement'] === 'commit') {
+      const retired = original.action === 'retire-orphan' || original.action === 'remove';
+      const disabled = original.action === 'disable-nonconforming';
+      const activated = original.action === 'install' || original.action === 'update' || original.action === 'route-migrate';
+      const matches = retired ? item['resourceState'] === 'absent' && item['activationState'] === 'inactive'
+        : disabled ? item['resourceState'] === 'retained' && item['activationState'] === 'inactive'
+        : activated && item['resourceState'] === 'present' && item['activationState'] === 'active-conforming';
+      if (!matches) throw contradiction('committed recovery contradicts the original native action terminal state');
+    }
     if (item['status'] === 'not-attempted' && (item['settlement'] !== null || item['finalJournalState'] !== original.journalState
       || item['mutationStarted'] || item['changed'] || item['readbackVerified'] || item['resourceState'] !== 'unknown' || item['activationState'] !== 'unknown')) {
       throw contradiction('unattempted recovery cannot claim observations, settlement, or mutation');

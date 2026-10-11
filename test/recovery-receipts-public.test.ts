@@ -1,12 +1,12 @@
 import { expect, test } from 'bun:test';
-import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { bytesToText, withLifecycleCliHarness } from './lifecycle-cli-harness';
 import { fakeDcodeLockInterpreter } from './dcode-fake-lock';
 import { parseLifecycleReport } from '../src/lifecycle-report';
 import type { LifecycleStateV2 } from '../src/state';
 
-test('successful recovery reports a real native change separately from unchanged current Desired', async () => {
+for (const intent of ['unchanged', 'retirement'] as const) test(`successful recovery preserves historical change and current ${intent} intent`, async () => {
   await withLifecycleCliHarness(harness => {
     harness.writeHome({ '.deepagents/.keep': '' });
     const source = harness.source('recovery-accounting', {
@@ -40,13 +40,30 @@ test('successful recovery reports a real native change separately from unchanged
     writeFileSync(enablementFile, JSON.stringify(candidate, null, 2) + '\n');
     const inventory = JSON.parse(harness.run(['scopes', '--json']).stdout);
     const before = readFileSync(enablementFile, 'utf8');
-    const resumed = harness.run(['sync', source, '--target', 'dcode', '--json'], { env });
+    const retirementManifest = join(harness.root, 'retire-current.json');
+    if (intent === 'retirement') {
+      const sibling = harness.source('other-current', { 'plugin.json': '{"name":"other","version":"1.0.0"}' });
+      writeFileSync(retirementManifest, JSON.stringify({ schemaVersion: 1, entries: [
+        { operation: 'retire-source', scopeId: state.scopes[0]!.id, target: { kind: 'dcode', instance: 'default' } },
+        { operation: 'sync', source: { kind: 'local', locator: sibling }, target: { kind: 'dcode', instance: 'default' } },
+      ] }));
+      rmSync(source, { recursive: true });
+    }
+    const resumed = harness.run(intent === 'unchanged' ? ['sync', source, '--target', 'dcode', '--json'] : ['sync', '--manifest', retirementManifest, '--json'], { env });
     const report = parseLifecycleReport(JSON.parse(resumed.stdout));
     expect(resumed.exitCode).toBe(0);
     expect(readFileSync(enablementFile, 'utf8') === before).toBe(false);
-    expect(report.outcomes.map(row => ({ package: row.package, action: row.action, changed: row.changed }))).toEqual([
-      { package: 'demo', action: 'unchanged', changed: false }, { package: 'sibling', action: 'unchanged', changed: false },
-    ]);
+    if (intent === 'unchanged') {
+      expect(report.outcomes.map(row => ({ package: row.package, action: row.action, changed: row.changed }))).toEqual([
+        { package: 'demo', action: 'unchanged', changed: false }, { package: 'sibling', action: 'unchanged', changed: false },
+      ]);
+    } else {
+      expect(report.outcomes.filter(row => row.coverage === 'retirement').map(row => ({ package: row.package, action: row.action, result: row.result }))).toEqual([
+        { package: 'demo', action: 'retire-orphan', result: 'succeeded' }, { package: 'sibling', action: 'retire-orphan', result: 'succeeded' },
+      ]);
+      expect(report.outcomes.filter(row => row.coverage === 'desired-pair').map(row => row.package)).toEqual(['other']);
+      expect(report.plan).toHaveLength(3);
+    }
     expect(report.summary.changed).toBe(true);
     expect(report.summary.mutationStarted).toBe(true);
     expect(report.recovery!.receipts).toHaveLength(1);
@@ -55,6 +72,55 @@ test('successful recovery reports a real native change separately from unchanged
     expect(receipt.original.operationId).toBe(original.operationId);
     expect({ status: receipt.status, settlement: receipt.settlement, changed: receipt.changed, verified: receipt.readbackVerified })
       .toEqual({ status: 'completed', settlement: 'rollback', changed: true, verified: true });
+  });
+}, 30_000);
+
+test('failed release after artifact disposal remains discoverable and retries without repeating native apply', async () => {
+  await withLifecycleCliHarness(harness => {
+    harness.writeHome({ '.deepagents/.keep': '' });
+    const source = harness.source('release-after-disposal', { 'plugin.json': '{"name":"demo","version":"1.0.0"}' });
+    const operations = join(harness.home, '.deepagents/plugins/cache/plgnz-operations');
+    const counter = join(harness.root, 'cleanup-counter');
+    const denied = join(harness.root, 'deny-cleanup');
+    writeFileSync(denied, `#!/bin/sh\nn=0\nif [ -f '${counter}' ]; then n=$(cat '${counter}'); fi\nn=$((n+1))\nprintf '%s' "$n" > '${counter}'\nif [ "$n" -eq 3 ]; then chmod a-w '${operations}'; fi\nprintf 'deepagents-code 0.1.83\\n'\n`);
+    chmodSync(denied, 0o755);
+    const interpreter = fakeDcodeLockInterpreter(harness.root);
+    const env = { OPEN_PLUGIN_DCODE_BIN: denied, OPEN_PLUGIN_DCODE_PYTHON_BIN: interpreter };
+    try {
+      const initial = harness.run(['sync', source, '--target', 'dcode', '--json'], { env });
+      expect(initial.exitCode).toBe(1);
+      const before: LifecycleStateV2 = JSON.parse(bytesToText(initial.state.after!));
+      const originalAttempt = before.attempts.at(-1)!;
+      const originalJournal = originalAttempt.journal[0]!;
+      expect(originalJournal.state).toBe('cleanup-pending');
+      const rollback = originalJournal.sealedOperation!.rollbackReference;
+      chmodSync(operations, 0o755);
+      const failOnce = join(harness.root, 'release-fail-once');
+      writeFileSync(failOnce, 'fail next lock release');
+      const wrapper = join(harness.root, 'release-failing-python');
+      writeFileSync(wrapper, `#!/bin/sh\n'${interpreter}' "$@"\ncode=$?\ncase "$2" in *'sys.stdin.read()'*) if [ -f '${failOnce}' ]; then rm '${failOnce}'; exit 1; fi;; esac\nexit "$code"\n`);
+      chmodSync(wrapper, 0o755);
+      const native = harness.fakeNative('normal', Array.from({ length: 32 }, () => ({ args: ['--version'], stdout: 'deepagents-code 0.1.83\n' })));
+      const retryEnv = { OPEN_PLUGIN_DCODE_BIN: native.path, OPEN_PLUGIN_DCODE_PYTHON_BIN: wrapper };
+      const failed = harness.run(['sync', source, '--target', 'dcode', '--json'], { env: retryEnv });
+      const failedReport = parseLifecycleReport(JSON.parse(failed.stdout));
+      expect(failed.exitCode).toBe(1);
+      expect(existsSync(rollback)).toBe(false);
+      expect(failedReport.recovery!.receipts[0]!.status).toBe('pending');
+      expect(failedReport.recovery!.receipts[0]!.settlement).toBe('commit');
+      expect(failedReport.recovery!.receipts[0]!.reason!.diagnostic).toContain('lock process failed');
+      const inventory = JSON.parse(harness.run(['scopes', '--json']).stdout);
+      expect(inventory.scopes[0].openJournals.operations[0].operationId).toBe(originalJournal.operationId);
+      expect(inventory.scopes[0].openJournals.operations[0].journalState).toBe('cleanup-pending');
+      const resumed = harness.run(['sync', source, '--target', 'dcode', '--json'], { env: retryEnv });
+      const report = parseLifecycleReport(JSON.parse(resumed.stdout));
+      expect(resumed.exitCode).toBe(0);
+      expect(report.recovery!.receipts[0]!.original).toEqual(inventory.scopes[0].openJournals.operations[0]);
+      expect(report.recovery!.receipts[0]!.status).toBe('completed');
+      expect(report.outcomes[0]!.action).toBe('unchanged');
+      expect(report.summary.changed).toBe(false);
+      expect(resumed.stores.dcode.after).toEqual(resumed.stores.dcode.before);
+    } finally { chmodSync(operations, 0o755); }
   });
 }, 30_000);
 
