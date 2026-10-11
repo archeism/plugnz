@@ -67,8 +67,16 @@ must have unique keys and explicitly disable system-site packages; an additional
 `bin/pyvenv.cfg` is an unverified layout rather than silently ignored. Shadow
 checks cover package directories, source, sourceless `.pyc`, and plain or tagged
 `.so`/`.pyd` extensions in the examined bin, site-packages and source roots,
-including customization modules and editable/venv helpers. The observed uv venv hook
-is allowed only with its exact verified helper bytes. Other installer bodies,
+including customization modules and editable/venv helpers.
+Source import-tree checks also apply to native launchers, not only editable
+ones: untracked package, initializer or extension alternatives must not replace
+tracked Python modules such as `hermes_bootstrap` or nested `hermes_cli.main`.
+Editable bin/site roots are additionally checked for the source's root modules.
+The read-only traversal is bounded to 20,000 entries and excludes hidden
+repository/venv directories and `__pycache__`; ordinary untracked documents are
+allowed. This is import-shadow validation, not an attestation of all untracked
+content or arbitrary import hooks. See the [public shadow regression receipt](../evidence/issue35-hermes-import-shadow-20261011.md).
+The observed uv venv hook is allowed only with its exact verified helper bytes. Other installer bodies,
 hook revisions and layouts stay visibly unverified, not proven incompatible;
 select the actual executable with `OPEN_PLUGIN_HERMES_BIN` and retain its
 source-binding evidence before widening recognition. Entry-module symlinks outside

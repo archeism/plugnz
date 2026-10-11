@@ -331,6 +331,39 @@ function hasImportShadow(directory: string, modules: string[], allowed: string[]
       && /\.(?:py|pyc|so|pyd)$/u.test(entry))));
 }
 
+/** A clean Git index alone does not bind Python imports: untracked extension
+ * modules and packages can precede the tracked .py files. Check the source
+ * module tree for both launchers without importing it or running Python.
+ * Venv import roots are checked separately; bytecode caches and inert data do
+ * not override source modules and are not a reason to reject a checkout. */
+function verifiedSourceImportClosure(root: string): boolean {
+  let remaining = 20_000;
+  const visit = (directory: string, top: boolean): boolean => {
+    const entries = readdirSync(directory);
+    remaining -= entries.length;
+    if (remaining < 0) return false;
+    const packages = entries.filter(entry => /^[a-zA-Z_]\w*$/u.test(entry)
+      && entry !== '__pycache__' && statSync(join(directory, entry)).isDirectory());
+    const modules = ['__init__', ...packages, ...entries.filter(entry => entry.endsWith('.py')).map(entry => entry.slice(0, -3))];
+    if (top) modules.push('hermes_cli', 'hermes_bootstrap', 'hermes_constants', 'pm');
+    const allowed = entries.filter(entry => entry.endsWith('.py'));
+    allowed.push(...packages.filter(module => !entries.includes(`${module}.py`)));
+    // A package initializer resolves inside the package; a package named
+    // after another source module resolves before that source module.
+    if (hasImportShadow(directory, modules, allowed)) return false;
+    for (const entry of entries) {
+      if (entry.startsWith('.') || entry === '__pycache__') continue;
+      const path = join(directory, entry);
+      const stat = lstatSync(path);
+      if (stat.isSymbolicLink()) {
+        if (entry.endsWith('.py') || statSync(path).isDirectory()) return false;
+      } else if (stat.isDirectory() && !visit(path, false)) return false;
+    }
+    return true;
+  };
+  return visit(root, true);
+}
+
 /** Read the selected launcher's actual import binding; mere comments/markers do not qualify. */
 function hermesExecutableSource(binary: string, depth = 0): string | undefined {
   if (depth > 4 || !isAbsolute(binary) || !existsSync(binary)) return undefined;
@@ -354,6 +387,7 @@ function hermesExecutableSource(binary: string, depth = 0): string | undefined {
     if (root === undefined || code.replaceAll(bindings[0]![1]!, "'/__PLUGNZ_HERMES_ROOT__'") !== hermesNativeBootstrap) return undefined;
     return root !== undefined && isAbsolute(root) && existsSync(join(root, 'hermes_cli', 'main.py'))
       && realpathSync(join(root, 'hermes_cli', 'main.py')).startsWith(`${realpathSync(root)}/`)
+      && verifiedSourceImportClosure(realpathSync(root))
       ? realpathSync(root) : undefined;
   }
   // Python console entry points installed editably by pip/uv bind through local
@@ -385,6 +419,10 @@ function hermesExecutableSource(binary: string, depth = 0): string | undefined {
         || !('editable' in direct.dir_info) || direct.dir_info.editable !== true || !direct.url.startsWith('file:///')) continue;
       const root = decodeURIComponent(direct.url.slice('file://'.length));
       if (!isAbsolute(root) || !existsSync(join(root, 'hermes_cli', 'main.py'))) continue;
+      const sourceModules = ['hermes_cli', 'hermes_bootstrap', 'hermes_constants', 'pm',
+        ...readdirSync(root).filter(name => name.endsWith('.py')).map(name => name.slice(0, -3)),
+        ...readdirSync(root).filter(name => existsSync(join(root, name, '__init__.py')))];
+      if (hasImportShadow(packages, sourceModules) || hasImportShadow(join(venv, 'bin'), sourceModules)) return undefined;
       if (hasImportShadow(root, ['hermes_cli', 'sitecustomize', 'usercustomize', '_virtualenv'], ['hermes_cli'])) return undefined;
       const version = name.slice('hermes_agent-'.length, -'.dist-info'.length);
       const finder = `__editable___hermes_agent_${version.replace(/[^a-zA-Z0-9]/gu, '_')}_finder`;
@@ -403,7 +441,8 @@ function hermesExecutableSource(binary: string, depth = 0): string | undefined {
           && verifiedEditableFinder(readFileSync(join(packages, `${finder}.py`), 'utf8'), root, version)) binding = true;
         else return undefined;
       }
-      if (binding && realpathSync(join(root, 'hermes_cli', 'main.py')).startsWith(`${realpathSync(root)}/`)) roots.push(realpathSync(root));
+      if (binding && realpathSync(join(root, 'hermes_cli', 'main.py')).startsWith(`${realpathSync(root)}/`)
+        && verifiedSourceImportClosure(realpathSync(root))) roots.push(realpathSync(root));
     }
   }
   return roots.length === 1 ? roots[0] : undefined;

@@ -6,6 +6,81 @@ import { parseLifecycleReport } from '../src/lifecycle-report';
 import { hermesPublicRuntime, nativeHermesFixtureLauncher } from './hermes-runtime-fixture';
 import { initGitRepo, writeFiles } from './util';
 import { hermesEditableFinderBody } from '../src/hosts/hermes-launcher-templates';
+import { spawnSync } from 'node:child_process';
+
+test('isolated Python PathFinder identifies Hermes extension precedence without importing source', async () => {
+  await withLifecycleCliHarness(harness => {
+    const runtime = hermesPublicRuntime(harness);
+    writeFiles(runtime.sourceRoot, {
+      'hermes_bootstrap.py': '', 'hermes_bootstrap.so': 'not executed',
+      'hermes_cli/main.so': 'not executed',
+      'hermes_cli/__init__.py': '', 'hermes_cli/__init__.so': 'not executed',
+    });
+    const before = snapshotTree(runtime.sourceRoot);
+    const probe = `import importlib.machinery, json\nfrom pathlib import Path\nroot = Path(${JSON.stringify(runtime.sourceRoot)})\nrows = []\nfor name, directory in [('hermes_bootstrap', root), ('main', root / 'hermes_cli'), ('__init__', root / 'hermes_cli')]:\n    spec = importlib.machinery.PathFinder.find_spec(name, [str(directory)])\n    rows.append({'name': name, 'loader': type(spec.loader).__name__, 'origin': spec.origin})\nprint(json.dumps(rows))\n`;
+    const result = spawnSync('/usr/bin/python3', ['-I', '-B', '-c', probe], {
+      encoding: 'utf8', cwd: harness.home, env: { HOME: harness.home, PATH: '/usr/bin:/bin' },
+    });
+    expect({ code: result.status, stderr: result.stderr }).toEqual({ code: 0, stderr: '' });
+    expect(JSON.parse(result.stdout)).toEqual([
+      { name: 'hermes_bootstrap', loader: 'ExtensionFileLoader', origin: join(runtime.sourceRoot, 'hermes_bootstrap.so') },
+      { name: 'main', loader: 'ExtensionFileLoader', origin: join(runtime.sourceRoot, 'hermes_cli/main.so') },
+      { name: '__init__', loader: 'ExtensionFileLoader', origin: join(runtime.sourceRoot, 'hermes_cli/__init__.so') },
+    ]);
+    expect(snapshotTree(runtime.sourceRoot)).toEqual(before);
+  });
+});
+
+for (const form of ['native', 'editable'] as const) {
+  for (const [name, files] of [
+    ['root bootstrap extension', { 'hermes_bootstrap.so': 'foreign extension' }],
+    ['nested main extension', { 'hermes_cli/main.so': 'foreign extension' }],
+    ['nested tagged extension', { 'hermes_cli/plugins.py': '', 'hermes_cli/plugins.abi3.so': 'foreign extension' }],
+    ['package initializer extension', { 'hermes_cli/__init__.py': '', 'hermes_cli/__init__.so': 'foreign extension' }],
+    ['namespace initializer extension', { 'hermes_cli/__init__.so': 'foreign extension' }],
+    ['nested namespace extension', { 'hermes_cli/nested/handler.py': '', 'hermes_cli/nested.so': 'foreign extension' }],
+    ['root bootstrap package', { 'hermes_bootstrap.py': '', 'hermes_bootstrap/__init__.py': 'foreign package' }],
+  ] as const) {
+    test(`${form} Hermes refuses source import-closure ${name} before any writes`, async () => {
+      await withLifecycleCliHarness(harness => {
+        const runtime = hermesPublicRuntime(harness);
+        writeFiles(runtime.sourceRoot, files);
+        if (form === 'native') writeFileSync(runtime.executable, nativeHermesFixtureLauncher(runtime.sourceRoot));
+        harness.writeHome({ '.hermes/config.yaml': 'model: preserved\n' });
+        const source = harness.source('plugin', {
+          'plugin.json': '{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"demo","version":"1.0.0"}\n',
+          'skills/demo/SKILL.md': '---\nname: demo\ndescription: Demo\n---\nDemo.\n',
+        });
+        const before = snapshotTree(runtime.sourceRoot);
+        const result = harness.run(['add', source, '--target', 'hermes', '--json']);
+        expect(result.exitCode).toBe(1);
+        expect(parseLifecycleReport(JSON.parse(result.stdout)).outcomes[0]?.reason?.code).toBe('capability.unverified');
+        expect(snapshotTree(runtime.sourceRoot)).toEqual(before);
+        expect(result.stores.hermes.after).toEqual(result.stores.hermes.before);
+        expect(result.state.after).toEqual(result.state.before);
+        expect(result.ambient.after).toEqual(result.ambient.before);
+      });
+    });
+  }
+  test(`${form} Hermes admits inert untracked source files without executing or changing the runtime`, async () => {
+    await withLifecycleCliHarness(harness => {
+      const runtime = hermesPublicRuntime(harness);
+      writeFiles(runtime.sourceRoot, { 'notes/untracked.txt': 'preserved inert note', 'hermes_cli/untracked.md': 'preserved inert document' });
+      if (form === 'native') writeFileSync(runtime.executable, nativeHermesFixtureLauncher(runtime.sourceRoot));
+      harness.writeHome({ '.hermes/config.yaml': 'model: preserved\n' });
+      const source = harness.source('plugin', {
+        'plugin.json': '{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"demo","version":"1.0.0"}\n',
+        'skills/demo/SKILL.md': '---\nname: demo\ndescription: Demo\n---\nDemo.\n',
+      });
+      const before = snapshotTree(runtime.sourceRoot);
+      const result = harness.run(['add', source, '--target', 'hermes', '--json']);
+      expect(result.exitCode).toBe(0);
+      expect(parseLifecycleReport(JSON.parse(result.stdout)).outcomes[0]?.reason).toBe(null);
+      expect(snapshotTree(runtime.sourceRoot)).toEqual(before);
+      expect(result.ambient.after).toEqual(result.ambient.before);
+    });
+  });
+}
 
 for (const [name, files] of [
   ['conflicting config', { '.venv/pyvenv.cfg': 'include-system-site-packages = false\ninclude-system-site-packages = true\n' }],
@@ -18,6 +93,8 @@ for (const [name, files] of [
   ['virtualenv extension shadow', { '.venv/lib/python3.13/site-packages/_virtualenv.so': 'foreign extension' }],
   ['finder sourceless shadow', { '.venv/lib/python3.13/site-packages/__editable___hermes_agent_0_21_4_finder.pyc': 'foreign bytecode' }],
   ['debug extension shadow', { '.venv/lib/python3.13/site-packages/hermes_cli_d.pyd': 'foreign extension' }],
+  ['bootstrap site extension shadow', { '.venv/lib/python3.13/site-packages/hermes_bootstrap.so': 'foreign extension' }],
+  ['constants bin extension shadow', { '.venv/bin/hermes_constants.so': 'foreign extension' }],
 ] as const) {
   test(`editable Hermes refuses ${name} with no writes`, async () => {
     await withLifecycleCliHarness(harness => {
