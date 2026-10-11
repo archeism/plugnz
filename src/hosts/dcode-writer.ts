@@ -4,14 +4,335 @@ import { tmpdir } from 'node:os';
 import type { AddOptions, HostWriter, InstalledPlugin, PinOptions, PinOutcome } from '../host';
 import type { PluginSource, ResolvedSource } from '../source';
 import { pinPluginMcpFiles } from '../mcp-write';
-import { CryptoHasher } from '../runtime';
-import { dcode, dcodeCacheRoot, dcodeEnablementFile, dcodeMcpCandidates, dcodeRegistryFile, dcodeRoot, dcodeStateDir, probeDcodeVersion } from './dcode';
+import { CryptoHasher, spawnSync } from '../runtime';
+import { dcode, dcodeBinary, dcodeCacheRoot, dcodeEnablementFile, dcodeMcpCandidates, dcodeRegistryFile, dcodeRoot, dcodeStateDir, probeDcodeVersion } from './dcode';
+import { spawn as spawnChild } from 'node:child_process';
 import { requirePackageSemantics } from '../capability-evidence';
 import { inventoryPackageSemantics } from '../semantic-inventory';
+import { capabilityEvidenceProfiles, createCapabilityEvidenceProfile } from '../capability-evidence';
+import { fingerprintTree } from '../fingerprint';
+import { createLifecycleHostAdapter, createTargetInventoryObservation } from '../lifecycle-runtime';
+import type { LifecycleHostDefinition, LifecycleReadbackData, LifecycleTargetIdentity, NativeProjectionRequest, TargetInstallationData } from '../lifecycle-host';
+declare const TextDecoder: { new(): { decode(input: Uint8Array): string } };
 
 const MARKER = '.plgnz-install.json';
 const MANIFESTS = ['plugin.json', '.claude-plugin/plugin.json', '.codex-plugin/plugin.json'] as const;
 const READBACK_FAULT = '.plgnz-dcode-readback-fault';
+
+type DcodeBinding = { adapterId: string; target: LifecycleTargetIdentity; scopeId: string; packageName: string; nativeId: string; route?: 'managed' | 'native' };
+
+// Participate in dcode's native filelock, not a parallel lock understood only
+// by plugnz. A held subprocess releases on stdin EOF, including parent crash.
+const NATIVE_LOCK_SCRIPT = `import sys\nfrom importlib.metadata import version\nfrom filelock import FileLock\nif version('deepagents-code') != '0.1.83':\n raise RuntimeError('unverified dcode lock runtime')\nwith FileLock(sys.argv[1]).acquire(timeout=10):\n print('DCODE_LOCK_0.1.83', flush=True)\n sys.stdin.read()\n`;
+type LockChild = {
+  stdin: { end(): void }; stdout: { on(event: 'data', callback: (data: Uint8Array) => void): void };
+  stderr: { on(event: 'data', callback: (data: Uint8Array) => void): void };
+  on(event: 'error', callback: (error: Error) => void): void;
+  on(event: 'exit', callback: (code: number | null) => void): void;
+  kill(signal?: string): void;
+};
+const nativeLocks = new Map<string, { child: LockChild; exited: Promise<number | null>; isAlive(): boolean }>();
+
+function nativePython(): string {
+  const override = process.env['OPEN_PLUGIN_DCODE_PYTHON_BIN'];
+  if (override) { assertIdentity(basename(override), 'Python binary'); return override; }
+  const binary = dcodeBinary();
+  if (binary === undefined) throw new Error('dcode native lock runtime is unavailable');
+  const shebang = readFileSync(binary, 'utf8').split(/\r?\n/, 1)[0] ?? '';
+  const match = /^#!(\/[^\s]+python(?:\d+(?:\.\d+)?)?)$/u.exec(shebang);
+  if (match?.[1] === undefined || !existsSync(match[1])) throw new Error('dcode native Python interpreter is unverified; set OPEN_PLUGIN_DCODE_PYTHON_BIN to its verified interpreter');
+  return match[1];
+}
+
+function probeLifecycleVersion(): ReturnType<typeof probeDcodeVersion> {
+  const observation = probeDcodeVersion();
+  if (observation.kind !== 'detected' || observation.version !== '0.1.83') return observation;
+  const result = spawnSync([nativePython(), '-c', "from importlib.metadata import version; import filelock; assert version('deepagents-code') == '0.1.83'; print('DCODE_LOCK_0.1.83')"], { stdout: 'pipe', stderr: 'pipe', timeout: 10_000 });
+  if (result.exitCode !== 0 || new TextDecoder().decode(result.stdout).trim() !== 'DCODE_LOCK_0.1.83') throw new Error(`dcode native lock runtime is unverified: ${new TextDecoder().decode(result.stderr).trim()}`);
+  return observation;
+}
+
+async function acquireNativeLock(attemptId: string, operationId: string): Promise<void> {
+  const key = `${attemptId}:${operationId}`;
+  const existing = nativeLocks.get(key);
+  if (existing !== undefined) { if (!existing.isAlive()) throw new Error('dcode native lock was lost before verification'); return; }
+  const file = join(dcodeRoot(), 'plugins', '.mutation.lock'); assertManagedPath(file);
+  mkdirSync(dirname(file), { recursive: true });
+  const child = spawnChild(nativePython(), ['-c', NATIVE_LOCK_SCRIPT, file], { env: { ...process.env, HOME: process.env['OPEN_PLUGIN_HOME'] || process.env['HOME'], DEEPAGENTS_HOME: dcodeRoot() }, stdio: ['pipe', 'pipe', 'pipe'] }) as unknown as LockChild;
+  let alive = true;
+  const exited = new Promise<number | null>(resolveExit => child.on('exit', code => { alive = false; resolveExit(code); }));
+  await new Promise<void>((resolveLock, rejectLock) => {
+    let output = '', diagnostic = '', settled = false;
+    const finish = (error?: Error): void => {
+      if (settled) return; settled = true; clearTimeout(timer);
+      if (error) { child.kill('SIGKILL'); rejectLock(error); } else resolveLock();
+    };
+    const timer = setTimeout(() => finish(new Error('dcode native lock acquisition timed out')), 12_000);
+    child.stdout.on('data', data => { output += new TextDecoder().decode(data); if (output.includes('DCODE_LOCK_0.1.83\n')) finish(); });
+    child.stderr.on('data', data => { diagnostic += new TextDecoder().decode(data); });
+    child.on('error', error => finish(new Error(`dcode native lock failed: ${error.message}`)));
+    child.on('exit', code => finish(new Error(`dcode native lock failed (${code}): ${diagnostic.trim()}`)));
+  });
+  nativeLocks.set(key, { child, exited, isAlive: () => alive });
+}
+
+async function releaseNativeLock(attemptId: string, operationId: string): Promise<void> {
+  const key = `${attemptId}:${operationId}`, held = nativeLocks.get(key);
+  if (held === undefined) return;
+  nativeLocks.delete(key); held.child.stdin.end();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const code = await Promise.race([held.exited, new Promise<never>((_, reject) => { timer = setTimeout(() => { held.child.kill('SIGKILL'); reject(new Error('dcode native lock release timed out')); }, 2000); })]);
+    if (code !== 0) throw new Error(`dcode native lock process failed during mutation (${code})`);
+  } finally { if (timer !== undefined) clearTimeout(timer); }
+}
+
+function lifecycleDirectory(attemptId: string, operationId: string): string {
+  const hash = new CryptoHasher('sha256'); hash.update(`${attemptId}\0${operationId}`);
+  const dir = join(dcodeCacheRoot(), 'plgnz-operations', hash.digest('hex'));
+  assertCachePath(dir);
+  return dir;
+}
+
+function lifecycleSlot(nativeId: string, fingerprint: string): string { return managedSlot(nativeId, fingerprint); }
+
+function observeDcodeTarget(target: LifecycleTargetIdentity): TargetInstallationData[] {
+  if (target.kind !== 'dcode' || target.instance !== 'default') throw new Error('unsupported dcode target identity');
+  const registry = readRegistry(dcodeRegistryFile());
+  const enabled = boolObject(readEnablement(dcodeEnablementFile()).enabledPlugins, 'enabledPlugins');
+  return Object.entries(object(registry.plugins, 'registry plugins')).map(([nativeId, raw]) => {
+    const rows = rowsFor(raw);
+    if (rows.length !== 1) throw new Error(`dcode install record ${nativeId} has duplicate rows`);
+    const path = rowInstall(rows[0]!, nativeId); assertCachePath(path);
+    const present = existsSync(path);
+    const marker = present ? ownership(path) : null;
+    const body = present ? readDoc(join(path, MARKER), {}, 'ownership marker') : {};
+    const owned = marker?.pluginId === nativeId;
+    const fingerprint = present ? fingerprintTree(path) : null;
+    return {
+      nativeId, packageName: nativeId.split('@')[0]!,
+      ownership: owned ? { kind: 'owned', proof: body.proof === 'adopted' ? 'adopted' : 'created', scopeId: typeof body.scopeId === 'string' ? body.scopeId : 'dcode:default', proofId: `dcode-marker:${nativeId}` } : { kind: 'unmanaged' },
+      presence: present ? 'present' : 'absent', enablement: enabled[nativeId] === true ? 'enabled' : 'disabled',
+      activation: enabled[nativeId] === true && present ? 'active' : 'inactive',
+      installedFingerprint: fingerprint, installedVersion: present ? declaredManifest(path, nativeId.split('@')[0]!).version : null,
+      source: owned ? { type: body.sourceType === 'git' ? 'git' : 'local', immutableRevision: marker.kind === 'current' ? marker.sourceRevision : marker.fingerprint, locator: body.sourceType === 'git' ? marker.source : null } : null,
+      contentRoots: fingerprint === null ? [] : [{ label: 'managed', path, fingerprint }],
+    };
+  });
+}
+
+function dcodeLifecycleReadback(binding: DcodeBinding): LifecycleReadbackData {
+  if (existsSync(join(dcodeStateDir(), READBACK_FAULT))) throw new Error(`dcode readback failed for ${binding.nativeId}`);
+  const installations = observeDcodeTarget(binding.target);
+  const row = installations.find(item => item.nativeId === binding.nativeId);
+  const present = row?.presence === 'present';
+  const enabled = row?.enablement === 'enabled' && present;
+  const dataRoot = join(dcodeRoot(), 'plugins', 'data');
+  assertManagedPath(dataRoot);
+  return {
+    adapterId: binding.adapterId, target: binding.target, scopeId: binding.scopeId, packageName: binding.packageName, nativeId: binding.nativeId,
+    route: binding.route ?? (present ? 'managed' : 'none'), presence: present ? 'present' : 'absent',
+    enablement: enabled ? 'enabled' : 'disabled', activation: enabled ? 'active' : 'inactive',
+    transition: { requirement: present ? 'restart' : 'none', status: 'effective' },
+    installedFingerprint: present ? row!.installedFingerprint : null, contentRoots: present ? row!.contentRoots : [],
+    retention: { pluginData: existsSync(dataRoot) ? { state: 'present', fingerprint: fingerprintTree(dataRoot) } : { state: 'absent', fingerprint: null }, inactiveMetadata: { state: 'absent', fingerprint: null } },
+  };
+}
+
+function captureDcodeRollback(binding: DcodeBinding, attemptId: string, operationId: string): string {
+  const dir = join(lifecycleDirectory(attemptId, operationId), 'rollback');
+  mkdirSync(dir, { recursive: true });
+  const registry = readRegistry(dcodeRegistryFile());
+  const enabled = boolObject(readEnablement(dcodeEnablementFile()).enabledPlugins, 'enabledPlugins');
+  const row = object(registry.plugins, 'registry plugins')[binding.nativeId];
+  const state = { row: row ?? null, enabled: enabled[binding.nativeId] ?? null, registryExisted: existsSync(dcodeRegistryFile()), enablementExisted: existsSync(dcodeEnablementFile()) };
+  writeFileSync(join(dir, 'state.json'), JSON.stringify(state));
+  for (const [index, item] of rowsFor(row).entries()) {
+    const path = rowInstall(item, binding.nativeId); assertCachePath(path); assertNoSymlinks(path);
+    if (existsSync(path)) cpSync(path, join(dir, `content-${index}`), { recursive: true });
+  }
+  return dir;
+}
+
+async function lockPreparation(binding: DcodeBinding, attemptId: string, operationId: string, expectedObservationId: string): Promise<void> {
+  await acquireNativeLock(attemptId, operationId);
+  const observed = createTargetInventoryObservation('dcode', { target: binding.target, installations: observeDcodeTarget(binding.target) });
+  if (observed.observationId !== expectedObservationId) throw new Error('dcode native inventory changed before locked preparation; refusing stale rollback authority');
+}
+
+function preflightAdoption(request: NativeProjectionRequest): void {
+  if (request.operation !== 'install' && request.operation !== 'update') return;
+  const snapshot = request.snapshot;
+  const installed = request.targetObservation.installations.find(item => item.nativeId === snapshot.nativeId);
+  if (installed?.ownership.kind !== 'unmanaged' || installed.presence !== 'present') return;
+  const path = installed.contentRoots[0]?.path;
+  if (path === undefined) throw new Error('dcode unmanaged adoption has no native root');
+  const manifest = declaredManifest(snapshot.packageRoot, snapshot.packageName);
+  // Adoption authority is checked read-only during the global plan, not first
+  // discovered after other hosts or packages have already activated.
+  assessPrior(object(readRegistry(dcodeRegistryFile()).plugins, 'registry plugins')[snapshot.nativeId], snapshot.nativeId, snapshot.nativeGit?.locator ?? `local:${snapshot.scopeId}`, true, snapshot.packageName, manifest.version, snapshot.packageRoot);
+  if (fingerprintTree(path) !== installed.installedFingerprint) throw new Error('dcode unmanaged adoption changed during preflight');
+}
+
+function setDcodeRow(nativeId: string, row: unknown, enabled: boolean | null): void {
+  assertManagedPath(dcodeRegistryFile()); assertManagedPath(dcodeEnablementFile());
+  const registry = readRegistry(dcodeRegistryFile()), enablement = readEnablement(dcodeEnablementFile());
+  const plugins = { ...object(registry.plugins, 'registry plugins') }, flags = { ...boolObject(enablement.enabledPlugins, 'enabledPlugins') };
+  if (row === null) delete plugins[nativeId]; else plugins[nativeId] = row;
+  if (enabled === null) delete flags[nativeId]; else flags[nativeId] = enabled;
+  writeDoc(dcodeRegistryFile(), { ...registry, plugins }); writeDoc(dcodeEnablementFile(), { ...enablement, enabledPlugins: flags });
+}
+
+const dcodeDefinition: LifecycleHostDefinition = {
+  id: 'dcode', evidenceProfiles: capabilityEvidenceProfiles.filter(profile => profile.host === 'dcode').flatMap(profile => [profile, createCapabilityEvidenceProfile({ ...profile, operations: ['disable'], semantics: { ...profile.semantics, 'reversible-disable': 'supported' }, evidence: [...profile.evidence, 'docs/evidence/dcode-managed-lifecycle-20261011.md'] })]),
+  probeVersion: async () => probeLifecycleVersion(),
+  observeTarget: async target => ({ target, installations: observeDcodeTarget(target) }),
+  observeNativeMutationScope: async () => ({ kind: 'unavailable' }),
+  observeNativeProjection: async request => { preflightAdoption(request); return { kind: 'requires-managed', reasonId: 'dcode-frozen-projection-and-updater-isolation' }; },
+  revalidateTargetPrecondition: async handle => {
+    await acquireNativeLock(handle.attemptId, handle.operationId);
+    return { version: probeDcodeVersion(), targetObservationId: createTargetInventoryObservation('dcode', { target: handle.target, installations: observeDcodeTarget(handle.target) }).observationId };
+  },
+  stageActivation: async request => {
+    const dir = lifecycleDirectory(request.snapshot.attemptId, request.snapshot.operationId);
+    const stagingRoot = join(dir, 'stage');
+    if (existsSync(stagingRoot)) throw new Error('dcode preparation stage already exists');
+    mkdirSync(stagingRoot, { recursive: true });
+    const manifest = declaredManifest(request.snapshot.packageRoot, request.snapshot.packageName);
+    stagePlugin(request.snapshot.packageRoot, stagingRoot, request.snapshot.packageName, manifest.version);
+    return { stagingRoot, stagingId: `${request.snapshot.attemptId}:${request.snapshot.operationId}` };
+  },
+  applyLifecycleDirectives: async projection => {
+    forceAutoUpdateOff(projection.stagingRoot);
+    const prior = observeDcodeTarget(projection.target).find(item => item.nativeId === projection.nativeId);
+    writeFileSync(join(projection.stagingRoot, MARKER), JSON.stringify({ source: projection.sourceLocator ?? `local:${projection.scopeId}`, pluginId: projection.nativeId, fingerprint: projection.sourceRevision, sourceRevision: projection.sourceRevision, projectedFingerprint: projectionDigest(projection.stagingRoot), scopeId: projection.scopeId, sourceType: projection.sourceType, proof: prior?.ownership.kind === 'unmanaged' ? 'adopted' : 'created' }));
+    return ['dcode.managed-unversioned-registry'];
+  },
+  applyPins: async projection => {
+    const found = new Set<string>();
+    for (const candidate of dcodeMcpCandidates()) {
+      const file = join(projection.stagingRoot, candidate.kind === 'spec' ? candidate.file : candidate.manifest);
+      if (!existsSync(file)) continue;
+      const body = readDoc(file, {}, 'MCP document');
+      if (typeof body.mcpServers !== 'object' || body.mcpServers === null || Array.isArray(body.mcpServers)) continue;
+      let changed = false;
+      for (const pin of projection.pins) {
+        const server = (body.mcpServers as Doc)[pin.server];
+        if (typeof server !== 'object' || server === null || Array.isArray(server)) continue;
+        (server as Doc).command = pin.executable; found.add(pin.server); changed = true;
+      }
+      if (changed) writeFileSync(file, JSON.stringify(body, null, 2));
+    }
+    if (projection.pins.some(pin => !found.has(pin.server))) throw new Error('dcode resolved pin is absent from staged MCP configuration');
+    const marker = readDoc(join(projection.stagingRoot, MARKER), {}, 'ownership marker');
+    marker.projectedFingerprint = projectionDigest(projection.stagingRoot);
+    writeFileSync(join(projection.stagingRoot, MARKER), JSON.stringify(marker));
+    return [...found];
+  },
+  captureActivationPreparation: async (projection, fingerprint) => {
+    await lockPreparation(projection, projection.attemptId, projection.operationId, projection.targetObservationId);
+    const prior = dcodeLifecycleReadback(projection);
+    const target = lifecycleSlot(projection.nativeId, fingerprint); assertCachePath(target);
+    const installed = observeDcodeTarget(projection.target).find(item => item.nativeId === projection.nativeId);
+    if (installed?.ownership.kind === 'owned' && installed.ownership.scopeId !== projection.scopeId) throw new Error('dcode scope ownership conflict');
+    // Explicit adoption is authorized by the planner. Still require a complete
+    // native identity and source-byte proof before copying or retiring that root.
+    if (installed?.ownership.kind === 'unmanaged') {
+      const path = installed.contentRoots[0]?.path;
+      if (path === undefined || !sameTree(projection.snapshot.packageRoot, path)) throw new Error('dcode legacy content differs; refusing adoption');
+      const manifest = declaredManifest(path, projection.packageName);
+      if (manifest.version !== projection.packageVersion) throw new Error('dcode legacy version differs; refusing adoption');
+    }
+    if (existsSync(target) && ownership(target)?.pluginId !== projection.nativeId) throw new Error('dcode lifecycle target is not owned');
+    const rollbackReference = captureDcodeRollback(projection, projection.attemptId, projection.operationId);
+    writeFileSync(join(rollbackReference, 'next-path.json'), JSON.stringify({ target }));
+    return { prior, expected: { ...prior, route: 'managed', presence: 'present', enablement: 'enabled', activation: 'active', transition: { requirement: 'restart', status: 'effective' }, installedFingerprint: fingerprint, contentRoots: [{ label: 'managed', path: target, fingerprint }] }, rollbackReference, rollbackCoverageOperationIds: projection.affectedOperationIds };
+  },
+  captureDisablePreparation: async request => {
+    const binding = { adapterId: 'dcode', ...request.activation };
+    await lockPreparation(binding, request.attemptId, request.operationId, request.selection.targetObservationId);
+    return { prior: dcodeLifecycleReadback(binding), rollbackReference: captureDcodeRollback(binding, request.attemptId, request.operationId), rollbackCoverageOperationIds: request.selection.affectedOperationIds, transition: { requirement: 'restart', status: 'effective' } };
+  },
+  captureRetirementPreparation: async request => {
+    const binding = { adapterId: 'dcode', ...request.activation };
+    await lockPreparation(binding, request.attemptId, request.operationId, request.selection.targetObservationId);
+    return { prior: dcodeLifecycleReadback(binding), rollbackReference: captureDcodeRollback(binding, request.attemptId, request.operationId), rollbackCoverageOperationIds: request.selection.affectedOperationIds, transition: { requirement: 'none', status: 'effective' } };
+  },
+  apply: async prepared => {
+    await acquireNativeLock(prepared.handle.attemptId, prepared.handle.operationId);
+    const target = lifecycleSlot(prepared.handle.nativeId, prepared.handle.projectedFingerprint!); assertCachePath(target);
+    mkdirSync(dirname(target), { recursive: true });
+    if (existsSync(target)) {
+      const marker = ownership(target);
+      if (marker?.pluginId !== prepared.handle.nativeId) throw new Error('dcode lifecycle activation would overwrite foreign content');
+      if (fingerprintTree(target) !== prepared.handle.projectedFingerprint) throw new Error('dcode immutable projection slot has diverged');
+    } else {
+      // Stage and target live under the same native cache filesystem. Publish
+      // only a complete sealed directory; never mutate a registered live root.
+      renameSync(prepared.stagingRoot, target);
+    }
+    setDcodeRow(prepared.handle.nativeId, [{ installPath: target }], true);
+    return { receiptId: `dcode-apply:${prepared.handle.operationId}`, changed: true };
+  },
+  disable: async prepared => {
+    await acquireNativeLock(prepared.handle.attemptId, prepared.handle.operationId);
+    const row = object(readRegistry(dcodeRegistryFile()).plugins, 'registry plugins')[prepared.handle.nativeId];
+    setDcodeRow(prepared.handle.nativeId, row ?? null, false);
+    return { receiptId: `dcode-disable:${prepared.handle.operationId}`, changed: true };
+  },
+  retire: async prepared => {
+    await acquireNativeLock(prepared.handle.attemptId, prepared.handle.operationId);
+    const rows = rowsFor(object(readRegistry(dcodeRegistryFile()).plugins, 'registry plugins')[prepared.handle.nativeId]);
+    for (const row of rows) {
+      const path = rowInstall(row, prepared.handle.nativeId); assertCachePath(path);
+      if (ownership(path)?.pluginId !== prepared.handle.nativeId) throw new Error('dcode retirement has no ownership proof');
+    }
+    setDcodeRow(prepared.handle.nativeId, null, null);
+    for (const row of rows) rmSync(rowInstall(row, prepared.handle.nativeId), { recursive: true, force: true });
+    return { receiptId: `dcode-retire:${prepared.handle.operationId}`, changed: true };
+  },
+  readback: async handle => {
+    const held = nativeLocks.get(`${handle.attemptId}:${handle.operationId}`);
+    if (held !== undefined && !held.isAlive()) throw new Error('dcode native lock was lost before readback');
+    return dcodeLifecycleReadback(handle);
+  },
+  rollback: async handle => {
+    await acquireNativeLock(handle.attemptId, handle.operationId);
+    const target = handle.projectedFingerprint === null ? undefined : lifecycleSlot(handle.nativeId, handle.projectedFingerprint);
+    if (target !== undefined) assertCachePath(target);
+    if (target !== undefined && existsSync(target) && !handle.prior.contentRoots.some(root => resolve(root.path) === resolve(target))) {
+      if (ownership(target)?.pluginId !== handle.nativeId) throw new Error('dcode rollback target is not owned');
+      rmSync(target, { recursive: true });
+    }
+    const state = readDoc(join(handle.rollbackReference, 'state.json'), {}, 'rollback state');
+    for (const [index, row] of rowsFor(state.row).entries()) {
+      const path = rowInstall(row, handle.nativeId); assertCachePath(path);
+      const backup = join(handle.rollbackReference, `content-${index}`);
+      if (existsSync(backup)) { mkdirSync(dirname(path), { recursive: true }); cpSync(backup, path, { recursive: true }); }
+    }
+    setDcodeRow(handle.nativeId, state.row ?? null, typeof state.enabled === 'boolean' ? state.enabled : null);
+    if (state.registryExisted === false && Object.keys(object(readRegistry(dcodeRegistryFile()).plugins, 'registry plugins')).length === 0) rmSync(dcodeRegistryFile());
+    if (state.enablementExisted === false && Object.keys(boolObject(readEnablement(dcodeEnablementFile()).enabledPlugins, 'enabledPlugins')).length === 0) rmSync(dcodeEnablementFile());
+    return { receiptId: `dcode-rollback:${handle.operationId}`, changed: true };
+  },
+  cleanup: async (reference, disposition) => {
+    try {
+      const dir = lifecycleDirectory(reference.attemptId, reference.operationId);
+      const next = readDoc(join(dir, 'rollback', 'next-path.json'), {}, 'cleanup target');
+      if (disposition === 'verified-commit' && typeof next.target === 'string') {
+        const prior = readDoc(join(dir, 'rollback', 'state.json'), {}, 'rollback state');
+        for (const row of rowsFor(prior.row)) {
+          const path = rowInstall(row, reference.operationId); assertCachePath(path);
+          if (resolve(path) !== resolve(next.target)) rmSync(path, { recursive: true, force: true });
+        }
+      }
+      rmSync(dir, { recursive: true, force: true });
+    } finally { await releaseNativeLock(reference.attemptId, reference.operationId); }
+    return { cleanupId: `dcode-cleanup:${reference.operationId}`, completed: true };
+  },
+};
+
+export const dcodeLifecycle = createLifecycleHostAdapter(dcodeDefinition);
 
 type Doc = Record<string, unknown>;
 type Ownership =
@@ -88,7 +409,10 @@ export const dcodeWriter: HostWriter = {
         && slot.projectedFingerprint === projected
         && slot.sourceRevision === resolved.sha
         && sameTree(stage, target);
-      const nextRegistry: Doc = { ...registry, plugins: { ...plugins, [id]: [{ installPath: target, version: manifest.version }] } };
+      // Released dcode 0.1.83 skips unversioned registry entries in its updater.
+      // Its updater reads the *source* manifest, so changing only this copy's
+      // autoUpdate extension cannot isolate a plugnz-managed activation.
+      const nextRegistry: Doc = { ...registry, plugins: { ...plugins, [id]: [{ installPath: target }] } };
       const nextEnablement: Doc = { ...enablement, enabledPlugins: { ...enabled, [id]: true } };
       if (opts?.dryRun) {
         console.log(`[dcode] would activate directory: ${target}`);
@@ -267,7 +591,8 @@ function assertReadback(id: string, registryFile: string, enablementFile: string
   if (rows.length !== 1) throw new Error(`dcode readback failed for ${id}`);
   const install = rowInstall(rows[0]!, id);
   if (resolve(install) !== resolve(target)) throw new Error(`dcode readback path mismatch for ${id}`);
-  if (rows[0]!.version !== version) throw new Error(`dcode readback version mismatch for ${id}`);
+  if (rows[0]!.version !== undefined && rows[0]!.version !== null) throw new Error(`dcode managed install is eligible for native auto-update: ${id}`);
+  if (declaredManifest(target, id.split('@')[0]!).version !== version) throw new Error(`dcode readback version mismatch for ${id}`);
   if (boolObject(object(enablement.enabledPlugins, 'enabledPlugins'), 'enabledPlugins')[id] !== true) throw new Error(`dcode readback enablement mismatch for ${id}`);
   const marker = ownership(target);
   if (marker?.kind !== 'current' || marker.projectedFingerprint !== projected || marker.sourceRevision !== sourceRevision) {
