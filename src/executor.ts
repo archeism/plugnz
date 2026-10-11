@@ -44,7 +44,13 @@ export async function executeLifecycle(input: ExecuteLifecycleInput): Promise<Ex
     case 'zero-write-failure':
       return finish(input.plan.report);
     case 'frozen':
-      if (input.plan.requestedDryRun) return finish(input.plan.report);
+      if (input.plan.requestedDryRun) {
+        for (const row of input.plan.operations) {
+          const host = input.hosts.find((candidate) => candidate.kinds.includes(row.operation.scope.target.kind));
+          host?.announceDryRun?.(row.operation);
+        }
+        return finish(input.plan.report);
+      }
       return executeFrozen(input.plan, input.hosts, input.now);
     default: {
       const unreachable: never = input.plan;
@@ -1068,7 +1074,14 @@ function refused(reason: LifecycleReason): { readonly kind: 'refused'; readonly 
 
 function thrownReason(error: unknown): LifecycleReason {
   if (error instanceof LifecycleHostPhaseError) return error.reason;
+  if (filesystemDenial(error)) return createLifecycleReason('runtime', 'runtime.operation-failed', unknownErrorDiagnostic(error));
   return createLifecycleReason('internal', 'internal.defect', unknownErrorDiagnostic(error));
+}
+
+function filesystemDenial(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null || !('code' in error)) return false;
+  const code = error.code;
+  return code === 'EACCES' || code === 'EPERM' || code === 'EROFS' || code === 'ENOSPC';
 }
 
 function refusalReport(plan: FrozenPlan, reason: LifecycleReason): ExecuteLifecycleResult {
@@ -1125,7 +1138,7 @@ function summaryFor(outcomes: readonly LifecycleOperationOutcome[]): LifecycleRe
     mutationStarted,
     changed,
     failureCategory: failed.reason?.category ?? 'internal',
-    reason: null,
+    reason: failed.reason?.category === 'runtime' ? failed.reason : null,
     recoveryId: pending?.operationId ?? null,
     readbackId: readback?.operationId ?? null,
   };

@@ -96,6 +96,7 @@ export interface PlannerHost {
   readonly kinds: readonly string[];
   readonly adapter: LifecycleHostAdapter;
   readonly plannedNativeId: (plugin: PluginSource) => string;
+  readonly announceDryRun?: (operation: LifecyclePlanOperation) => void;
 }
 
 export interface PlanLifecycleInput {

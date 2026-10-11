@@ -17,6 +17,7 @@ import type {
   TargetOwnershipObservation,
   TargetVersionObservation,
 } from '../lifecycle-host';
+import type { LifecyclePlanOperation } from '../lifecycle-report';
 import { createLifecycleHostAdapter, createTargetInventoryObservation } from '../lifecycle-runtime';
 import { pinPluginMcpFiles } from '../mcp-write';
 import { cursorRoot, homeRoot } from '../paths';
@@ -894,6 +895,12 @@ function refuseForeignScope(target: string, scopeId: string, nativeId: string): 
   if (marker.scopeId !== undefined && marker.scopeId !== scopeId) {
     throw new Error(`Cursor local plugin ${nativeId} is not owned by deployment scope ${scopeId}`);
   }
+}
+
+export function announceCursorDryRun(operation: LifecyclePlanOperation): void {
+  if (operation.action !== 'install' || operation.nativeId === null) return;
+  const target = managedPluginDir(operation.scope.target.instance, operation.nativeId);
+  console.error(`[cursor] would activate directory: ${target}`);
 }
 
 function managedPluginDir(instance: string, nativeId: string): string {

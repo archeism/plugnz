@@ -4,7 +4,7 @@ import type { PlannerHost } from './planner';
 import type { PluginSource } from './source';
 import { createClaudeCodeLifecycleHost, claudeCodeWriter } from './hosts/claude-code-writer';
 import { codexLifecycle, codexWriter } from './hosts/codex-writer';
-import { cursorManagedLifecycle, cursorWriter } from './hosts/cursor-writer';
+import { announceCursorDryRun, cursorManagedLifecycle, cursorWriter } from './hosts/cursor-writer';
 import { createGrokLifecycleAdapter, grokWriter } from './hosts/grok-writer';
 import { hermesLifecycle, hermesWriter } from './hosts/hermes-writer';
 import { kimiLifecycle, kimiWriter } from './hosts/kimi-writer';
@@ -15,8 +15,14 @@ function plannerHost(
   kind: string,
   adapter: LifecycleHostAdapter,
   plannedNativeId: (plugin: PluginSource) => string,
+  announceDryRun?: PlannerHost['announceDryRun'],
 ): PlannerHost {
-  return { kinds: [kind], adapter, plannedNativeId };
+  return {
+    kinds: [kind],
+    adapter,
+    plannedNativeId,
+    ...(announceDryRun === undefined ? {} : { announceDryRun }),
+  };
 }
 
 export const lifecyclePlannerHostKinds = [
@@ -36,7 +42,7 @@ export function createLifecyclePlannerHosts(): readonly PlannerHost[] {
     plannerHost('claude-code', createClaudeCodeLifecycleHost(), claudeCodeWriter.plannedNativeId),
     plannerHost('codex', codexLifecycle, codexWriter.plannedNativeId),
     plannerHost('kimi', createLifecycleHostAdapter(kimiLifecycle), kimiWriter.plannedNativeId),
-    plannerHost('cursor', cursorManagedLifecycle, cursorWriter.plannedNativeId),
+    plannerHost('cursor', cursorManagedLifecycle, cursorWriter.plannedNativeId, announceCursorDryRun),
     plannerHost('omp', ompLifecycle, ompWriter.plannedNativeId),
     plannerHost('hermes', hermesLifecycle, hermesWriter.plannedNativeId),
     plannerHost('grok', createGrokLifecycleAdapter(), grokWriter.plannedNativeId),

@@ -767,10 +767,22 @@ async function runAdd(argv: string[], mode: MutationOutputMode): Promise<number>
   if (split.kind === 'usage') return emitAddReport(usageReport('add', flags.dryRun, split.diagnostic, split.code), mode);
   if (split.kind === 'refused') return emitAddReport(split.report, mode);
   if (split.kind === 'empty') {
+    let resolved;
+    try {
+      resolved = resolveSource(source);
+    } catch (error) {
+      return emitAddReport(reportFor('add', flags.dryRun, [], [], {
+        terminalPhase: 'resolve',
+        mutationStarted: false,
+        reason: reason('runtime', 'runtime.operation-failed', unknownErrorDiagnostic(error)),
+      }), mode);
+    }
+    const sourceSnapshots = resolved.snapshot === undefined ? [] : [{ id: 'source-0', reference: resolved.snapshot }];
     return emitAddReport(reportFor('add', flags.dryRun, [], [], {
       terminalPhase: 'preflight',
       mutationStarted: false,
       reason: reason('runtime', 'runtime.operation-failed', 'No detected writer targets'),
+      sourceSnapshots,
     }), mode);
   }
   let binding: SourceBinding;
