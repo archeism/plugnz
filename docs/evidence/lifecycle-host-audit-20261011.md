@@ -38,6 +38,22 @@ discrepancy, not a fulfilled checkbox. A version-preserving immutable native
 source/opt-out mechanism needs proof, or the spec adjustment needs a human
 decision; do not silently weaken either the version or auto-update requirement.
 
+Rechecked on 2026-10-11: PyPI still advertises release 0.1.83 (uploaded October
+7). Its `InstalledPluginEntry` exposes only `install_path` and `version`;
+the installed-row parser drops extra `autoUpdate:false` and `pinned:true`
+fields. An isolated pure-parser probe confirmed this using the released native
+Python environment, without invoking the CLI or touching host stores. The
+retained `dcode-0183-registry-parser-version-optout.log` has SHA-256
+`902431839f7810170e37f763f75db647f31c138f8901bc2e8a20d031295da658`.
+The updater skips unversioned rows, reads update opt-in from the refreshed
+Source manifest, and otherwise exposes only global configuration. Global
+disablement would affect unrelated plugins; upstream Source opt-out cannot be
+guaranteed by editing the installed copy; a separate marketplace namespace
+would change native identity. None is an authorized substitute for the exact
+per-package requirement. Charles has been asked whether to accept the current
+unversioned native representation explicitly or retain the requirement as an
+upstream-blocked acceptance item. No spec adjustment has been made.
+
 Relevant evidence: `docs/hosts/{claude-code,cursor,hermes,grok,kimi,zcode-cli}.md`,
 `docs/evidence/codex-personal-20260922.json`,
 `docs/evidence/omp-native-extension-package-20260923.json`,

@@ -157,3 +157,22 @@ The native/finder/console template hashes above are unchanged. No skill files
 were revised; these are product regression checks, not skill-improvement scores.
 Independent frozen-candidate review and the separate full/all-host Native gate
 remain required.
+
+## Combined main acceptance gate
+
+Frozen combination `b6a80e41c9d91a9da8ebe7ef8b8d6c8cc386daa4` preserves
+the host corrections through `3e7eefc` and released main `d6428f0`. Typecheck
+passed. Its unmodified full suite finished with 690 passes, six explicit skips,
+one failure and 4549 assertions in 258.65 seconds. The failing Cursor scenario
+hit its default five-second test deadline; Bun killed its active CLI, causing
+an empty-JSON parse failure. It passed isolated without a timeout override:
+one test, ten assertions, 3.46 seconds. Only this multi-CLI test's deadline is
+now explicitly 20 seconds; assertions and production timeouts are unchanged.
+A fresh full gate is required before integration; focused success is not it.
+
+Retained logs under the existing `plugnz-evidence/20261011` directory:
+
+| Log | SHA-256 |
+| --- | --- |
+| `plugnz-b6a-host-combined-full-failure.log` | `416124623182000e584bc63c2e45cb792bd9f4155467fe31a0152172f2e58deb` |
+| `plugnz-b6a-cursor-retirement-isolated.log` | `45dea4b6e1bae38d315e4b63a2b1a99c721edc5ef0b7f1cf9f70d34e2cfc8648` |
