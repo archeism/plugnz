@@ -1,1 +1,1 @@
-Proof resource V1.
+Proof resource V2, unchanged declared version.
