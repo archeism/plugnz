@@ -102,3 +102,24 @@ Raw logs are retained under `~/.local/state/plugnz-evidence/20261011/`:
 | --- | --- |
 | `plugnz-main-issue29-verification.log` | `4062502a543602127d939b7d6506a40081293538217e1b6debb4e4a17808aca5` |
 | `personal-issue29-diagnostic-verification.log` | `37deb5da69490dada282a3f09723d90ad44c053996c89bedb30742f073433e42` |
+
+## Combined host gate: second deadline failure
+
+Frozen `50b1508` full Bun 1.4 gate: 690 passed, 6 skipped, 1 failed,
+4550 assertions, 278.83 seconds. The failed ZCode update/rollback fixture hit
+the implicit five-second deadline. An isolated run with that same deadline
+also timed out (5.013 seconds), so this is not described as suite-only noise.
+A bounded 20-second diagnostic passed in 4.35 seconds, including native update
+failure detection and verified rollback. Only this test's explicit deadline is
+raised to 20 seconds; production deadlines and assertions remain unchanged.
+The corrected test passed without a command-level override: 1 passed,
+1 assertion, 4.24 seconds; typecheck and diff checks passed.
+The correction is not a full-suite pass or native runtime proof. Claude's
+separately confirmed catalog-discovery bug still blocks host integration.
+
+Retained failure logs under `~/.local/state/plugnz-evidence/20261011/`:
+
+| Log | SHA-256 |
+| --- | --- |
+| `plugnz-50b-host-combined-full-failure.log` | `bc753cc415664bb10158ad7db9e981eb6d2bd67201505248eecc64ccec7feea6` |
+| `plugnz-50b-zcode-update-isolated.log` | `388f53d2e5b1ff542917f171e06df35892216bc9749aa98eac9602979210e991` |
