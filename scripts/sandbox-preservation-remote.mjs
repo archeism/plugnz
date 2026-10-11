@@ -189,7 +189,7 @@ if (action === 'run') {
   });
   const tar = spawnSync('tar', ['-czf', archive,
     '--transform', `s,^${basename(root)},trial,`, '-C', '/vercel/sandbox/proof', basename(root),
-    '-C', controlParent, 'control', ...supplierArgs], { encoding: 'utf8', timeout: 40_000 });
+    '-C', controlParent, 'control', ...supplierArgs], { encoding: 'utf8', timeout: config.operation === 'acquisition' ? 180_000 : 40_000 });
   assert.equal(tar.status, 0, tar.stderr);
   assert.ok(lstatSync(archive).size <= config.archiveBytes);
   console.log(JSON.stringify({ archive, bytes: lstatSync(archive).size,

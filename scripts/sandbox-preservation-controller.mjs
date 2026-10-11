@@ -13,13 +13,15 @@ assert.match(config.sandbox, /^plugnz-[a-z0-9-]+$/u);
 assert.ok(config.project && config.team && config.cli);
 assert.ok(Number.isSafeInteger(config.experimentUid) && config.experimentUid >= 2000 && config.experimentUid <= 60000);
 assert.ok(Number.isSafeInteger(config.archiveAt) && config.archiveAt > Date.now());
-// Worst case: stop15s + remote settle15s + archive50s + download60s +
-// network/clock margin30s. Local restore may finish after Sandbox expiration.
-const reserveMs = 170_000;
+const acquisition = config.operation === 'acquisition';
+const archiveMs = acquisition ? 240_000 : 50_000;
+const downloadMs = acquisition ? 300_000 : 60_000;
+// Larger acquisition archives get explicit conservative transport bounds;
+// tiny probes are not a throughput certification for 512 MiB.
+const reserveMs = 15_000 + 15_000 + archiveMs + downloadMs + (acquisition ? 60_000 : 30_000);
 assert.ok(config.expiresAt - config.archiveAt >= reserveMs, 'Reserve complete bounded preservation pipeline');
 assert.ok(config.diskGrowthBytes > 0 && config.diskGrowthBytes <= 3 * 1024 ** 3);
 assert.ok(Number.isSafeInteger(config.baselineUsedBytes) && config.baselineUsedBytes > 0, 'Freeze wholeFS baseline before supplier acquisition');
-const acquisition = config.operation === 'acquisition';
 assert.ok(config.operation === undefined || ['acquisition', 'native-proof', 'method-probe'].includes(config.operation));
 assert.ok(config.diskReserveBytes >= (acquisition ? 640 : 128) * 1024 ** 2);
 assert.ok(config.archiveBytes > 0 && config.archiveBytes <= (acquisition ? 512 : 100) * 1024 ** 2);
@@ -67,7 +69,7 @@ async function cli(args, timeout = 70_000) {
 const remoteHelper = '/vercel/sandbox/proof/preservation-remote.mjs';
 const remoteConfig = `${config.evidenceRoot}-config.json`;
 const exec = action => {
-  const duration = action === 'run' ? Math.max(1, config.archiveAt - Date.now() + 30_000) : action === 'stop' ? 15_000 : 50_000;
+  const duration = action === 'run' ? Math.max(1, config.archiveAt - Date.now() + 30_000) : action === 'stop' ? 15_000 : archiveMs;
   return cli(['exec', config.sandbox, '--sudo', '--timeout', `${Math.ceil(duration / 1000)}s`, '--', 'node', remoteHelper, action, remoteConfig], duration);
 };
 let reason = 'supplier-finished';
@@ -82,7 +84,7 @@ const preserve = () => preservePromise ??= (async () => {
   assert.equal(metadata.archive, `${config.evidenceRoot}.tar.gz`);
   assert.ok(metadata.bytes <= config.archiveBytes && /^[a-f0-9]{64}$/u.test(metadata.sha256));
   const archive = join(output, 'evidence.tar.gz');
-  const copied = await cli(['copy', `${config.sandbox}:${metadata.archive}`, archive], 60_000); assert.equal(copied.code, 0, copied.stderr);
+  const copied = await cli(['copy', `${config.sandbox}:${metadata.archive}`, archive], downloadMs); assert.equal(copied.code, 0, copied.stderr);
   assert.ok(Date.now() < config.expiresAt, 'Download missed actual Sandbox deadline');
   assert.equal(lstatSync(archive).size, metadata.bytes);
   assert.equal(createHash('sha256').update(readFileSync(archive)).digest('hex'), metadata.sha256);

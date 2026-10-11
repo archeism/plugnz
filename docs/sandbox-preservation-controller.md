@@ -21,7 +21,7 @@ Required JSON fields:
 | `cli` | Absolute pinned Sandbox CLI executable |
 | `sdkRoot` | Installed official `@vercel/sandbox` package root; current proof uses SDK 3.6.1 with CLI 4.7.1 |
 | `expiresAt` | Actual running session expiry, milliseconds since epoch; must exactly match SDK `Sandbox.get`, with `resume:false` |
-| `archiveAt` | Absolute preservation deadline, at least 170 seconds before expiry |
+| `archiveAt` | Absolute preservation deadline, at least 170 seconds before expiry; acquisition needs 630 seconds |
 | `baselineUsedBytes` | Fresh whole-filesystem `df -Pk /` used-byte measurement **before any supplier acquisition** |
 | `diskGrowthBytes` | Whole-filesystem additional allocation ceiling, at most 3 GiB |
 | `operation` | Optional `method-probe` / `native-proof`; explicit `acquisition` permits the separately approved acquisition budget |
@@ -36,8 +36,11 @@ Required JSON fields:
 
 The controller validates actual expiry before copying/launching. Setup copies are
 bounded to 20 seconds each; a late setup refuses launch. Pipeline bounds reserve
-15 seconds for stopping, 15 for remote settlement, 50 for remote archive, 60 for
-download, and 30 for clock/network margin. Download must finish before actual
+15 seconds for stopping and 15 for remote settlement. Native/method arms reserve
+50 seconds for archive, 60 for download and 30 margin (170 total). Acquisition
+reserves 240 seconds for inventory/archive, 300 for download and 60 margin (630
+total), including a 180-second remote compression bound. These are conservative
+configured bounds, not a claim tiny probes measured 512 MiB throughput. Download must finish before actual
 expiry; local restore can finish afterward. Remote artifact SHA256, size, every
 trial file hash/mode and every symlink target are verified after a real local
 restore. Source snapshots and SHA256 files for both controller helpers accompany
