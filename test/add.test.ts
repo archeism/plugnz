@@ -426,18 +426,25 @@ describe('add', () => {
 
   test('idempotency > running twice works and produces same result', async () => {
     await withHostEnvAsync('claude-code', async (home) => {
-      const sourceDir = mkdtempSync(join(tmpdir(), 'open-plugin-source-'));
-      initGitRepo(sourceDir, pluginsMap);
-      
-      const code1 = await main(['add', sourceDir, '--target', 'claude-code']);
-      expect(code1).toBe(0);
-      const state1 = readState();
-      
-      const code2 = await main(['add', sourceDir, '--target', 'claude-code']);
-      expect(code2).toBe(0);
-      const state2 = readState();
-      
-      expect(state1.length).toBe(state2.length);
+      const saved = process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'];
+      process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'] = versionShim(home, 'claude', '2.1.295 (Claude Code)');
+      try {
+        const sourceDir = mkdtempSync(join(tmpdir(), 'open-plugin-source-'));
+        initGitRepo(sourceDir, pluginsMap);
+
+        const code1 = await main(['add', sourceDir, '--target', 'claude-code']);
+        expect(code1).toBe(0);
+        const state1 = readState();
+
+        const code2 = await main(['add', sourceDir, '--target', 'claude-code']);
+        expect(code2).toBe(0);
+        const state2 = readState();
+
+        expect(state1.length).toBe(state2.length);
+      } finally {
+        if (saved === undefined) delete process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'];
+        else process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'] = saved;
+      }
     });
   });
 
