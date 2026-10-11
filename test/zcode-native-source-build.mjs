@@ -15,7 +15,9 @@ const env = { PATH: `${root}/node-v24.14.0-linux-x64/bin:${root}/tooling/node_mo
 mkdirSync(env.HOME, { recursive: true });
 const nodeVersion = spawnSync('node', ['--version'], { env, encoding: 'utf8' });
 assert.equal(nodeVersion.status, 0); assert.equal(nodeVersion.stdout.trim(), 'v24.14.0');
-const command = phase === 'install' ? ['install', '--frozen-lockfile', '--store-dir', `${root}/pnpm-store`] : ['run', 'build'];
+// The authoritative root workspace includes the CLI and shared dependencies.
+// Its nested historical lock is stale; never relax or rewrite frozen locks.
+const command = phase === 'install' ? ['--filter', '@zcode/cli...', '--filter', 'zcode-cli', 'install', '--frozen-lockfile', '--store-dir', `${root}/pnpm-store`] : ['run', 'build'];
 const evidence = { phase, command, sourceCommit: rev.stdout.trim(), node: nodeVersion.stdout.trim(), measurements: [] };
 let stopped = null, bytes = 0, stdout = '', stderr = '';
 function allocated() {
@@ -26,7 +28,7 @@ function allocated() {
 const initial = allocated(); evidence.measurements.push({ milliseconds: 0, allocatedKiB: initial });
 assert.ok(initial < 900 * 1024, 'Insufficient reserved space before launch');
 const started = performance.now();
-const child = spawn('pnpm', command, { cwd: `${source}/apps/zcode-cli`, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+const child = spawn('pnpm', command, { cwd: phase === 'install' ? source : `${source}/apps/zcode-cli`, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
 function stop(reason) { stopped ??= reason; try { process.kill(-child.pid, 'SIGKILL'); } catch {} }
 const consume = (which, chunk) => {
   const remaining = Math.max(0, 4 * 1024 * 1024 - bytes); bytes += chunk.length;
