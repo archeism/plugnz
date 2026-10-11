@@ -6,7 +6,7 @@
  * only when their native name is in `plugins.enabled` and absent from
  * `plugins.disabled`.
  */
-import { existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs';
+import { existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { HostReader, InstalledPlugin, McpServerEntry } from '../host';
@@ -37,6 +37,8 @@ export function observeHermesRevision(): TargetVersionObservation {
   if (!binary || !existsSync(binary)) return { kind: 'unknown' };
   const scratch = mkdtempSync(join(tmpdir(), 'plgnz-hermes-version-'));
   try {
+    // Both evidenced releases honor this opt-out before passive update probes.
+    writeFileSync(join(scratch, 'config.yaml'), 'updates:\n  check: false\n');
     const env = { ...process.env, HOME: scratch, HERMES_HOME: scratch,
       XDG_CONFIG_HOME: scratch, XDG_DATA_HOME: scratch, XDG_CACHE_HOME: scratch,
       XDG_STATE_HOME: scratch, XDG_RUNTIME_DIR: scratch,

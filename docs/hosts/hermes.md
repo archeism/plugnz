@@ -50,7 +50,8 @@ non-Git installs, or an unparseable source identity report
 unverified, not proven incompatible; no compatible interval is fabricated.
 Untracked files are not part of the tracked-revision cleanliness assertion.
 
-The version subprocess uses a fresh temporary HOME/HERMES_HOME/XDG profile;
+The version subprocess uses a fresh temporary HOME/HERMES_HOME/XDG profile
+with `updates.check: false` to suppress Hermes's passive update check;
 source identification disables optional Git locks and lazy object fetching.
 The banner's upstream hash is not the executing revision and is never used for
 admission. The install-directory output is defined in the official pinned
