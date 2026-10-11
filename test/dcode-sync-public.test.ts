@@ -161,13 +161,41 @@ test('dcode pin keeps accurate recovery pending when verified rollback cleanup f
     expect(readFileSync(registryFile, 'utf8')).toBe(priorRegistry);
     expect(readFileSync(join(priorSlot, '.mcp.json'), 'utf8')).toBe(bytes);
     const ledger = JSON.parse(readFileSync(join(home, 'state.json'), 'utf8'));
-    expect(ledger.activations[0].pending.phase).toBe('rollback');
-    expect(ledger.attempts.at(-1).phase).toBe('recovery-required');
-    expect(ledger.attempts.at(-1).journal[0].state).toBe('rollback');
+    expect(ledger.activations[0].pending.phase).toBe('cleanup');
+    expect(ledger.attempts.at(-1).phase).toBe('finalizing');
+    expect(ledger.attempts.at(-1).journal[0].state).toBe('cleanup-pending');
   } finally {
     if (existsSync(operationsRoot)) spawnSync('chmod', ['-R', 'u+w', operationsRoot]);
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('dcode pin ledger write failure still rolls back and retains snapshots until a durable receipt', () => {
+  const root = mkdtempSync(join(tmpdir(), 'plgnz-dcode-pin-ledger-'));
+  const home = join(root, 'home'), native = join(home, '.deepagents'), source = join(root, 'source');
+  try {
+    mkdirSync(native, { recursive: true });
+    writeFiles(source, { 'plugin.json': '{"name":"demo","version":"1.0.0"}', '.mcp.json': '{"mcpServers":{"demo":{"command":"node"}}}' });
+    const binary = join(root, 'dcode'), denied = join(root, 'dcode-ledger-denied');
+    writeFileSync(binary, '#!/bin/sh\nprintf "deepagents-code 0.1.83\\n"\n'); chmodSync(binary, 0o755);
+    writeFileSync(denied, '#!/bin/sh\nif find "$OPEN_PLUGIN_DCODE_ROOT/plugins/cache/plgnz-operations" -name stage -type d | read stage; then chmod a-w "$OPEN_PLUGIN_HOME"; fi\nprintf "deepagents-code 0.1.83\\n"\n'); chmodSync(denied, 0o755);
+    const env = { ...process.env, HOME: home, OPEN_PLUGIN_HOME: home, OPEN_PLUGIN_DCODE_ROOT: native, OPEN_PLUGIN_DCODE_BIN: binary, OPEN_PLUGIN_DCODE_PYTHON_BIN: fakeDcodeLockInterpreter(root) };
+    const run = (args: string[], selected = binary) => spawnSync(cliExecutable, [cliPath, ...args, '--json'], { env: { ...env, OPEN_PLUGIN_DCODE_BIN: selected }, cwd: root, encoding: 'utf8' });
+    expect(run(['sync', source, '--target', 'dcode']).status).toBe(0);
+    const registryFile = join(native, '.state/installed_plugins.json'), registry = readFileSync(registryFile, 'utf8');
+    const priorSlot = JSON.parse(registry).plugins['demo@local'][0].installPath;
+    const bytes = readFileSync(join(priorSlot, '.mcp.json'), 'utf8');
+    const result = run(['pin', '--target', 'dcode'], denied);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('rollback verified but its durable receipt is blocked');
+    expect(result.stdout).toContain('EACCES');
+    expect(readFileSync(registryFile, 'utf8')).toBe(registry);
+    expect(readFileSync(join(priorSlot, '.mcp.json'), 'utf8')).toBe(bytes);
+    const ledger = JSON.parse(readFileSync(join(home, 'state.json'), 'utf8'));
+    expect(ledger.activations[0].pending.phase).toBe('applying');
+    const operationDir = join(native, 'plugins/cache/plgnz-operations', readdirSync(join(native, 'plugins/cache/plgnz-operations'))[0]!);
+    expect(readFileSync(join(operationDir, 'rollback/content-0/.mcp.json'), 'utf8')).toBe(bytes);
+  } finally { if (existsSync(home)) chmodSync(home, 0o755); rmSync(root, { recursive: true, force: true }); }
 });
 
 test('dcode authoritative sync installs, updates and retires without losing writable data', () => {

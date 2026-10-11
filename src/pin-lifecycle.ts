@@ -79,9 +79,14 @@ export async function runOfflineLifecyclePin(host: HostWriter, plugin: Installed
   } catch (error) {
     if (!committed && handle !== undefined && applying) {
       if (!(error instanceof LifecycleHostPhaseError && error.mutationStarted === false)) {
-        attempt.phase = 'recovery-required'; attempt.journal[0]!.state = 'rollback'; pending('rollback');
+        attempt.phase = 'recovery-required'; attempt.journal[0]!.state = 'rollback';
         try {
+          let journalError: unknown;
+          try { pending('rollback'); } catch (writeError) { journalError = writeError; }
           await adapter.rollback(handle); adapter.verifyRollback(handle, await adapter.readback(handle));
+          if (journalError !== undefined) throw new Error(`rollback verified but its durable receipt is blocked: ${(journalError as Error).message}`);
+          attempt.phase = 'finalizing'; attempt.journal[0]!.state = 'cleanup-pending';
+          persist({ ...activation, pending: { operation: 'update', phase: 'cleanup', attemptId, startedAt: now } });
           await adapter.cleanup(handle, 'verified-rollback');
           attempt.phase = 'failed'; attempt.journal[0]!.state = 'rolled-back'; persist(activation);
         } catch (recoveryError) { await adapter.releaseRecovery(handle); throw new Error(`pin failed: ${(error as Error).message}; recovery remains pending: ${(recoveryError as Error).message}`); }
