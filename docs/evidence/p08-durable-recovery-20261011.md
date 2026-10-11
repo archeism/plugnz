@@ -96,3 +96,19 @@ not measured. Native dependencies were reused, not copied per attempt. The
 Addy API/debugging/incremental/documentation and Matt TDD/review skills were
 used unchanged; these product gates are not a skill A/B or improvement claim.
 This checkpoint is not publication, consumer-pin or fleet-rollout evidence.
+
+## Integration hold: composed recovery reports
+
+The combined integration checkpoint `b55ecdc` passed `bun run check` and
+unmodified `bun test` under Bun 1.4.0: 667 passes, five skips, zero failures,
+4349 assertions, 203.79 seconds. Its full log is retained as
+`plugnz-b55-integration-full.log`, SHA-256
+`8ec51066f6d03a1887c3fbdd70b200c9a2c34b0578edf1966251e2badd045505`.
+
+A subsequent real CLI probe nevertheless found an uncovered reporting defect:
+failed recovery in a two-package scope replaced the frozen plan with only the
+pending operation, omitting the independent sibling. Personal correctly rejects
+that incomplete report, which can obscure the actionable recovery diagnostic.
+This is a producer defect, not permission to weaken consumer coverage checks.
+The candidate remains off main pending corrected complete-plan reporting,
+multi-journal recovery accounting, independent review and fresh verification.
