@@ -62,3 +62,27 @@ durable recovery, remaining host admission/provenance corrections, retained
 fresh-Native proof and consumer cleanup must not be represented as complete.
 External dcode coordination remains a human follow-up. Addy/Matt skills are
 unchanged; this audit is product evidence, not a skill-improvement claim.
+
+## Original hashed-adoption bug closure
+
+Fresh verification of shipped plugnz main `4c4bbe3` under Bun 1.4.0 passed
+`bun test test/dcode-public-local.test.ts test/dcode-lifecycle.test.ts
+test/dcode-sync-public.test.ts`: 42 tests, 327 assertions, 16.81 seconds.
+The public CLI scenario explicitly refuses unadopted hashed registration, then
+adopts matching bytes into the owned subtree and preserves the sibling. Negative
+cases cover mismatched identity/version/content, symlinks, duplicate registrations,
+foreign ownership and rollback; final-target mismatch prevents earlier writes.
+This supports closing plugnz #29 for the admitted 0.1.83 Managed profile, not
+claiming support for arbitrary native versions or complete dcode semantics.
+
+Personal main `31648c9` passed `bun test tests/plugin-sync.test.ts
+tests/plugin-deploy-batch.test.ts`: 26 tests, 88 assertions, 845 milliseconds.
+Exact pair and command diagnostics outrank empty/generic process stderr; public
+batch deployment remains nonzero for capability gaps. No real deployment ran.
+
+Raw logs are retained under `~/.local/state/plugnz-evidence/20261011/`:
+
+| Log | SHA-256 |
+| --- | --- |
+| `plugnz-main-issue29-verification.log` | `4062502a543602127d939b7d6506a40081293538217e1b6debb4e4a17808aca5` |
+| `personal-issue29-diagnostic-verification.log` | `37deb5da69490dada282a3f09723d90ad44c053996c89bedb30742f073433e42` |
