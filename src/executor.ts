@@ -625,7 +625,9 @@ class Ledger {
       ...this.state,
       activations: [
         ...this.state.activations.filter((row) =>
-          activationKey(row) !== activationKey(activation) && !legacyMarketplaceAlias(row, activation)),
+          activationKey(row) !== activationKey(activation)
+          && !legacyMarketplaceAlias(row, activation)
+          && !legacyBareMarketplaceAlias(row, activation)),
         activation,
       ],
     };
@@ -680,6 +682,7 @@ class Ledger {
 
   markRollbackRequired(plan: FrozenPlan, operation: LifecyclePlanOperation): void {
     this.adoptMovedGeneration();
+    this.retargetBareAlias(plan, operation);
     this.replaceAttempt(plan, (attempt) => this.journaled(attempt, operation.operationId, 'rollback', 'recovery-required', true));
   }
 
@@ -803,6 +806,34 @@ class Ledger {
     };
   }
 
+  private retargetBareAlias(plan: FrozenPlan, operation: LifecyclePlanOperation): void {
+    const nativeId = operation.nativeId;
+    if (nativeId === null || !nativeId.includes('@')) return;
+    const journal = this.state.attempts
+      .find((attempt) => attempt.id === plan.attemptId)
+      ?.journal.find((row) => row.operationId === operation.operationId);
+    if (journal === undefined || (journal.action !== 'install' && journal.action !== 'update')) return;
+    const pendingOperation = journal.action;
+    let changed = false;
+    const activations = this.state.activations.map((row) => {
+      if (!isBareMarketplaceAlias(row, operation.scope.id, operation.package, nativeId)) return row;
+      changed = true;
+      return {
+        ...row,
+        nativeId,
+        pending: {
+          operation: pendingOperation,
+          phase: 'rollback' as const,
+          attemptId: plan.attemptId,
+          startedAt: this.now,
+        },
+        updatedAt: this.now,
+      };
+    });
+    if (!changed) return;
+    this.state = { ...this.state, activations };
+  }
+
   private adoptMovedGeneration(): void {
     const loaded = readLifecycleState();
     if (loaded.state.stateGeneration === this.baselineGeneration) return;
@@ -838,6 +869,18 @@ function legacyMarketplaceAlias(row: ActivationRecord, canonical: ActivationReco
   if (separator <= 0 || row.packageId !== row.nativeId) return false;
   const name = row.nativeId.slice(0, separator);
   return name === canonical.packageId && name === canonical.nativeId;
+}
+
+function legacyBareMarketplaceAlias(row: ActivationRecord, canonical: ActivationRecord): boolean {
+  return isBareMarketplaceAlias(row, canonical.scopeId, canonical.packageId, canonical.nativeId);
+}
+
+function isBareMarketplaceAlias(row: ActivationRecord, scopeId: string, packageId: string, nativeId: string): boolean {
+  if (row.scopeId !== scopeId) return false;
+  if (row.route.kind !== 'legacy-unverified' || row.ownership.kind !== 'legacy-claim') return false;
+  if (row.packageId !== row.nativeId || row.nativeId.includes('@')) return false;
+  if (packageId !== row.nativeId) return false;
+  return nativeId.startsWith(`${row.nativeId}@`);
 }
 
 function sourceRelativeDir(plan: FrozenPlan, operation: LifecyclePlanOperation): string {

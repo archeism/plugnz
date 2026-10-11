@@ -460,7 +460,15 @@ export const kimiLifecycle: LifecycleHostDefinition = {
     const registryFile = join(pluginsDir(), 'installed.json');
     assertKimiManaged(id, managed, registryFile);
     const priorRow = existsSync(registryFile) ? readRegistry(registryFile).plugins.find((row) => row.id === id) : undefined;
+    const marker = existsSync(managed) ? readOwnership(managed) : null;
+    const legacyMarker = marker !== null
+      && !marker.pluginId.includes('@')
+      && prepared.handle.nativeId.startsWith(`${marker.pluginId}@`);
     if (existsSync(managed) && priorRow?.enabled === true && sameRoot(priorRow.root, managed) && sameTree(prepared.stagingRoot, managed)) {
+      if (legacyMarker) {
+        rewriteOwnership(managed, { source: marker.source, pluginId: prepared.handle.nativeId, fingerprint: marker.fingerprint });
+        return { receiptId: `kimi-apply:${prepared.handle.attemptId}:${prepared.handle.operationId}`, changed: true };
+      }
       return { receiptId: `kimi-apply:${prepared.handle.attemptId}:${prepared.handle.operationId}`, changed: false };
     }
     const registryBefore = existsSync(registryFile) ? readFileSync(registryFile, 'utf8') : undefined;
