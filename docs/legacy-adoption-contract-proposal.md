@@ -1,7 +1,8 @@
 # Legacy pending adoption — contract proposal
 
 Status: proposed, not implemented; independent design review required before code.
-Frozen implementation inspected: `f6b92a5`. Consumer `e658803` stays unchanged.
+Frozen implementation inspected: `f6b92a5`. Consumer reader corrections are now
+merged at Personal `3daf6ca`; this design does not change its production pin.
 Scope: restore evidence-backed legacy adoption delivery without weakening sealed
 recovery authority. Cursor is the first adapter; other adapters require their own
 proof. No new CLI verb, fleet pin, real-home test, or capability bypass.
@@ -80,9 +81,13 @@ restart safety. Add/prove its bounded fence and prior/candidate CAS for this rou
 or leave interrupted adoption explicitly pending/unverified. Completion of the
 interrupted-adoption requirement cannot be claimed until that public proof passes.
 
-ZCode's different physical IDs require a separate two-ID transaction. Current
-same-ID route migration and Source-provenance repair do not establish that proof;
-do not implement ZCode by borrowing Cursor's alias equivalence.
+The genuine old-producer `75d7bc1` public lifecycle fixture now captures ZCode's
+physical ID `demo@catalog`, different from the current hashed physical ID. This is
+isolated historical public-CLI/fixture evidence, not a released native-runtime
+compatibility proof. It requires a separate two-ID transaction; old legacy-add
+writer inspection, same-ID route migration and Source-provenance repair do not
+establish that proof. Do not borrow Cursor's same-root alias equivalence. Other
+historical ZCode command/layout combinations remain unverified until captured.
 
 ## Durable transaction and interruption
 
@@ -124,7 +129,8 @@ completed commit/rollback receipt. Add a separately versioned optional
 `adoptions: { schemaVersion: 1, receipts: [...] }` report envelope. Each entry binds
 the exact precommand original proof, fresh attempt/operation identity, old/new
 native IDs, admission proof ID, status (`pending`, `committed`, `not-attempted`),
-and structured reason. A committed entry requires the durable relation and the
+and structured reason (including explicit fresh-operation rollback). A committed
+entry requires the durable relation and the
 fresh operation's verified commit; pending cannot imply convergence. Changes are
 already represented by the fresh outcome or modern recovery receipt, never
 double-counted as historical native changes.
@@ -154,23 +160,13 @@ remain rejected. Old strict consumers will reject new adoption reports until
 deliberate producer release, artifact proof, consumer golden and pin advancement.
 No reinterpretation of `recovery.schemaVersion: 1` or relaxed consumer coverage.
 
-### Remaining wire freeze requirement — blocks implementation
+### Exact wire freeze — review blocks implementation
 
-Independent design review requires exact versioned relation, plan, inventory and
-receipt fields before runtime code. In particular, `admissionProofId` is not authority
-merely because a report asserts it. Specify the canonical digest inputs and expose
-the necessary retained-record digest through the read-only precommand inventory;
-correlate the admission with that exact original, frozen Source/target, old/new native
-IDs and fresh planned operation. Specify how the fresh attempt and immutable commit
-identity are verified against durable reader evidence rather than arbitrary report
-IDs. This must work for both a newly applied adoption and a resumed modern attempt.
-
-Freeze the rules for superseded-original visibility versus blocking eligibility,
-and require a disjoint, complete union of ordinary recovery and adoption receipts.
-Reject missing, forged, duplicate, cross-scope or doubly accounted originals and
-replacement identities. No producer/consumer may independently invent a different
-interpretation. This proposal remains unapproved until that schema/correlation
-freeze receives independent review.
+The [wire contract](legacy-adoption-wire-contract.md) freezes the exact types,
+digest bytes, request expectation, reader projections, fresh-journal/commit
+correlation, complete accounting and targeted probe order. No runtime implementation
+is authorized until both independent design axes approve that contract. A digest
+asserted only by the mutating report is explicitly insufficient authority.
 
 ## Dependent scan / implementation boundaries
 
