@@ -267,6 +267,10 @@ describe('writer-side lifecycle route preflight', () => {
     expect(verified.phase).toBe('verified');
     expect(readback.installedFingerprint).toBe(prepared.handle.projectedFingerprint);
     expect(fake.readInstalled('demo@market')).toBe('fixture=/opt/bin/fixture\n');
+    // Adapters with no live resource ownership default to a no-op release;
+    // retaining a recovery handle must never imply artifact cleanup.
+    await fake.adapter.releaseRecovery(prepared.handle);
+    expect(fake.readInstalled('demo@market')).toBe('fixture=/opt/bin/fixture\n');
     await fake.adapter.cleanup(prepared.handle, 'verified-commit');
     expect(fake.events).toEqual([
       'version',

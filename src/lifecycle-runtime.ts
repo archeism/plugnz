@@ -623,6 +623,11 @@ export function createLifecycleHostAdapter(definition: LifecycleHostDefinition):
       return deepFreeze({ phase: 'rollback-verified', handle, observation }) as VerifiedRollback<any, any>;
     },
 
+    async releaseRecovery(handle) {
+      assertHandle(definition.id, handle);
+      await invokePhase('cleanup', async () => { await definition.releaseRecovery?.(handle); });
+    },
+
     async cleanup(target, disposition) {
       const reference = cleanupReference(definition.id, target);
       if (isPreparationProjection(target) && disposition !== 'aborted-preparation') {

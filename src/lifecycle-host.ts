@@ -589,6 +589,8 @@ export interface LifecycleHostDefinition {
   retire(prepared: PreparedRetirementMutation): Promise<MutationResultData>;
   readback(handle: DurableLifecycleOperation): Promise<LifecycleReadbackData>;
   rollback(handle: DurableLifecycleOperation): Promise<MutationResultData>;
+  /** Release live process resources only; retain every durable recovery artifact. */
+  releaseRecovery?(handle: DurableLifecycleOperation): Promise<void>;
   cleanup(reference: CleanupReference, disposition: CleanupDisposition): Promise<CleanupResultData>;
 }
 
@@ -638,6 +640,8 @@ export interface LifecycleHostAdapter {
     handle: DurableLifecycleOperation<Route, Action>,
     observation: LifecycleReadbackObservation,
   ): VerifiedRollback<Route, Action>;
+  /** End live resource ownership after recovery is durably pending, without cleanup. */
+  releaseRecovery(handle: DurableLifecycleOperation): Promise<void>;
   cleanup(
     target: StagedProjection | DirectivesAppliedProjection | PinsAppliedProjection | PreparedLifecycleMutation | DurableLifecycleOperation,
     disposition: CleanupDisposition,
