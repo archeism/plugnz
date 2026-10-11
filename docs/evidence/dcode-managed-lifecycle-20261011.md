@@ -25,6 +25,18 @@ exit closes stdin, releasing the child-held lock. An explicit
 `OPEN_PLUGIN_DCODE_PYTHON_BIN` can select a verified interpreter for wrapper-based
 installations; it is not an unlocked fallback.
 
+When rollback verification remains unavailable, `releaseRecovery` closes only
+the live lock subprocess. Its durable rollback artifacts and pending journal
+remain untouched; the CLI exits loudly instead of hanging on an open pipe.
+
+Standalone `pin` uses a generic opt-in offline lifecycle transaction. It freezes
+the recorded active bytes, never fetches the mutable Source, and uses the same
+staging/sealing/locking/readback/rollback SPI. A durable update intent precedes
+publication; verified projected/installed fingerprints and pin names are committed
+while locked before former-slot cleanup. Source revision, source fingerprint and
+ownership remain unchanged. Legacy/unowned installs cannot gain authority through
+pin. Direct dcode writer pinning is preview-only, preventing in-place mutation.
+
 Public CLI regression tests exercise install, same-version changed-byte update,
 hashed native adoption, source-free retirement, and preservation of writable data.
 The content-addressed slot is activated by same-filesystem directory rename;

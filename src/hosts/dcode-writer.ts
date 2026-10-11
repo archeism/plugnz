@@ -346,6 +346,7 @@ type Prior =
 type ManifestIdentity = { version: string };
 
 export const dcodeWriter: HostWriter = {
+  lifecyclePinAdapter: dcodeLifecycle,
   ...dcode,
   supportsAdoption: true,
   plannedNativeId: (plugin) => `${plugin.name}@${plugin.marketplace || 'local'}`,
@@ -461,6 +462,7 @@ export const dcodeWriter: HostWriter = {
     if (plugin.path === undefined || !existsSync(plugin.path)) return { changes: [], refusals: [] };
     assertCachePath(plugin.path);
     if (ownership(plugin.path)?.pluginId !== plugin.id) return { changes: [], refusals: [] };
+    if (opts?.dryRun !== true) throw new Error('dcode pin requires the durable lifecycle pin workflow; direct in-place pinning is refused');
     return pinPluginMcpFiles(plugin.path, dcodeMcpCandidates(), opts);
   },
   async remove(id: string): Promise<void> {

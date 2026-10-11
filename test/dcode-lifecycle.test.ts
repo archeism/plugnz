@@ -554,7 +554,7 @@ describe('dcode lifecycle', () => {
       expect(existsSync(managedRoot(root))).toBe(false);
     });
   });
-  test('pin rewrites an owned slot and leaves a foreign cache untouched', async () => {
+  test('pin previews owned bytes but refuses direct in-place mutation and leaves foreign cache untouched', async () => {
     await isolated(async root => {
       const item = incoming();
       writeFiles(item.plugin.dir, { '.mcp.json': '{"mcpServers":{"fixture":{"command":"true"}}}\n' });
@@ -563,10 +563,10 @@ describe('dcode lifecycle', () => {
       const bare = '{"mcpServers":{"fixture":{"command":"true"}}}\n';
       writeFileSync(join(owned, '.mcp.json'), bare);
       const installed = dcode.listInstalled().find((plugin) => plugin.id === 'addy@personal');
-      const pinned = await dcodeWriter.pin(installed!);
+      const pinned = await dcodeWriter.pin(installed!, { dryRun: true });
       expect(pinned.changes.length).toBe(1);
-      expect(readFileSync(join(owned, '.mcp.json'), 'utf8')).toContain('/true');
-      writeFileSync(join(owned, '.mcp.json'), bare);
+      expect(readFileSync(join(owned, '.mcp.json'), 'utf8')).toBe(bare);
+      expect((await failed(() => dcodeWriter.pin(installed!))).message).toContain('durable lifecycle pin workflow');
       const wrongId = await dcodeWriter.pin({ id: 'other@personal', name: 'other', path: owned });
       expect(wrongId.changes).toEqual([]);
       expect(wrongId.refusals).toEqual([]);
