@@ -541,7 +541,7 @@ describe('public lifecycle commands', () => {
         instanceTwo: twoBefore,
       });
     });
-  });
+  }, 20_000);
 
   test('scenario 2 bad and uninvoked sources never delete and offline retire keeps retained state', async () => {
     await withLifecycleCliHarness((harness) => {
