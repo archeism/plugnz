@@ -21,6 +21,8 @@ import { CryptoHasher } from './runtime';
 import type { FrozenSource, PluginSource } from './source';
 import { readLifecycleState, type ActivationRecord, type DeploymentScopeRecord, type JournalAction, type JournalEntryRecord, type JournalState, type LifecycleAttemptRecord, type LifecycleStateV2 } from './state';
 import { writeLifecycleState } from './state-write';
+import { parseSerializedLifecycleOperation } from './lifecycle-operation-record';
+import type { DurableLifecycleOperation } from './lifecycle-host';
 
 export interface ExecuteLifecycleInput {
   readonly plan: LifecyclePlan;
@@ -193,6 +195,7 @@ async function runActivation(
     const sealed = await host.adapter.sealActivation(pinned);
     preparation = sealed;
     handle = sealed.handle;
+    ledger.captureOperation(plan, operation, handle);
     ledger.markApplying(plan, operation);
     receipt = await host.adapter.apply(sealed);
     const observation = await host.adapter.readback(receipt.handle);
@@ -416,6 +419,7 @@ async function runDisable(plan: FrozenPlan, operation: LifecyclePlanOperation, h
     if (prepared.selection.operation !== 'disable') throw new Error('disable containment selected the wrong operation');
     ledger.acceptJournal(plan, operation, 'disable-nonconforming');
     preparation = await host.adapter.prepareDisable({ operationId: operation.operationId, attemptId: plan.attemptId, selection: { ...prepared.selection, operation: 'disable' }, activation: prepared.activation });
+    ledger.captureOperation(plan, operation, preparation.handle);
     ledger.markApplying(plan, operation);
     receipt = await host.adapter.disable(preparation);
     const observation = await host.adapter.readback(receipt.handle);
@@ -483,6 +487,7 @@ async function runRetire(
       activation: prepared.activation,
     });
     preparation = sealed;
+    ledger.captureOperation(plan, operation, sealed.handle);
     ledger.markPruning(plan, operation);
     receipt = await host.adapter.retire(sealed);
     const observation = await host.adapter.readback(receipt.handle);
@@ -499,6 +504,7 @@ async function runRetire(
     if (preparation !== undefined && ledger.journalState(plan.attemptId, operation.operationId) === 'applying') {
       return recoverApplied(plan, operation, host, ledger, preparation.handle, reason);
     }
+    if (preparation === undefined) ledger.markNotApplied(plan, operation);
     return stop(operation, reason);
   }
   if (receipt === undefined || verified === undefined) {
@@ -676,6 +682,11 @@ class Ledger {
     this.replaceAttempt(plan, (attempt) => this.journaled(attempt, operation.operationId, 'applying', 'applying', true));
   }
 
+  captureOperation(plan: FrozenPlan, operation: LifecyclePlanOperation, handle: DurableLifecycleOperation): void {
+    const sealedOperation = parseSerializedLifecycleOperation(JSON.parse(JSON.stringify(handle)));
+    this.replaceAttempt(plan, attempt => ({ ...attempt, journal: attempt.journal.map(row => row.operationId === operation.operationId ? { ...row, sealedOperation } : row) }));
+  }
+
   /** A definitive pre-apply refusal must not authorize rollback of another writer's bytes. */
   markNotApplied(plan: FrozenPlan, operation: LifecyclePlanOperation): void {
     if (operation.action === 'disable-nonconforming') this.clearDisablePending(operation);
@@ -759,7 +770,16 @@ class Ledger {
   markRolledBack(plan: FrozenPlan, operation: LifecyclePlanOperation): void {
     this.adoptMovedGeneration();
     if (operation.action === 'disable-nonconforming') this.clearDisablePending(operation, true);
+    this.clearPending(operation);
     this.replaceAttempt(plan, (attempt) => this.journaled(attempt, operation.operationId, 'rolled-back', 'failed', true));
+  }
+
+  markRollbackVerified(plan: FrozenPlan, operation: LifecyclePlanOperation): void {
+    this.adoptMovedGeneration();
+    this.state = { ...this.state, activations: this.state.activations.map(row =>
+      row.scopeId === operation.scope.id && row.packageId === operation.package
+        ? { ...row, pending: { operation: operation.action as NonNullable<typeof row.pending>['operation'], phase: 'cleanup', attemptId: plan.attemptId, startedAt: this.now }, readbackState: 'verified' } : row) };
+    this.replaceAttempt(plan, attempt => ({ ...this.journaled(attempt, operation.operationId, 'cleanup-pending', 'finalizing', true), journal: attempt.journal.map(row => row.operationId === operation.operationId ? { ...row, state: 'cleanup-pending', settlement: 'rollback', updatedAt: this.now } : row) }));
   }
 
   confirmDisable(plan: FrozenPlan, operation: LifecyclePlanOperation): void {
@@ -1082,7 +1102,7 @@ async function recoverApplied(
       diagnostic = `; rollback verification failed: ${unknownErrorDiagnostic(error)}`;
     }
     try {
-      if (verified) ledger.markRolledBack(plan, operation);
+      if (verified) ledger.markRollbackVerified(plan, operation);
       else ledger.markRollbackRequired(plan, operation);
     } catch (error) {
       // Never delete the only recovery snapshots if the durable receipt failed.
@@ -1090,8 +1110,8 @@ async function recoverApplied(
       diagnostic += `; recovery ledger could not be persisted: ${unknownErrorDiagnostic(error)}`;
     }
     if (verified) {
-      try { await host.adapter.cleanup(handle, 'verified-rollback'); }
-      catch {}
+      try { await host.adapter.cleanup(handle, 'verified-rollback'); ledger.markRolledBack(plan, operation); }
+      catch (error) { verified = false; diagnostic += `; rollback cleanup remains pending: ${unknownErrorDiagnostic(error)}`; }
     }
   } finally {
     // Live locks must not outlive this process, even when the ledger itself is

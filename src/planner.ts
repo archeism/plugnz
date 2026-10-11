@@ -114,6 +114,9 @@ export interface PlanLifecycleInput {
   /** Original add argument. Carries fetch credentials that must not enter the manifest. */
   readonly transportSource?: string;
   readonly removalSelection?: readonly { readonly scopeId: string; readonly packageId: string; readonly nativeId: string }[];
+  /** Private recovery preflight; never execute this plan before pending journals settle. */
+  readonly recoveryPreflight?: boolean;
+  readonly retainedSources?: Map<string, FrozenSource>;
 }
 
 type FrozenOperation = Extract<LifecyclePlan, { kind: 'frozen' }>['operations'][number];
@@ -162,9 +165,13 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
   if (duplicate !== null) return zeroWrite(command, input.dryRun, duplicate);
 
   const prepared: Prepared[] = [];
-  const transportCache = new Map<string, FrozenSource>();
+  const transportCache = input.retainedSources ?? new Map<string, FrozenSource>();
+  const planningState = input.recoveryPreflight ? { ...loaded.state, activations: loaded.state.activations.map(row => {
+    if (row.pending === undefined || !loaded.state.attempts.some(attempt => attempt.command !== 'legacy-recovery' && attempt.id === row.pending!.attemptId && attempt.journal.some(entry => entry.scopeId === row.scopeId && entry.packageId === row.packageId && entry.nativeId === row.nativeId && (entry.sealedOperation !== undefined || entry.state === 'pending')))) return row;
+    const { pending: _pending, ...kept } = row; return kept;
+  }) } : loaded.state;
   for (const entry of input.manifest.entries) {
-    const result = await prepareEntry(entry, input.hosts, loaded.state, command, input.transportSource, transportCache);
+    const result = await prepareEntry(entry, input.hosts, planningState, command, input.transportSource, transportCache);
     if (result.kind === 'defect') return zeroWrite(command, input.dryRun, result.reason, result.terminalPhase);
     if (input.removalSelection !== undefined) {
       if (command !== 'remove' || result.kind !== 'retire-source') {
@@ -183,10 +190,27 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
   }
 
   const attemptId = lifecycleAttemptId(loaded.state.stateGeneration, prepared.map((item) => item.identity));
+  const recovering = input.recoveryPreflight && loaded.state.attempts.some(attempt => attempt.command !== 'legacy-recovery' && attempt.journal.some(row =>
+    prepared.some(item => item.scope.id === row.scopeId) && ['pending', 'applying', 'applied', 'readback-verified', 'rollback', 'cleanup-pending'].includes(row.state)));
   const scopes: PlannedScope[] = [];
   const operations: FrozenOperation[] = [];
   for (const item of prepared) {
-    const planned = await planPrepared(item, attemptId, input.validatedAt, loaded.state, command);
+    const pendingNativeIds = new Set(recovering ? loaded.state.attempts.filter(attempt => attempt.command !== 'legacy-recovery').flatMap(attempt => attempt.journal.filter(row => row.scopeId === item.scope.id && ['pending', 'applying', 'applied', 'readback-verified', 'rollback', 'cleanup-pending'].includes(row.state)).map(row => row.nativeId)) : []);
+    let classifiable = item;
+    if (item.kind === 'sync' && pendingNativeIds.size > 0) {
+      // Validate Source semantics even when only this native identity is transitional.
+      const selectedPackages: SelectedManifestPackage<PluginSource>[] = [];
+      for (const selected of item.selected) {
+        const nativeId = plannedNativeIdFor(item, selected.plugin);
+        if (nativeId instanceof Error) return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.defect', unknownErrorDiagnostic(nativeId)));
+        if (!pendingNativeIds.has(nativeId)) { selectedPackages.push(selected); continue; }
+        try { inventoryPackageSemantics(selected.plugin); }
+        catch (error) { return zeroWrite(command, input.dryRun, error instanceof SemanticInventoryError ? error.reason : createLifecycleReason('internal', 'internal.defect', unknownErrorDiagnostic(error))); }
+      }
+      classifiable = { ...item, selected: selectedPackages };
+    }
+    const classifiableState = pendingNativeIds.size === 0 ? loaded.state : { ...loaded.state, activations: loaded.state.activations.filter(row => row.scopeId !== item.scope.id || !pendingNativeIds.has(row.nativeId)) };
+    const planned = await planPrepared(classifiable, attemptId, input.validatedAt, classifiableState, command);
     if (planned.kind === 'defect') return zeroWrite(command, input.dryRun, planned.reason, planned.terminalPhase);
     scopes.push(planned.scope);
     operations.push(...planned.operations);

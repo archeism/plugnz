@@ -563,6 +563,8 @@ export interface CleanupResultData {
 export interface LifecycleHostDefinition {
   readonly id: string;
   readonly evidenceProfiles: readonly CapabilityEvidenceProfile[];
+  /** Opt-in: hold the native mutation fence until releaseRecovery/cleanup. */
+  beginRecovery?(handle: DurableLifecycleOperation): Promise<void>;
   probeVersion(target: LifecycleTargetIdentity): Promise<TargetVersionObservation>;
   observeTarget(target: LifecycleTargetIdentity): Promise<TargetInventoryData>;
   observeNativeMutationScope(request: NativeMutationScopeRequest): Promise<NativeMutationScopeData>;
@@ -626,6 +628,7 @@ export interface LifecycleHostAdapter {
   retire<Route extends SelectedLifecycleRoute, Action extends RetirementMutationAction>(
     prepared: PreparedRetirementMutation<Route, Action>,
   ): Promise<MutationReceipt<Route, Action>>;
+  beginRecovery(handle: DurableLifecycleOperation): Promise<{ readonly kind: 'prior' | 'expected'; readonly observation: LifecycleReadbackObservation }>;
   readback<Route extends SelectedLifecycleRoute, Action extends LifecycleMutationAction>(
     handle: DurableLifecycleOperation<Route, Action>,
   ): Promise<LifecycleReadbackObservation>;
