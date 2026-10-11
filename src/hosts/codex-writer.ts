@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { parse as parseToml } from 'smol-toml';
 import { createCapabilityEvidenceProfile, type CapabilityEvidenceProfile, type CapabilityStatus } from '../capability-evidence';
 import { projectPluginForCodex } from '../conversion';
-import { fingerprintTree } from '../fingerprint';
+import { fingerprintSourceTree, fingerprintTree } from '../fingerprint';
 import type { AddOptions, HostWriter, InstalledPlugin, PinOptions, PinOutcome } from '../host';
 import type {
   ActivationPreparationCapture,
@@ -1062,7 +1062,7 @@ function captureMarketplaceRollback(projection: PinsAppliedProjection): void {
     cpSync(checkout, snapshot, { recursive: true });
     if (fingerprintTree(snapshot) !== fingerprint || fingerprintTree(checkout) !== fingerprint) throw new Error('Codex marketplace checkout changed during rollback capture');
   }
-  writeFileSync(join(bundle, 'marketplace.json'), JSON.stringify({ marketplace, fingerprint }));
+  writeFileSync(join(bundle, 'marketplace.json'), JSON.stringify({ marketplace, fingerprint, sourceFingerprint: projection.snapshot.snapshotFingerprint }));
 }
 
 /** Capture only a clean checkout of the exact immutable Source consumed by this call. */
@@ -1073,14 +1073,15 @@ function captureAttemptedMarketplace(handle: DurableLifecycleOperation): void {
   if (marketplace === null || handle.sourceLocator === null) return;
   const checkout = marketplaceCheckout(marketplace);
   if (!existsSync(checkout)) return;
+  const capture = JSON.parse(readFileSync(metadata, 'utf8')) as Record<string, unknown>;
+  if (typeof capture['sourceFingerprint'] !== 'string' || !/^[0-9a-f]{64}$/u.test(capture['sourceFingerprint'])) throw new Error('invalid Codex captured Source fingerprint');
   const git = (args: readonly string[]): string | null => {
     const result = spawnSync(['git', '-C', checkout, ...args]);
     return result.exitCode === 0 ? decodeBytes(result.stdout).trim() : null;
   };
   if (git(['rev-parse', 'HEAD']) !== handle.sourceRevision
     || git(['config', '--get', 'remote.origin.url']) !== handle.sourceLocator
-    || git(['status', '--porcelain', '--untracked-files=all']) !== '') return;
-  const capture = JSON.parse(readFileSync(metadata, 'utf8')) as Record<string, unknown>;
+    || fingerprintSourceTree(checkout) !== capture['sourceFingerprint']) return;
   writeFileSync(metadata, JSON.stringify({ ...capture, attemptedFingerprint: fingerprintTree(checkout) }));
 }
 
