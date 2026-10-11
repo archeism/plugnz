@@ -49,3 +49,18 @@ Conversion accepts Markdown/TOML commands and skill directories only when it pre
 ## First increment and verification record
 
 The first code increment is the bundled Addy → Codex path (nine commands, 25 skills): diagnostics/source, conversion/staging, lifecycle, then native transcript. Each increment starts RED, records the focused command/output and saved action/result, and stays releasable. A native evidence record includes profile/version, source identity/fingerprint, selected target, transcript/readback, elapsed time, and failures. At `0.0.x`, releases are patch-only; no npm publication or fleet rollout is in scope.
+
+## Route migration admission
+
+A selected route change is an update capability operation with a distinct
+`route-migrate` snapshot and journal identity. Before native writes, execution
+requires the observed native ownership, canonical Source identity, immutable
+prior revision, and installed fingerprint to match the recorded activation.
+The sealed readback must then prove that same active prior route and exact
+retention observations before applying the different selected route. Ledger-only
+route claims are refused without rollback or native mutation. Staging and
+rollback snapshots are removed only by the explicit verified/aborted cleanup
+boundary. The generic SPI tests prove transaction mechanics, not any harness's
+Native capability; real released-harness snapshot and collateral-scope proof
+must precede enabling Native eligibility.
+

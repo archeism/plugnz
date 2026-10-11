@@ -35,3 +35,25 @@ test('Codex managed sync records canonical native scope and source proof through
     expect(bytesToText(retired.stores.codex.after.files['plugins/data/demo@local/kept']!)).toBe('user data\n');
   });
 }, 20_000);
+
+test('a route migration refuses ledger-only prior-route claims without native writes or stale rollback', async () => {
+  await withLifecycleCliHarness((harness) => {
+    harness.writeHome({ '.codex/.keep': '' });
+    const source = harness.source('codex-migration-refusal', { 'plugin.json': '{"name":"demo","version":"1.0.0"}\n' });
+    const codex = harness.fakeNative('codex', Array.from({ length: 24 }, () => ({ args: ['--version'], stdout: 'codex-cli 0.162.0\n' })));
+    const env = { OPEN_PLUGIN_CODEX_BIN: codex.path };
+    const installed = harness.run(['sync', source, '--target', 'codex', '--json'], { env });
+    expect(installed.exitCode).toBe(0);
+    const state = JSON.parse(bytesToText(installed.state.after!));
+    state.activations[0].route.kind = 'native';
+    writeFileSync(join(harness.home, 'state.json'), JSON.stringify(state));
+    const preview = harness.run(['sync', source, '--target', 'codex', '--dry-run', '--json'], { env });
+    expect(parseLifecycleReport(JSON.parse(preview.stdout)).plan[0]!.action).toBe('route-migrate');
+    const refused = harness.run(['sync', source, '--target', 'codex', '--json'], { env });
+    expect(refused.exitCode).toBe(1);
+    const report = parseLifecycleReport(JSON.parse(refused.stdout));
+    expect(report.summary.mutationStarted).toBe(false);
+    expect(report.outcomes[0]!.reason!.diagnostic).toContain('sealed prior route');
+    expect(refused.stores.codex.after.files).toEqual(refused.stores.codex.before.files);
+  });
+}, 20_000);

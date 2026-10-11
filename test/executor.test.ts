@@ -24,6 +24,36 @@ afterAll(() => {
 });
 
 describe('lifecycle executor', () => {
+  // SPI contract coverage only; real Codex Native capability requires the
+  // separately retained released-CLI Sandbox probe, not this fixture profile.
+  test('SPI route migration journals both directions against a genuinely applied prior and retains plugin data', async () => {
+    const root = temp('migration-spi');
+    const home = join(root, 'home'); mkdirSync(home);
+    const source = writePlugin(join(root, 'sources'), 'alpha');
+    const fake = new FakeLifecycleHost(realpathSync(mkdirTemp(join(root, 'host'))), [managedProfile(['install', 'update']), managedProfile(['update'], 'native')]);
+    const planner: PlannerHost = { kinds: ['codex'], adapter: fake.adapter, plannedNativeId: plugin => plugin.name };
+    await withHome(home, async () => {
+      const plan = () => planLifecycle({ manifest: manifest([syncEntry(source, 'codex')]), dryRun: false, validatedAt: now, hosts: [planner] });
+      const installed = expectFrozen(await plan());
+      expect((await executeLifecycle({ plan: installed, hosts: [planner], now })).exitCode).toBe(0);
+      const data = join(fake.root, 'host/plugin-data/alpha');
+      writeFileSync(data, 'user data\n');
+      fake.nativeScope = { kind: 'bounded', mode: 'exact-package', affectedNativeIds: ['alpha'] };
+      for (const route of ['native', 'managed'] as const) {
+        fake.nativeProjection = route === 'native' ? { kind: 'equivalent', proofId: 'fixture-equivalence' } : { kind: 'requires-managed', reasonId: 'fixture-policy' };
+        const migration = expectFrozen(await plan());
+        expect(migration.operations[0]!.operation.action).toBe('route-migrate');
+        const result = await executeLifecycle({ plan: migration, hosts: [planner], now });
+        expect(result.report.outcomes[0]!.reason).toBe(null);
+        expect(result.exitCode).toBe(0);
+        const state = readLifecycleState().state;
+        expect(state.activations[0]!.route.kind).toBe(route);
+        expect(state.attempts.at(-1)!.journal[0]!.action).toBe('route-migrate');
+        expect(state.attempts.at(-1)!.journal[0]!.state).toBe('completed');
+        expect(readFileSync(data, 'utf8')).toBe('user data\n');
+      }
+    });
+  });
   test('retirement which mutates then throws before its receipt rolls back through the sealed handle', async () => {
     const root = temp('partial-retirement');
     const home = join(root, 'home');
@@ -1204,14 +1234,14 @@ function boundHost(kind: string, root: string, operations: readonly CapabilityOp
   };
 }
 
-function managedProfile(operations: readonly CapabilityOperation[]) {
+function managedProfile(operations: readonly CapabilityOperation[], route: 'managed' | 'native' = 'managed') {
   const semantics = Object.fromEntries(PACKAGE_SEMANTICS.map((semantic) => [semantic, 'supported'])) as Record<PackageSemantic, CapabilityStatus>;
   return createCapabilityEvidenceProfile({
     host: 'fixture',
     detectedVersion: '1.0.0',
     sourceTypes: ['local', 'git'],
     operations,
-    route: 'managed',
+    route,
     operationStatus: 'supported',
     semantics,
     evidence: ['docs/adr/0002-preflight-before-native-activation.md'],

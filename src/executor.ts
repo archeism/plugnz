@@ -120,6 +120,8 @@ async function runOperation(
       return runActivation(plan, operation, hosts, ledger, 'install');
     case 'update':
       return runActivation(plan, operation, hosts, ledger, 'update');
+    case 'route-migrate':
+      return runActivation(plan, operation, hosts, ledger, 'route-migrate');
     case 'unchanged':
       ledger.clearPending(operation);
       return succeeded(operation, false);
@@ -127,7 +129,6 @@ async function runOperation(
       return runRetire(plan, operation, hosts, ledger);
     case 'disable-nonconforming':
       return runDisable(plan, operation, hosts, ledger);
-    case 'route-migrate':
     case 'retain-prior':
     case 'not-attempted':
       return stop(operation, createLifecycleReason(
@@ -147,7 +148,7 @@ async function runActivation(
   operation: LifecyclePlanOperation,
   hosts: readonly PlannerHost[],
   ledger: Ledger,
-  action: 'install' | 'update',
+  action: 'install' | 'update' | 'route-migrate',
 ): Promise<OperationStep> {
   if (ledger.journalState(plan.attemptId, operation.operationId) === 'completed') return succeeded(operation, false);
   const nativeId = operation.nativeId;
@@ -160,8 +161,8 @@ async function runActivation(
   }
   let prepared: Awaited<ReturnType<typeof prepareActivation>>;
   try {
-    const recordedPins = ledger.activation(operation.scope.id, operation.package, nativeId)?.pins ?? [];
-    prepared = await prepareActivation(plan, operation, host, nativeId, action, recordedPins);
+    const recorded = ledger.activation(operation.scope.id, operation.package, nativeId);
+    prepared = await prepareActivation(plan, operation, host, nativeId, action, recorded?.pins ?? [], recorded);
   } catch (error) {
     if (action === 'update' && error instanceof SemanticInventoryError && ledger.activation(operation.scope.id, operation.package, nativeId) !== undefined) {
       ledger.acceptJournal(plan, operation, action);
@@ -193,13 +194,26 @@ async function runActivation(
     const sealed = await host.adapter.sealActivation(pinned);
     preparation = sealed;
     handle = sealed.handle;
+    if (action === 'route-migrate') {
+      const recorded = ledger.activation(operation.scope.id, operation.package, nativeId);
+      const prior = sealed.handle.prior;
+      if (recorded === undefined || recorded.ownership.kind === 'legacy-claim'
+        || recorded.readbackState !== 'verified' || recorded.activationState !== 'active'
+        || prior.route !== recorded.route.kind || prior.route === sealed.handle.route
+        || prior.presence !== 'present' || prior.installedFingerprint !== recorded.fingerprints.installed
+        || Object.values(prior.retention).some(row => row.state === 'missing' || row.state === 'not-observed')
+        || prior.enablement !== 'enabled' || prior.activation !== 'active') {
+        throw new LifecycleHostPhaseError('seal', createLifecycleReason('internal', 'internal.invariant', 'sealed prior route or installed bytes do not prove the recorded migration authority'), new Error('unproven prior route'), false);
+      }
+    }
     ledger.markApplying(plan, operation);
     receipt = await host.adapter.apply(sealed);
     const observation = await host.adapter.readback(receipt.handle);
     verified = host.adapter.verify(receipt.handle, observation);
   } catch (error) {
     const reason = thrownReason(error);
-    if (receipt === undefined && ledger.journalState(plan.attemptId, operation.operationId) === 'applying'
+    if (receipt === undefined && (ledger.journalState(plan.attemptId, operation.operationId) === 'applying'
+      || (action === 'route-migrate' && handle !== undefined))
       && error instanceof LifecycleHostPhaseError && !error.mutationStarted) {
       ledger.markNotApplied(plan, operation);
       if (preparation !== undefined) await abortPreparation(host, preparation);
@@ -276,13 +290,14 @@ async function prepareActivation(
   operation: LifecyclePlanOperation,
   host: PlannerHost,
   nativeId: string,
-  action: 'install' | 'update',
+  action: 'install' | 'update' | 'route-migrate',
   recordedPins: readonly string[],
+  recorded: ActivationRecord | undefined,
 ): Promise<
   | {
       readonly kind: 'ready';
       readonly selection: SelectedRouteDecision<SelectedLifecycleRoute, 'install' | 'update'>;
-      readonly snapshot: FrozenPackageSnapshot & { readonly action: 'install' | 'update' };
+      readonly snapshot: FrozenPackageSnapshot & { readonly action: 'install' | 'update' | 'route-migrate' };
       readonly pins: ReturnType<typeof createResolvedLifecyclePins>;
       readonly pinNames: readonly string[];
       readonly notices: readonly string[];
@@ -306,6 +321,15 @@ async function prepareActivation(
   }
   const target = lifecycleTarget(operation);
   const observation = await host.adapter.observeTarget(target);
+  if (action === 'route-migrate') {
+    const prior = observation.installations.find(row => row.nativeId === nativeId);
+    if (recorded === undefined || prior?.ownership.kind !== 'owned' || prior.ownership.scopeId !== operation.scope.id
+      || prior.presence !== 'present' || prior.installedFingerprint !== recorded.fingerprints.installed
+      || prior.source?.immutableRevision !== recorded.sourceRevision || prior.source?.type !== operation.scope.source.kind
+      || (operation.scope.source.kind === 'git' && prior.source?.locator !== operation.scope.source.locator)) {
+      return refused(createLifecycleReason('internal', 'internal.invariant', 'route migration has no native ownership/source/installed-byte proof for its recorded prior'));
+    }
+  }
   const version = await host.adapter.probeVersion(observation.target);
   if (version.kind !== 'detected') {
     return refused(createLifecycleReason('runtime', 'runtime.operation-failed', `${action} '${operation.package}' lost its detected target version`));
@@ -320,30 +344,31 @@ async function prepareActivation(
   const pinNames = resolvedPins.pins.map((pin) => pin.server);
   const notices = resolvedPins.dropped.map((server) => `dropped pin '${server}'`);
   const snapshot = sealActivationSnapshot(operation, plan.attemptId, nativeId, frozen, plugin, packageFingerprint, inventory, observation.target, action);
+  const capabilityOperation = action === 'route-migrate' ? 'update' : action;
   const planCoverage = createLifecyclePlanCoverage(observation, [{
     nativeId,
     operationId: operation.operationId,
-    operation: action,
+    operation: capabilityOperation,
     mutationGroupId: operation.operationId,
-    authorization: action === 'update' ? 'observed-owned' : 'planned-create',
+    authorization: capabilityOperation === 'update' ? 'observed-owned' : 'planned-create',
   }]);
   const sourceType = operation.scope.source.kind;
   const nativeScope = await host.adapter.observeNativeMutationScope({
     targetObservation: observation,
-    operation: action,
+    operation: capabilityOperation,
     packageName: plugin.name,
     nativeId,
     sourceType,
   });
   const nativeProjection = await host.adapter.observeNativeProjection({
     targetObservation: observation,
-    operation: action,
+    operation: capabilityOperation,
     snapshot,
     pins,
   });
   const decision = host.adapter.decideRoute({
     target: observation.target,
-    operation: action,
+    operation: capabilityOperation,
     operationId: operation.operationId,
     attemptId: plan.attemptId,
     scopeId: operation.scope.id,
@@ -358,7 +383,7 @@ async function prepareActivation(
     snapshot,
     pins,
   });
-  if (decision.kind !== 'selected' || decision.operation !== action || decision.route !== operation.route) {
+  if (decision.kind !== 'selected' || decision.operation !== capabilityOperation || decision.route !== operation.route) {
     return refused(createLifecycleReason(
       'runtime',
       'runtime.operation-failed',
@@ -377,8 +402,8 @@ function sealActivationSnapshot(
   packageFingerprint: string,
   inventory: PackageSemanticInventory,
   target: LifecycleTargetIdentity,
-  action: 'install' | 'update',
-): FrozenPackageSnapshot & { readonly action: 'install' | 'update' } {
+  action: 'install' | 'update' | 'route-migrate',
+): FrozenPackageSnapshot & { readonly action: 'install' | 'update' | 'route-migrate' } {
   const relativePackagePath = plugin.relativeDir !== undefined && plugin.relativeDir.length > 0 ? plugin.relativeDir : '.';
   const snapshot = createFrozenPackageSnapshot({
     operationId: operation.operationId,
@@ -399,7 +424,7 @@ function sealActivationSnapshot(
     inventory,
   });
   if (snapshot.action !== action) throw new Error(`frozen snapshot action '${snapshot.action}' is not ${action}`);
-  return snapshot as FrozenPackageSnapshot & { readonly action: 'install' | 'update' };
+  return snapshot as FrozenPackageSnapshot & { readonly action: 'install' | 'update' | 'route-migrate' };
 }
 
 async function runDisable(plan: FrozenPlan, operation: LifecyclePlanOperation, hosts: readonly PlannerHost[], ledger: Ledger): Promise<OperationStep> {
@@ -625,7 +650,7 @@ class Ledger {
     );
   }
 
-  acceptJournal(plan: FrozenPlan, operation: LifecyclePlanOperation, action: Extract<JournalAction, 'install' | 'update' | 'retire-orphan' | 'disable-nonconforming'>): void {
+  acceptJournal(plan: FrozenPlan, operation: LifecyclePlanOperation, action: Extract<JournalAction, 'install' | 'update' | 'route-migrate' | 'retire-orphan' | 'disable-nonconforming'>): void {
     const entry: JournalEntryRecord = {
       operationId: operation.operationId,
       scopeId: operation.scope.id,
@@ -727,7 +752,7 @@ class Ledger {
     this.save();
   }
 
-  markInstallPending(plan: FrozenPlan, operation: LifecyclePlanOperation, action: 'install' | 'update'): void {
+  markInstallPending(plan: FrozenPlan, operation: LifecyclePlanOperation, action: 'install' | 'update' | 'route-migrate'): void {
     this.state = {
       ...this.state,
       activations: this.state.activations.map((row) => row.packageId === operation.package && row.scopeId === operation.scope.id
@@ -741,7 +766,7 @@ class Ledger {
     this.save();
   }
 
-  markCleanupPending(plan: FrozenPlan, operation: LifecyclePlanOperation, action: 'install' | 'update' | 'retire-orphan' | 'disable-nonconforming'): void {
+  markCleanupPending(plan: FrozenPlan, operation: LifecyclePlanOperation, action: 'install' | 'update' | 'route-migrate' | 'retire-orphan' | 'disable-nonconforming'): void {
     this.state = {
       ...this.state,
       activations: this.state.activations.map((row) => row.packageId === operation.package && row.scopeId === operation.scope.id

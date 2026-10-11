@@ -801,6 +801,9 @@ function readCodexInstall(handle: DurableLifecycleOperation): LifecycleReadbackD
 function cleanupCodexStage(reference: CleanupReference): CleanupResultData {
   const stage = resolve(join(codexHome(), '.plgnz-lifecycle', `${reference.attemptId}:${reference.operationId}`));
   if (existsSync(stage)) rmSync(stage, { recursive: true, force: true });
+  const rollback = rollbackBundle(reference.attemptId, reference.operationId);
+  assertManagedPath(codexHome(), rollback);
+  if (existsSync(rollback)) rmSync(rollback, { recursive: true, force: true });
   return { cleanupId: `cleanup:${reference.attemptId}:${reference.operationId}`, completed: true };
 }
 

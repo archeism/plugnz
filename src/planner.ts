@@ -475,24 +475,6 @@ async function classifyDesired(
   const matchingBytes = sameBytes(activation, installation, selected.plugin)
     && installation?.activation === 'active' && installation.enablement === 'enabled';
   const action = chosenAction(replacing, recordedRoute, decision.route, matchingBytes, reapplyMatchingUpdate);
-  if (action === 'route-migrate') {
-    return classified(
-      operationId,
-      'desired-pair',
-      item.scope,
-      snapshotId,
-      selected.plugin.name,
-      nativeId,
-      'retain-prior',
-      recordedRoute ?? decision.route,
-      createLifecycleReason(
-        'capability',
-        'capability.unsupported',
-        `${action} of '${selected.plugin.name}' is not applied by this execution slice`,
-        action,
-      ),
-    );
-  }
   return classified(operationId, 'desired-pair', item.scope, snapshotId, selected.plugin.name, nativeId, action, decision.route, null);
 }
 
