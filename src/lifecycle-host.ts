@@ -244,6 +244,8 @@ export interface FrozenPackageSnapshotInput {
   readonly snapshotFingerprint: string;
   readonly packageFingerprint: string;
   readonly nativeGit?: NativeGitSnapshotDescriptor;
+  /** Marketplace collection that authored this package, when the Source is a collection. */
+  readonly collectionName?: string;
   readonly inventory: PackageSemanticInventory;
 }
 

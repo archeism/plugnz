@@ -79,7 +79,7 @@ export function resolveSource(source: string): FrozenSource {
   const snapshotFingerprint = fingerprintTree(targetDir);
   const snapshot: SourceSnapshotReference = {
     binding,
-    revision: isGit ? sha : snapshotFingerprint,
+    revision: sha === 'local' ? snapshotFingerprint : sha,
     fingerprint: snapshotFingerprint,
   };
 

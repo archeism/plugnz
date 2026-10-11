@@ -338,6 +338,10 @@ function onePolicyValue(declarations: InvocationPolicyDeclaration[], direction: 
   return values.values().next().value ?? true;
 }
 
+function hasOpeningFrontmatter(raw: string): boolean {
+  return OPENING_FRONTMATTER.exec(raw) !== null;
+}
+
 function openingFrontmatter(raw: string, path: string): Record<string, unknown> | undefined {
   const match = OPENING_FRONTMATTER.exec(raw);
   if (match === null) return undefined;
@@ -669,6 +673,9 @@ function inventoryComponentRoots(root: string): {
       if (suffix === undefined) invalid(`unsupported ${spec.kind} dialect: ${path}`);
       const dialect = spec.dialects[suffix];
       if (dialect === undefined) invalid(`unsupported ${spec.kind} dialect: ${path}`);
+      // A markdown command without frontmatter is not a declared command. The
+      // host projection refuses it while applying, after update intent is recorded.
+      if (spec.kind === 'command' && dialect === 'markdown' && !hasOpeningFrontmatter(readFileSync(absolute, 'utf8'))) continue;
 
       const parsed = parseComponentDefinition(absolute, path, spec.kind, dialect, entry.slice(0, -suffix.length));
       if (identities.has(parsed.definition.identity)) {

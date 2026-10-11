@@ -177,7 +177,8 @@ export function createLifecyclePlanCoverage(
         invariant(`plan coverage native id '${nativeId}' is not ownership-proven in target observation '${target.observationId}'`);
       }
     } else if (authorization === 'planned-create') {
-      if (installation !== undefined && (installation.presence !== 'absent' || installation.ownership.kind === 'ambiguous')) {
+      const adoptingUnmanaged = installation?.presence === 'present' && installation.ownership.kind === 'unmanaged';
+      if (!adoptingUnmanaged && installation !== undefined && (installation.presence !== 'absent' || installation.ownership.kind === 'ambiguous')) {
         invariant(`planned-create native id '${nativeId}' collides with target observation '${target.observationId}'`);
       }
     } else {

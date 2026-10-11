@@ -741,11 +741,14 @@ function sourceOf(marker: Ownership | null): TargetInventoryData['installations'
   }
 }
 
-function lifecycleMarker(request: { snapshot: { nativeId: string; scopeId: string; sourceType: SourceType; immutableRevision: string; packageFingerprint: string; nativeGit?: { locator: string } } }): Ownership {
+function lifecycleMarker(request: { snapshot: { nativeId: string; collectionName?: string; scopeId: string; sourceType: SourceType; immutableRevision: string; packageFingerprint: string; nativeGit?: { locator: string } } }): Ownership {
   const locator = request.snapshot.nativeGit?.locator ?? null;
+  const qualifiedId = request.snapshot.collectionName === undefined
+    ? request.snapshot.nativeId
+    : `${request.snapshot.nativeId}@${request.snapshot.collectionName}`;
   return {
     source: locator ?? request.snapshot.immutableRevision,
-    pluginId: request.snapshot.nativeId,
+    pluginId: ownsNativeDirectory(qualifiedId, request.snapshot.nativeId) ? qualifiedId : request.snapshot.nativeId,
     fingerprint: request.snapshot.packageFingerprint,
     scopeId: request.snapshot.scopeId,
     sourceType: request.snapshot.sourceType,
@@ -883,7 +886,12 @@ function absentRoute(action: DurableLifecycleOperation['action'], route: Durable
 function refuseForeignScope(target: string, scopeId: string, nativeId: string): void {
   if (!existsSync(target)) return;
   const marker = readOwnership(target);
-  if (marker === null || marker.scopeId !== scopeId || !ownsNativeDirectory(marker.pluginId, nativeId)) {
+  if (marker === null || !ownsNativeDirectory(marker.pluginId, nativeId)) {
+    throw new Error(`Cursor local plugin ${nativeId} is not owned by deployment scope ${scopeId}`);
+  }
+  // A scope-less plgnz marker is the pre-lifecycle collection record. Applying
+  // replaces it with the scoped marker. A different scope stays foreign.
+  if (marker.scopeId !== undefined && marker.scopeId !== scopeId) {
     throw new Error(`Cursor local plugin ${nativeId} is not owned by deployment scope ${scopeId}`);
   }
 }

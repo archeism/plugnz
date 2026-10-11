@@ -101,6 +101,7 @@ async function runOperation(
     case 'update':
       return runActivation(plan, operation, hosts, ledger, 'update');
     case 'unchanged':
+      ledger.clearPending(operation);
       return succeeded(operation, false);
     case 'retire-orphan':
       return runRetire(plan, operation, hosts, ledger);
@@ -177,6 +178,9 @@ async function runActivation(
       return recoverApplied(plan, operation, host, ledger, handle, reason);
     }
     if (preparation !== undefined) await abortPreparation(host, preparation);
+    if (preparation === undefined && ledger.activation(operation.scope.id, operation.package, nativeId) !== undefined) {
+      ledger.markInstallPending(plan, operation, action);
+    }
     return stop(operation, reason);
   }
   if (receipt === undefined || verified === undefined) {
@@ -355,6 +359,7 @@ function sealActivationSnapshot(
     relativePackagePath,
     snapshotFingerprint: frozen.snapshot.fingerprint,
     packageFingerprint,
+    ...(plugin.marketplace === undefined ? {} : { collectionName: plugin.marketplace }),
     inventory,
   });
   if (snapshot.action !== action) throw new Error(`frozen snapshot action '${snapshot.action}' is not ${action}`);
@@ -614,9 +619,40 @@ class Ledger {
   confirmActivation(plan: FrozenPlan, operation: LifecyclePlanOperation, activation: ActivationRecord): void {
     this.state = {
       ...this.state,
-      activations: [...this.state.activations.filter((row) => activationKey(row) !== activationKey(activation)), activation],
+      activations: [
+        ...this.state.activations.filter((row) =>
+          activationKey(row) !== activationKey(activation) && !legacyMarketplaceAlias(row, activation)),
+        activation,
+      ],
     };
     this.replaceAttempt(plan, (attempt) => this.journaled(attempt, operation.operationId, 'readback-verified', 'readback', true));
+  }
+
+  clearPending(operation: LifecyclePlanOperation): void {
+    let changed = false;
+    const activations = this.state.activations.map((row) => {
+      if (row.scopeId !== operation.scope.id || row.packageId !== operation.package || row.pending === undefined) return row;
+      changed = true;
+      const { pending: _pending, ...rest } = row;
+      return rest;
+    });
+    if (!changed) return;
+    this.state = { ...this.state, activations };
+    this.save();
+  }
+
+  markInstallPending(plan: FrozenPlan, operation: LifecyclePlanOperation, action: 'install' | 'update'): void {
+    this.state = {
+      ...this.state,
+      activations: this.state.activations.map((row) => row.packageId === operation.package && row.scopeId === operation.scope.id
+        ? {
+          ...row,
+          pending: { operation: action, phase: 'accepted', attemptId: plan.attemptId, startedAt: row.pending?.startedAt ?? this.now },
+          updatedAt: this.now,
+        }
+        : row),
+    };
+    this.save();
   }
 
   markCleanupPending(plan: FrozenPlan, operation: LifecyclePlanOperation, action: 'install' | 'update' | 'retire-orphan'): void {
@@ -661,6 +697,7 @@ class Ledger {
 
   private completedScope(plan: FrozenPlan, operation: LifecyclePlanOperation, scope: DeploymentScopeRecord, converged: boolean): DeploymentScopeRecord {
     if (scope.id !== operation.scope.id) return scope;
+    if (scope.authority !== 'authoritative') return scope;
     const planned = plan.scopes.find((row) => row.scope.id === scope.id);
     if (planned?.selectorMode === 'retired') {
       const { desired: _desired, lastConverged: _converged, ...kept } = scope;
@@ -788,6 +825,15 @@ function finish(report: LifecycleReport): ExecuteLifecycleResult {
 
 function activationKey(activation: ActivationRecord): string {
   return `${activation.scopeId}\0${activation.packageId}\0${activation.nativeId}`;
+}
+
+function legacyMarketplaceAlias(row: ActivationRecord, canonical: ActivationRecord): boolean {
+  if (row.scopeId !== canonical.scopeId) return false;
+  if (row.route.kind !== 'legacy-unverified' || row.ownership.kind !== 'legacy-claim') return false;
+  const separator = row.nativeId.indexOf('@');
+  if (separator <= 0 || row.packageId !== row.nativeId) return false;
+  const name = row.nativeId.slice(0, separator);
+  return name === canonical.packageId && name === canonical.nativeId;
 }
 
 function sourceRelativeDir(plan: FrozenPlan, operation: LifecyclePlanOperation): string {

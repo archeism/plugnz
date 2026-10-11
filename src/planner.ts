@@ -148,7 +148,7 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
 
   const prepared: Prepared[] = [];
   for (const entry of input.manifest.entries) {
-    const result = await prepareEntry(entry, input.hosts, loaded.state);
+    const result = await prepareEntry(entry, input.hosts, loaded.state, command);
     if (result.kind === 'defect') return zeroWrite(command, input.dryRun, result.reason);
     prepared.push(result);
   }
@@ -169,10 +169,11 @@ async function prepareEntry(
   entry: SyncManifestEntry,
   hosts: readonly PlannerHost[],
   state: LifecycleStateV2,
+  command: LifecycleCommandName,
 ): Promise<Prepared | Defect> {
   switch (entry.operation) {
     case 'sync':
-      return prepareSync(entry, hosts, state);
+      return prepareSync(entry, hosts, state, command);
     case 'retire-source':
       return prepareRetire(entry, hosts, state);
     default: {
@@ -186,6 +187,7 @@ async function prepareSync(
   entry: SyncManifestSyncEntry,
   hosts: readonly PlannerHost[],
   state: LifecycleStateV2,
+  command: LifecycleCommandName,
 ): Promise<PreparedSync | Defect> {
   let frozen: FrozenSource;
   try {
@@ -201,7 +203,7 @@ async function prepareSync(
     throw error;
   }
   const scope = deploymentScopeForSyncManifestEntry(entry);
-  const pending = pendingDefect(state, scope.id);
+  const pending = pendingDefect(state, scope.id, new Set(selected.map((item) => item.plugin.name)), command);
   if (pending !== null) return defect(pending);
   const host = hosts.find((candidate) => candidate.kinds.includes(entry.target.kind)) ?? null;
   if (host === null) {
@@ -391,7 +393,7 @@ async function classifyDesired(
   const installation = item.observation.installations.find((row) => row.nativeId === nativeId);
   const collision = foreignOwnership(item.observation, nativeId, item.scope.id, item.entry.target);
   if (collision !== null) return defect(collision);
-  if (installation?.presence === 'present' && installation.ownership.kind === 'unmanaged') {
+  if (installation?.presence === 'present' && installation.ownership.kind === 'unmanaged' && !selected.adoptionRequested) {
     return defect(createLifecycleReason(
       'internal',
       'internal.ambiguous-ownership',
@@ -970,14 +972,41 @@ function foreignOwnership(
   );
 }
 
-function pendingDefect(state: LifecycleStateV2, scopeId: string): LifecycleReason | null {
-  const activation = state.activations.find((row) => row.scopeId === scopeId && row.pending !== undefined);
+function pendingDefect(
+  state: LifecycleStateV2,
+  scopeId: string,
+  repairablePackageNames?: ReadonlySet<string>,
+  command?: LifecycleCommandName,
+): LifecycleReason | null {
+  const activation = state.activations.find((row) =>
+    row.scopeId === scopeId
+    && row.pending !== undefined
+    && !repairsLegacyMarketplaceAlias(row, repairablePackageNames)
+    && !recoversPendingUpdate(row, repairablePackageNames, command));
   if (activation?.pending === undefined) return null;
   return createLifecycleReason(
     'internal',
     'internal.invariant',
     `package '${activation.packageId}' has pending ${activation.pending.operation} work that requires recovery before planning`,
   );
+}
+
+/** Update retries the package whose install intent is already pending. Sync still refuses it. */
+function recoversPendingUpdate(
+  activation: ActivationRecord,
+  packageNames: ReadonlySet<string> | undefined,
+  command: LifecycleCommandName | undefined,
+): boolean {
+  return command === 'update' && packageNames !== undefined && packageNames.has(activation.packageId);
+}
+
+/** A v1 marketplace id (`name@marketplace`) can be repaired by installing the canonical package. */
+function repairsLegacyMarketplaceAlias(activation: ActivationRecord, packageNames: ReadonlySet<string> | undefined): boolean {
+  if (packageNames === undefined || packageNames.size === 0) return false;
+  if (activation.route.kind !== 'legacy-unverified' || activation.ownership.kind !== 'legacy-claim') return false;
+  const separator = activation.nativeId.indexOf('@');
+  if (separator <= 0 || activation.packageId !== activation.nativeId) return false;
+  return packageNames.has(activation.nativeId.slice(0, separator));
 }
 
 function duplicateHostKind(hosts: readonly PlannerHost[]): LifecycleReason | null {
