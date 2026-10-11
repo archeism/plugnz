@@ -595,6 +595,9 @@ async function prepareOwnedMutation(
   const target = lifecycleTarget(plan, operation);
   const observation = await host.adapter.observeTarget(target);
   const installation = observation.installations.find((row) => row.nativeId === nativeId);
+  if (installation?.observedRoute !== undefined && installation.observedRoute !== recorded.route.kind) {
+    return refused(createLifecycleReason('internal', 'internal.invariant', `${operationLabel} recorded route contradicts fresh observed owned route`));
+  }
   if (installation === undefined || installation.presence !== 'present' || installation.ownership.kind !== 'owned' || installation.ownership.scopeId !== operation.scope.id) {
     return refused(createLifecycleReason('internal', 'internal.ambiguous-ownership', `package '${nativeId}' on ${operation.scope.target.kind}/${operation.scope.target.instance} is not ownership-proven`));
   }

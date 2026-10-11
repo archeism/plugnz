@@ -76,3 +76,17 @@ boundary. The generic SPI tests prove transaction mechanics, not any harness's
 Native capability; real released-harness snapshot and collateral-scope proof
 must precede enabling Native eligibility.
 
+Route contradictions are global zero-write defects for every recorded owned
+activation in a requested scope, including omissions and explicit retirement,
+and fresh disable/retire preparation checks the route again. Kimi's native
+installer names its destination `plugins/managed`; that directory is Native
+storage, not evidence of a plugnz Managed route.
+
+An unchanged live installation does not require an update primitive (SPEC.md
+acceptance sequence: install → unchanged re-add). When update admission is a
+gap, an ordinary sync may report unchanged only with exact recorded/observed
+route, Source type/revision/origin, verified conforming owned bytes, and fresh
+install-semantic admission on that same route. It neither stages nor mutates.
+Explicit update, changed desired bytes, dirty installed bytes, or unknown route
+still require update support and retain their loud limitation.
+

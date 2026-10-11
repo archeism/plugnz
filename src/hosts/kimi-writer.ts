@@ -617,7 +617,9 @@ function readKimiInstallations(): TargetInstallationData[] {
       presence: 'present',
       enablement: enabled ? 'enabled' : 'disabled',
       activation: enabled ? 'active' : 'inactive',
-      ...(owned && resolve(plugin.path) === resolve(managedPluginPath(plugin.name)) ? { observedRoute: 'managed' as const } : {}),
+      // Kimi's native installer calls its own destination "managed"; this is
+      // still the native lifecycle route, proven by the exact registry root.
+      ...(owned && resolve(plugin.path) === resolve(managedPluginPath(plugin.name)) ? { observedRoute: 'native' as const } : {}),
       installedFingerprint: digest,
       installedVersion: null,
       source: owned ? { type: 'local', immutableRevision: marker.fingerprint, locator: null } : null,

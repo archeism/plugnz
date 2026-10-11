@@ -48,12 +48,13 @@ test('a route migration refuses ledger-only prior-route claims without native wr
     state.activations[0].route.kind = 'native';
     writeFileSync(join(harness.home, 'state.json'), JSON.stringify(state));
     const preview = harness.run(['sync', source, '--target', 'codex', '--dry-run', '--json'], { env });
-    expect(parseLifecycleReport(JSON.parse(preview.stdout)).plan[0]!.action).toBe('route-migrate');
+    expect(preview.exitCode).toBe(1);
+    expect(parseLifecycleReport(JSON.parse(preview.stdout)).summary.reason!.code).toBe('internal.invariant');
     const refused = harness.run(['sync', source, '--target', 'codex', '--json'], { env });
     expect(refused.exitCode).toBe(1);
     const report = parseLifecycleReport(JSON.parse(refused.stdout));
     expect(report.summary.mutationStarted).toBe(false);
-    expect(report.outcomes[0]!.reason!.diagnostic).toContain('sealed prior route');
+    expect(report.summary.reason!.diagnostic).toContain('contradicts observed owned route');
     expect(refused.stores.codex.after.files).toEqual(refused.stores.codex.before.files);
   });
 }, 20_000);

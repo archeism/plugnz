@@ -1085,6 +1085,11 @@ describe('public lifecycle commands', () => {
       };
       refused('dry-run', ['sync', '--manifest', manifest, '--dry-run', '--json']);
       refused('apply', ['sync', '--manifest', manifest, '--json']);
+      refused('retire dry-run', ['retire-source', source, '--target', 'cursor', '--dry-run', '--json']);
+      refused('retire apply', ['retire-source', source, '--target', 'cursor', '--json']);
+      writeFileSync(manifest, JSON.stringify({ schemaVersion: 1, entries: [{ operation: 'sync', source: { kind: 'local', locator: source }, target: { kind: 'cursor', instance: 'default' }, selectors: [{ package: 'kept' }] }] }));
+      refused('omission dry-run', ['sync', '--manifest', manifest, '--dry-run', '--json']);
+      refused('omission apply', ['sync', '--manifest', manifest, '--json']);
 
       const side = harness.run(
         ['sync', source, '--target', 'cursor', '--instance', 'side', '--json'],

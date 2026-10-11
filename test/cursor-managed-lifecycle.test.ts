@@ -179,6 +179,7 @@ describe('cursor managed local projection', () => {
 
       const inventoryAfter = await cursorManagedLifecycle.observeTarget(target);
       expect(inventoryAfter.installations).toEqual([{
+        observedRoute: 'managed',
         nativeId,
         packageName,
         ownership: { kind: 'owned', proof: 'created', scopeId, proofId: `cursor-${nativeId}-${scopeId}` },

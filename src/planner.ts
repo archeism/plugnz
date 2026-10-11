@@ -211,6 +211,12 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
       classifiable = { ...item, selected: selectedPackages };
     }
     const classifiableState = pendingNativeIds.size === 0 ? loaded.state : { ...loaded.state, activations: loaded.state.activations.filter(row => row.scopeId !== item.scope.id || !pendingNativeIds.has(row.nativeId)) };
+    for (const activation of classifiableState.activations.filter(row => row.scopeId === item.scope.id)) {
+      const installation = item.observation?.installations.find(row => row.nativeId === activation.nativeId);
+      if ((activation.route.kind === 'managed' || activation.route.kind === 'native') && installation?.observedRoute !== undefined && installation.observedRoute !== activation.route.kind) {
+        return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.invariant', `recorded route '${activation.route.kind}' contradicts observed owned route '${installation.observedRoute}' for '${activation.nativeId}'`));
+      }
+    }
     const planned = await planPrepared(classifiable, attemptId, input.validatedAt, classifiableState, command);
     if (planned.kind === 'defect') return zeroWrite(command, input.dryRun, planned.reason, planned.terminalPhase);
     scopes.push(planned.scope);
@@ -503,6 +509,24 @@ async function classifyDesired(
   const decision = await selectPairRoute(item, selected.plugin, inventory, nativeId, operationId, attemptId, capabilityOperation, version, state.scopes.find(row => row.id === item.scope.id), activation);
   if (decision.kind === 'defect') return decision;
   if (decision.kind === 'gap') {
+    // A byte-identical live prior needs no update primitive. Revalidate the
+    // desired semantic projection on its exact existing route, never substitute
+    // another route or use this path for explicit update/repair.
+    if (!reapplyMatchingUpdate && recordedRoute !== null && installation?.observedRoute === recordedRoute
+      && priorKind(activation) === 'conforming' && activation?.pending === undefined
+      && installation.ownership.kind === 'owned' && installation.ownership.scopeId === item.scope.id
+      && installation.presence === 'present' && installation.activation === 'active' && installation.enablement === 'enabled'
+      && sameBytes(activation, installation, selected.plugin)
+      && activation?.sourceRevision === item.frozen.snapshot.revision
+      && installation.source?.immutableRevision === activation.sourceRevision
+      && installation.source.type === sourceTypeOf(item.entry.source)
+      && (item.scope.source.kind !== 'git' || installation.source.locator === item.scope.source.locator)) {
+      const unchanged = await selectPairRoute(item, selected.plugin, inventory, nativeId, operationId, attemptId, 'install', version, state.scopes.find(row => row.id === item.scope.id), activation, true);
+      if (unchanged.kind === 'defect') return unchanged;
+      if (unchanged.kind === 'selected' && unchanged.route === recordedRoute && !unchanged.provenanceRepair) {
+        return classified(operationId, 'desired-pair', item.scope, snapshotId, selected.plugin.name, nativeId, 'unchanged', recordedRoute, null);
+      }
+    }
     const prior = priorKind(activation);
     if (prior === 'nonconforming') {
       const disabled = await selectDisable(item, nativeId, operationId, attemptId, version, activation, installation);
@@ -627,6 +651,7 @@ async function selectPairRoute(
   version: TargetVersionObservation,
   recordedScope?: DeploymentScopeRecord,
   activation?: ActivationRecord,
+  observeExistingOnly = false,
 ): Promise<{ readonly kind: 'selected'; readonly route: 'native' | 'managed'; readonly provenanceRepair: boolean } | { readonly kind: 'gap'; readonly reason: LifecycleReason } | Defect> {
   if (item.host === null || item.observation === null) {
     return { kind: 'gap', reason: createLifecycleReason('capability', 'capability.unverified', 'missing lifecycle adapter', 'lifecycle-adapter') };
@@ -665,7 +690,7 @@ async function selectPairRoute(
       operationId,
       operation,
       mutationGroupId: operationId,
-      authorization: operation === 'update' ? 'observed-owned' : 'planned-create',
+      authorization: operation === 'update' || observeExistingOnly ? 'observed-owned' : 'planned-create',
     }]);
     const nativeScope = await item.host.adapter.observeNativeMutationScope({
       targetObservation: item.observation,

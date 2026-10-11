@@ -24,6 +24,36 @@ afterAll(() => {
 });
 
 describe('lifecycle executor', () => {
+  test('fresh owned retirement and disable refuse a route contradiction introduced after global preflight', async () => {
+    for (const action of ['retire', 'disable'] as const) {
+    const root = temp('fresh-retirement-route');
+    const home = join(root, 'home'); mkdirSync(home);
+    const source = writePlugin(join(root, 'sources'), 'alpha');
+    const host = boundHost('codex', join(root, 'codex'), action === 'retire' ? ['install', 'update', 'retire'] : ['install', 'disable']);
+    await withHome(home, async () => {
+      const installed = expectFrozen(await planLifecycle({ manifest: manifest([syncEntry(source, 'codex')]), dryRun: false, validatedAt: now, hosts: [host.planner] }));
+      expect((await executeLifecycle({ plan: installed, hosts: [host.planner], now })).exitCode).toBe(0);
+      const scopeId = readLifecycleState().state.scopes[0]!.id;
+      if (action === 'disable') {
+        const loaded = readLifecycleState();
+        writeLifecycleState({ ...loaded.state, stateGeneration: loaded.state.stateGeneration + 1, activations: loaded.state.activations.map(row => ({ ...row, activationState: 'nonconforming' as const })) }, { globalPreflight: 'succeeded' });
+        writeFileSync(join(source, 'payload.txt'), 'changed desired bytes\n');
+      }
+      const retirement = expectFrozen(await planLifecycle({ manifest: action === 'retire' ? manifest([{ operation: 'retire-source', scopeId, target: { kind: 'codex', instance: 'default' } }]) : manifest([syncEntry(source, 'codex')]), dryRun: false, validatedAt: now, hosts: [host.planner] }));
+      expect(retirement.operations[0]!.operation.action).toBe(action === 'retire' ? 'retire-orphan' : 'disable-nonconforming');
+      const registryPath = join(host.fake.root, 'host/registry.json');
+      const registry = JSON.parse(readFileSync(registryPath, 'utf8')); registry.alpha.route = 'native';
+      writeFileSync(registryPath, JSON.stringify(registry));
+      const before = host.fake.hostMutationState();
+      const refused = await executeLifecycle({ plan: retirement, hosts: [host.planner], now });
+      expect(refused.exitCode).toBe(1);
+      expect(refused.report.summary.mutationStarted).toBe(false);
+      expect(refused.report.outcomes[0]!.reason!.code).toBe('internal.invariant');
+      expect(host.fake.hostMutationState()).toEqual(before);
+      expect(host.fake.events.includes(action)).toBe(false);
+    });
+    }
+  });
   // SPI contract coverage only; real Codex Native capability requires the
   // separately retained released-CLI Sandbox probe, not this fixture profile.
   test('SPI route migration journals both directions against a genuinely applied prior and retains plugin data', async () => {
