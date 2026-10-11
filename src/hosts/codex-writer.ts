@@ -13,7 +13,7 @@ import { parse as parseToml } from 'smol-toml';
 import { createCapabilityEvidenceProfile, type CapabilityEvidenceProfile, type CapabilityStatus } from '../capability-evidence';
 import { projectPluginForCodex } from '../conversion';
 import { fingerprintTree } from '../fingerprint';
-import { codexMarketplaceSourceFingerprint } from './codex-marketplace-proof';
+import { codexMarketplaceMetadataFile, codexMarketplaceSourceFingerprint } from './codex-marketplace-proof';
 import { capturePriorSourceRepair, priorSourceRepairAllows, recordedPriorSource, releasePriorSourceRepair, type PriorSourceProof } from '../prior-source-proof';
 import type { AddOptions, HostWriter, InstalledPlugin, PinOptions, PinOutcome } from '../host';
 import type {
@@ -1328,6 +1328,10 @@ function nativeProjection(request: NativeProjectionRequest): NativeProjectionDat
     return { kind: 'requires-managed', reasonId: 'native-upgrade-update-only' };
   }
   if (request.pins.length > 0) return { kind: 'requires-managed', reasonId: 'pins-present' };
+  if (existsSync(join(request.snapshot.snapshotRoot, codexMarketplaceMetadataFile))) {
+    // The native checkout overwrites this root file; it cannot consume that Source exactly.
+    return { kind: 'requires-managed', reasonId: 'native-reserved-source-metadata' };
+  }
   const marketplace = marketplaceOf(request.snapshot.nativeId);
   if (marketplace === null) return { kind: 'requires-managed', reasonId: 'catalog-absent' };
   const binding = catalogBinding(marketplace);

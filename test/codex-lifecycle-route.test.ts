@@ -23,6 +23,19 @@ const otherId = 'other-plugin@demo-market';
 const foreignId = 'foreign-plugin@other-market';
 
 describe('codex native marketplace upgrade route', () => {
+  test('Source-authored native metadata selects Managed before any native write', async () => {
+    await withCodexBinary(async home => {
+      const original = frozenSnapshot(home);
+      writeFiles(original.snapshotRoot, { '.codex-marketplace-install.json': '{"authored":true}\n' });
+      const snapshot = createFrozenPackageSnapshot({ ...original, snapshotFingerprint: fingerprintTree(original.snapshotRoot) });
+      writeCatalog(home, frozenSha, [demoId]); installPlugin(home, 'demo-plugin', demoId, true);
+      const before = fingerprintTree(join(home, '.codex'));
+      const decision = selectedRoute(await selectedUpdate(snapshot, createResolvedLifecyclePins([])));
+      expect(decision.route).toBe('managed');
+      expect(fingerprintTree(join(home, '.codex'))).toBe(before);
+      expect(readFileSync(join(home, 'codex-invocations.log'), 'utf8').includes('marketplace upgrade')).toBe(false);
+    });
+  });
   test('a failed native call with exact native metadata restores the prior full checkout', async () => {
     await withCodexBinary(async home => {
       const original = frozenSnapshot(home);
