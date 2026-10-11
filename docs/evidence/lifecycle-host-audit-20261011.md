@@ -86,3 +86,59 @@ Raw logs are retained under `~/.local/state/plugnz-evidence/20261011/`:
 | --- | --- |
 | `plugnz-main-issue29-verification.log` | `4062502a543602127d939b7d6506a40081293538217e1b6debb4e4a17808aca5` |
 | `personal-issue29-diagnostic-verification.log` | `37deb5da69490dada282a3f09723d90ad44c053996c89bedb30742f073433e42` |
+
+## Combined host gate: second deadline failure
+
+Frozen `50b1508` full Bun 1.4 gate: 690 passed, 6 skipped, 1 failed,
+4550 assertions, 278.83 seconds. The failed ZCode update/rollback fixture hit
+the implicit five-second deadline. An isolated run with that same deadline
+also timed out (5.013 seconds), so this is not described as suite-only noise.
+A bounded 20-second diagnostic passed in 4.35 seconds, including native update
+failure detection and verified rollback. Only this test's explicit deadline is
+raised to 20 seconds; production deadlines and assertions remain unchanged.
+The corrected test passed without a command-level override: 1 passed,
+1 assertion, 4.24 seconds; typecheck and diff checks passed.
+The full ZCode activation file at `fe95be7` also passed without a command-level
+override: 5 tests, 35 assertions, 14.04 seconds. The retained log is
+`plugnz-fe95-zcode-activation.log` in the same durable evidence directory.
+The correction is not a full-suite pass or native runtime proof. Claude's
+separately confirmed catalog-discovery bug still blocks host integration.
+
+Retained failure logs under `~/.local/state/plugnz-evidence/20261011/`:
+
+| Log | SHA-256 |
+| --- | --- |
+| `plugnz-50b-host-combined-full-failure.log` | `bc753cc415664bb10158ad7db9e981eb6d2bd67201505248eecc64ccec7feea6` |
+| `plugnz-50b-zcode-update-isolated.log` | `388f53d2e5b1ff542917f171e06df35892216bc9749aa98eac9602979210e991` |
+
+## Main-based deadline integration attempt
+
+The isolated deadline-only candidate `36a546d` contains no host adapter changes.
+Its full gate failed: 667 passed, 5 skipped, 2 failed, 4416 assertions,
+245.87 seconds. Two pre-existing multi-command public CLI fixtures (scenario 5
+and independent-pair/ungated-instance handling) hit their implicit five-second
+deadlines. The scenario 5 assertion saw a null subprocess exit after the test
+watchdog killed the process; this failed attempt is retained, not reported green.
+Raw `plugnz-36a-deadline-full.log` SHA-256:
+`99b14b686601a5210bf0912ca6d32b795e9ffac0e68f750cb701716f0ed12af1`.
+
+A bounded 20-second diagnostic passed both fixtures and one matching scenario 14
+control: 3 tests, 16 assertions, 8.27 seconds. The failing fixtures took 3.434 and
+3.183 seconds in isolation. Their explicit per-test deadlines are now 20 seconds;
+no production timeout, fixture behavior, or assertion changes. The main-based
+candidate still requires independent review and a fresh full gate.
+The explicit-deadline focused run passed without a command-level override:
+3 tests, 16 assertions, 7.92 seconds; typecheck and diff checks passed.
+
+Frozen `95c7a26` then passed the unmodified full `bun test` command under
+Bun 1.4.0: 669 passed, 5 existing skips, 0 failed, 4416 assertions,
+234.87 seconds. `bun run check` passed. Independent different-model review
+approved both test-only deadline increments separately; production behavior,
+timeouts and assertions remain unchanged. This main-based integration does not
+contain the held Claude, ZCode resource/provenance, or receipt-contract changes.
+No npm publication or fleet pin/deployment accompanies it.
+
+| Retained log | SHA-256 |
+| --- | --- |
+| `plugnz-95c-deadline-full.log` | `ffead036f4bc482c6bbc3b306d36a5cccfa2987507f45cbdae6a309909b76fb9` |
+| `plugnz-95c-deadline-check.log` | `8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92` |

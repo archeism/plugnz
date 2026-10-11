@@ -565,5 +565,5 @@ describe('ZCode CLI native activation', () => {
       await zcodeCliLifecycle.rollback(updated.prepared.handle);
       zcodeCliLifecycle.verifyRollback(updated.prepared.handle, await zcodeCliLifecycle.readback(updated.prepared.handle));
     });
-  });
+  }, 20_000);
 });

@@ -1010,7 +1010,7 @@ describe('public lifecycle commands', () => {
         store: repeated.stores.cursor.before,
       });
     });
-  });
+  }, 20_000);
 
   test('a contradictory recorded route blocks the whole batch without staging, and an ungated cursor instance is refused', async () => {
     await withLifecycleCliHarness((harness) => {
