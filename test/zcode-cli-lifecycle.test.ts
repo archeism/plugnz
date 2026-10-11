@@ -105,7 +105,7 @@ describe('official ZCode CLI default detection', () => {
     });
   });
 
-  test('without an override, the desktop-bundled CLI under an isolated home is detected', () => {
+  test.skipIf(process.platform !== 'darwin')('without an override, the desktop-bundled CLI under an isolated home is detected', () => {
     withZcode((home, _cliRoot, _binary) => {
       delete process.env.OPEN_PLUGIN_ZCODE_CLI_BIN;
       const bundle = join(home, 'Applications', 'ZCode.app', 'Contents', 'Resources', 'glm', 'zcode.cjs');
@@ -116,10 +116,17 @@ describe('official ZCode CLI default detection', () => {
     });
   });
 
-  test('an isolated home never falls through to the system-wide desktop bundle', () => {
+  test.skipIf(process.platform !== 'darwin')('an isolated home never falls through to the system-wide desktop bundle', () => {
     withZcode((home, _cliRoot, _binary) => {
       delete process.env.OPEN_PLUGIN_ZCODE_CLI_BIN;
       expect(zcodeCliBinaryCandidates()).toEqual([join(home, 'Applications', 'ZCode.app', 'Contents', 'Resources', 'glm', 'zcode.cjs')]);
+    });
+  });
+  test.skipIf(process.platform === 'darwin')('non-macOS hosts do not probe macOS desktop bundles without an explicit CLI override', () => {
+    withZcode((_home, _cliRoot, _binary) => {
+      delete process.env.OPEN_PLUGIN_ZCODE_CLI_BIN;
+      expect(zcodeCliBinaryCandidates()).toEqual([]);
+      expect(resolveOfficialZcodeCli()).toBeUndefined();
     });
   });
 });
