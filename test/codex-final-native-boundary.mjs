@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { captureSurfaces } from './codex-final-native-surfaces.mjs';
 
 const root = process.env.PLGNZ_PROOF_ROOT;
-assert(root?.startsWith('/vercel/sandbox/codex-final-proof/'));
+assert(root?.startsWith('/vercel/sandbox/codex-permissions-proof/'));
 const native = '/vercel/sandbox/native-tools/node_modules/.bin/codex';
 const args = process.argv.slice(2);
 const upgrade = args[0] === 'plugin' && args[1] === 'marketplace' && args[2] === 'upgrade';

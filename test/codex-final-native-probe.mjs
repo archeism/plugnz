@@ -11,13 +11,13 @@ const resumeDiscovery = phase === 'bootstrap' && process.argv[5] === 'resume-dis
 assert(['bootstrap', 'refresh', 'native-exit', 'foreign-checkout'].includes(phase));
 assert(['rollback', 'foreign'].includes(name));
 assert(/^[a-f0-9]{40}$/.test(revision));
-const base = '/vercel/sandbox/codex-final-proof';
+const base = '/vercel/sandbox/codex-permissions-proof';
 const root = join(base, name), home = join(root, 'home'), codexHome = join(home, '.codex');
 const native = '/vercel/sandbox/native-tools/node_modules/.bin/codex';
 const artifact = join(base, 'plugnz-candidate.mjs');
-const source = 'https://github.com/archeism/plugnz.git#finish/codex-native-metadata-fixture';
+const source = 'https://github.com/archeism/plugnz.git#finish/codex-native-permissions-fixture';
 const sha = value => createHash('sha256').update(value).digest('hex');
-assert.equal(sha(readFileSync(artifact)), '685041e13e31e331c7dfb8caea57b03a392ddb5289f4b4f66e8105f1e22b6ea3');
+assert.equal(sha(readFileSync(artifact)), '95654ab2ff3db1d92106d502f5578f987e24646c5aea5b559e5406b1356bff22');
 const caps = readFileSync('/proc/self/status', 'utf8').split('\n').filter(line => /^Cap(Inh|Prm|Eff|Bnd|Amb):/.test(line));
 assert.equal(caps.length, 5); assert(caps.every(line => /\s0+$/.test(line)), caps.join('\n'));
 assert.match(readFileSync('/proc/self/status', 'utf8'), /^NoNewPrivs:\s+1$/m);
