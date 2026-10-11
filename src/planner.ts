@@ -58,7 +58,7 @@ import {
   type SyncManifestRetireSourceEntry,
   type SyncManifestSyncEntry,
 } from './sync-manifest';
-import type { PersistedTargetIdentity } from './target-identity';
+import { canonicalTargetContext, type PersistedTargetIdentity } from './target-identity';
 
 export type LifecyclePlan =
   | {
@@ -76,6 +76,8 @@ export type LifecyclePlan =
       readonly report: LifecycleReport;
       readonly scopes: readonly {
         readonly scope: DeploymentScopeIdentity;
+        /** Frozen physical target binding; public scope identity intentionally omits context. */
+        readonly target?: LifecycleTargetIdentity;
         readonly selectorMode: 'all' | 'explicit' | 'retired';
         readonly desired: DesiredGenerationRecord | null;
         readonly prune: 'planned' | 'blocked';
@@ -238,6 +240,13 @@ async function prepareSync(
     throw error;
   }
   const scope = deploymentScopeForSyncManifestEntry(entry);
+  const recordedScope = state.scopes.find(row => row.id === scope.id);
+  if (recordedScope?.target.context !== undefined
+    && JSON.stringify(canonicalTargetContext(recordedScope.target.context))
+      !== JSON.stringify(entry.target.context === undefined ? undefined : canonicalTargetContext(entry.target.context))) {
+    return defect(createLifecycleReason('internal', 'internal.invariant',
+      `target context changed for recorded scope '${scope.id}'; use a distinct target instance or retire the recorded scope explicitly`));
+  }
   const pending = pendingDefect(state, scope.id, new Set(selected.map((item) => item.plugin.name)), command);
   if (pending !== null) return defect(pending);
   const host = hosts.find((candidate) => candidate.kinds.includes(entry.target.kind)) ?? null;
@@ -411,6 +420,7 @@ async function planSync(
     kind: 'planned',
     scope: {
       scope: item.scope,
+      target: item.observation?.target ?? item.entry.target,
       selectorMode: item.entry.selectors === undefined ? 'all' : 'explicit',
       desired: desiredGeneration(existing, item.frozen.snapshot.revision, item.frozen.snapshot.fingerprint, packages, validatedAt),
       prune: blocks || retirements.operations.some((row) => row.operation.action !== 'retire-orphan') ? 'blocked' : 'planned',
@@ -578,6 +588,7 @@ async function planRetire(
     kind: 'planned',
     scope: {
       scope: item.scope,
+      target: item.observation?.target ?? item.recorded.target,
       selectorMode: 'retired',
       desired: null,
       ...(item.retirementPackages === undefined ? {} : { retirementPackages: item.retirementPackages }),

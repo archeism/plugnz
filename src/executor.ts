@@ -304,7 +304,7 @@ async function prepareActivation(
   if (plugin === undefined || packageFingerprint === undefined) {
     return refused(createLifecycleReason('internal', 'internal.invariant', `${action} '${operation.package}' is missing from the frozen source`));
   }
-  const target = lifecycleTarget(operation);
+  const target = lifecycleTarget(plan, operation);
   const observation = await host.adapter.observeTarget(target);
   const version = await host.adapter.probeVersion(observation.target);
   if (version.kind !== 'detected') {
@@ -540,7 +540,7 @@ async function prepareOwnedMutation(
   if (recorded === undefined || recorded.route.kind === 'legacy-unverified' || recorded.ownership.kind === 'legacy-claim' || recorded.sourceRevision === undefined) {
     return refused(createLifecycleReason('internal', 'internal.invariant', `ownership of '${operation.package}' was not revalidated`));
   }
-  const target = lifecycleTarget(operation);
+  const target = lifecycleTarget(plan, operation);
   const observation = await host.adapter.observeTarget(target);
   const installation = observation.installations.find((row) => row.nativeId === nativeId);
   if (installation === undefined || installation.presence !== 'present' || installation.ownership.kind !== 'owned' || installation.ownership.scopeId !== operation.scope.id) {
@@ -600,8 +600,9 @@ async function prepareOwnedMutation(
   return { kind: 'ready', selection: decision, activation: owned, recorded };
 }
 
-function lifecycleTarget(operation: LifecyclePlanOperation): LifecycleTargetIdentity {
-  return { kind: operation.scope.target.kind, instance: operation.scope.target.instance };
+function lifecycleTarget(plan: FrozenPlan, operation: LifecyclePlanOperation): LifecycleTargetIdentity {
+  return plan.scopes.find(row => row.scope.id === operation.scope.id)?.target
+    ?? { kind: operation.scope.target.kind, instance: operation.scope.target.instance };
 }
 
 class Ledger {
@@ -892,7 +893,7 @@ class Ledger {
     const existing = this.state.scopes.find((scope) => scope.id === planned.scope.id);
     if (existing !== undefined && existing.authority !== 'authoritative') return existing;
     const selectorMode = planned.selectorMode;
-    const target = { kind: planned.scope.target.kind, instance: planned.scope.target.instance };
+    const target = planned.target ?? { kind: planned.scope.target.kind, instance: planned.scope.target.instance };
     if (existing === undefined) {
       return {
         id: planned.scope.id,
