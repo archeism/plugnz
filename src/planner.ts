@@ -340,8 +340,22 @@ async function planSync(
     try {
       inventory = inventoryPackageSemantics(selected.plugin);
     } catch (error) {
-      if (error instanceof SemanticInventoryError) return defect(error.reason);
-      return defect(createLifecycleReason('internal', 'internal.defect', unknownErrorDiagnostic(error)));
+      if (!(error instanceof SemanticInventoryError)) {
+        return defect(createLifecycleReason('internal', 'internal.defect', unknownErrorDiagnostic(error)));
+      }
+      const nativeId = plannedNativeIdFor(item, selected.plugin);
+      if (nativeId instanceof Error) return defect(createLifecycleReason('internal', 'internal.defect', unknownErrorDiagnostic(nativeId)));
+      const activation = findActivation(state, item.scope.id, selected.plugin.name, nativeId);
+      if (command !== 'update' || activation === undefined) return defect(error.reason);
+      packages.push({
+        packageId: selected.plugin.name,
+        nativeId,
+        sourceRelativeDir: selected.plugin.relativeDir && selected.plugin.relativeDir.length > 0 ? selected.plugin.relativeDir : '.',
+        requiredCapabilities: [],
+        adoptionRequested: selected.adoptionRequested,
+      });
+      classified.push(uninventoriedUpdate(item, selected.plugin.name, nativeId));
+      continue;
     }
     const nativeId = item.host === null ? selected.plugin.name : item.host.plannedNativeId(selected.plugin);
     packages.push({
@@ -804,6 +818,29 @@ function outcomeFor(row: FrozenOperation): LifecycleReport['outcomes'][number] {
       throw new Error(`unknown plan action ${String(unreachable)}`);
     }
   }
+}
+
+function plannedNativeIdFor(item: PreparedSync, plugin: PluginSource): string | Error {
+  if (item.host === null) return plugin.name;
+  try {
+    return item.host.plannedNativeId(plugin);
+  } catch (error) {
+    return error instanceof Error ? error : new Error(unknownErrorDiagnostic(error));
+  }
+}
+
+function uninventoriedUpdate(item: PreparedSync, packageName: string, nativeId: string): Classified {
+  return classified(
+    operationIdentity('desired-pair', item.scope.id, packageName, nativeId, item.frozen.snapshot.fingerprint),
+    'desired-pair',
+    item.scope,
+    sourceSnapshotId(item.frozen),
+    packageName,
+    nativeId,
+    'update',
+    'managed',
+    null,
+  );
 }
 
 function classified(

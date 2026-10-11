@@ -15,7 +15,7 @@ import {
 import { LifecycleHostPhaseError, createFrozenPackageSnapshot, createLifecyclePlanCoverage, createResolvedLifecyclePins } from './lifecycle-runtime';
 import { ownedActivation, retirementTombstone } from './owned-activation';
 import { lifecycleAttemptIdForPlannedScopes, type LifecyclePlan, type PlannerHost } from './planner';
-import { inventoryPackageSemantics, type PackageSemanticInventory } from './semantic-inventory';
+import { inventoryPackageSemantics, SemanticInventoryError, type PackageSemanticInventory } from './semantic-inventory';
 import { CryptoHasher } from './runtime';
 import { resolveSource, type FrozenSource, type PluginSource } from './source';
 import type { SourceBinding } from './source-reference';
@@ -142,6 +142,10 @@ async function runActivation(
     const recordedPins = ledger.activation(operation.scope.id, operation.package, nativeId)?.pins ?? [];
     prepared = await prepareActivation(plan, operation, host, nativeId, action, recordedPins);
   } catch (error) {
+    if (action === 'update' && error instanceof SemanticInventoryError && ledger.activation(operation.scope.id, operation.package, nativeId) !== undefined) {
+      ledger.acceptJournal(plan, operation, action);
+      ledger.markInstallPending(plan, operation, action);
+    }
     return stop(operation, thrownReason(error));
   }
   if (prepared.kind === 'refused') return stop(operation, prepared.reason);
