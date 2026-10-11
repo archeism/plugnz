@@ -7,6 +7,7 @@ import type { FrozenPackageSnapshot, LifecycleHostAdapter, TargetInstallationDat
 import { createFrozenPackageSnapshot, createLifecyclePlanCoverage, createRecordedOwnedActivation, createResolvedLifecyclePins } from '../src/lifecycle-runtime';
 import type { PackageSemanticInventory } from '../src/semantic-inventory';
 import { createClaudeCodeLifecycleHost, type ClaudeNativeRemoteUpdateContract } from '../src/hosts/claude-code-writer';
+import { createDeploymentScopeIdentity } from '../src/deployment-scope';
 
 const claudeTarget = { kind: 'claude-code', instance: 'default' } as const;
 const locator = 'https://github.com/example/plugins.git';
@@ -332,13 +333,7 @@ describe('claude-code lifecycle route', () => {
 
   test('writes Claude marketplace autoUpdate and does not claim a private marker', async () => {
     await withClaude(async (root) => {
-      mkdirSync(join(root, 'plugins'), { recursive: true });
-      writeFileSync(join(root, 'plugins/known_marketplaces.json'), `${JSON.stringify({
-        market: { source: { source: 'github', repo: 'example/plugins' }, installLocation: '/tmp/market' },
-      })}\n`);
-      writeFileSync(join(root, 'settings.json'), `${JSON.stringify({
-        extraKnownMarketplaces: { market: { source: { source: 'github', repo: 'example/plugins' } } },
-      })}\n`);
+      seedMarketplace(root, true);
       const host = createClaudeCodeLifecycleHost();
       const installed = await activate(host, updateSnapshot(root, 'autoupdate', '1.2.0', '6'.repeat(40), 'install'));
       const marketplaces = JSON.parse(readFileSync(join(root, 'plugins/known_marketplaces.json'), 'utf8')) as {
@@ -500,17 +495,107 @@ describe('claude-code lifecycle route', () => {
   });
 });
 
+test('Claude fresh foreign catalog entry drift blocks before any native write', async () => {
+  await withClaude(async root => {
+    const initial = updateSnapshot(root, 'entry-first-write-proof', '1.0.0', 'c'.repeat(40), 'install');
+    const sourceRoot = initial.snapshotRoot;
+    mkdirSync(join(initial.packageRoot, '.claude-plugin'), { recursive: true });
+    writeFileSync(join(initial.packageRoot, '.claude-plugin/plugin.json'), '{"name":"demo","version":"1.0.0","skills":"./skills/"}');
+    const catalogFile = join(sourceRoot, '.claude-plugin/marketplace.json');
+    mkdirSync(join(sourceRoot, '.claude-plugin'), { recursive: true });
+    const document = { name: 'market', owner: { name: 'foreign' }, plugins: [{ name: 'demo', source: './packages/demo', metadata: { exact: 'first' } }] };
+    writeFileSync(catalogFile, JSON.stringify(document));
+    mkdirSync(join(root, 'plugins'), { recursive: true });
+    writeFileSync(join(root, 'plugins/known_marketplaces.json'), JSON.stringify({ market: { source: { source: 'directory', path: sourceRoot }, installLocation: sourceRoot, autoUpdate: false, lastUpdated: '' } }));
+    const scope = createDeploymentScopeIdentity({ kind: 'local', locator: sourceRoot }, claudeTarget);
+    const packageFingerprint = fingerprintTree(initial.packageRoot);
+    const snapshot = createFrozenPackageSnapshot({ ...initial, scopeId: scope.id, sourceType: 'local', nativeGit: undefined, snapshotFingerprint: fingerprintTree(sourceRoot), packageFingerprint, inventory: { ...initial.inventory, package: { ...initial.inventory.package, fingerprint: packageFingerprint } } });
+    const host = createClaudeCodeLifecycleHost();
+    const planned = await plan(host, snapshot);
+    document.plugins[0]!.metadata.exact = 'changed';
+    writeFileSync(catalogFile, JSON.stringify(document));
+    const before = fingerprintTree(root);
+    let error: unknown;
+    try { await host.apply(planned.prepared); } catch (caught) { error = caught; }
+    expect(String(error)).toContain('selected foreign catalog entry changed');
+    expect(fingerprintTree(root)).toBe(before);
+    expect(existsSync(join(root, 'plugins/installed_plugins.json'))).toBe(false);
+    expect(existsSync(join(root, 'plugins/cache'))).toBe(false);
+    expect(existsSync(join(root, 'settings.json'))).toBe(false);
+  });
+});
+
+test('Claude global registry drift blocks apply and readback but does not overwrite it during rollback', async () => {
+  await withClaude(async root => {
+    const host = createClaudeCodeLifecycleHost();
+    const installed = await activate(host, updateSnapshot(root, 'global-valid-first', '1.0.0', 'c'.repeat(40), 'install'));
+    const update = await plan(host, updateSnapshot(root, 'global-before-drift', '1.0.0', 'd'.repeat(40), 'update'), 'update');
+    const file = join(root, 'plugins/known_marketplaces.json');
+    const known = JSON.parse(readFileSync(file, 'utf8'));
+    const foreign = { source: { source: 'directory', path: root }, installLocation: root, lastUpdated: null, metadata: { retained: true } };
+    known.foreign = foreign;
+    writeFileSync(file, JSON.stringify(known));
+    const before = fingerprintTree(root);
+    let applyError: unknown, readbackError: unknown;
+    try { await host.apply(update.prepared); } catch (error) { applyError = error; }
+    try { await host.readback(installed.handle); } catch (error) { readbackError = error; }
+    expect(String(applyError)).toContain('foreign.lastUpdated');
+    expect(String(readbackError)).toContain('foreign.lastUpdated');
+    expect(fingerprintTree(root)).toBe(before);
+    await host.rollback(installed.handle);
+    expect(JSON.parse(readFileSync(file, 'utf8')).foreign).toEqual(foreign);
+  });
+});
+
+test('Claude foreign catalog binds the whole selected entry but not unrelated marketplace metadata', async () => {
+  await withClaude(async root => {
+    const initial = updateSnapshot(root, 'entry-readback-proof', '1.0.0', 'c'.repeat(40), 'install');
+    const sourceRoot = initial.snapshotRoot;
+    mkdirSync(join(initial.packageRoot, '.claude-plugin'), { recursive: true });
+    writeFileSync(join(initial.packageRoot, '.claude-plugin/plugin.json'), '{"name":"demo","version":"1.0.0","skills":"./skills/"}');
+    const catalogFile = join(sourceRoot, '.claude-plugin/marketplace.json');
+    mkdirSync(join(sourceRoot, '.claude-plugin'), { recursive: true });
+    writeFileSync(catalogFile, JSON.stringify({ name: 'market', owner: { name: 'foreign' }, plugins: [{ name: 'demo', source: './packages/demo', metadata: { exact: 'first' } }] }));
+    mkdirSync(join(root, 'plugins'), { recursive: true });
+    writeFileSync(join(root, 'plugins/known_marketplaces.json'), JSON.stringify({ market: { source: { source: 'directory', path: sourceRoot }, installLocation: sourceRoot, autoUpdate: false, lastUpdated: '' } }));
+    const scope = createDeploymentScopeIdentity({ kind: 'local', locator: sourceRoot }, claudeTarget);
+    const packageFingerprint = fingerprintTree(initial.packageRoot);
+    const snapshot = createFrozenPackageSnapshot({ ...initial, scopeId: scope.id, sourceType: 'local', nativeGit: undefined, snapshotFingerprint: fingerprintTree(sourceRoot), packageFingerprint, inventory: { ...initial.inventory, package: { ...initial.inventory.package, fingerprint: packageFingerprint } } });
+    const host = createClaudeCodeLifecycleHost();
+    const planned = await plan(host, snapshot);
+    const document = JSON.parse(readFileSync(catalogFile, 'utf8'));
+    document.plugins.push({ name: 'foreign', source: './unrelated', metadata: { retained: true } });
+    document.description = 'foreign marketplace description';
+    writeFileSync(catalogFile, JSON.stringify(document));
+    const installed = await host.apply(planned.prepared);
+    expect(JSON.parse(readFileSync(catalogFile, 'utf8'))).toEqual(document);
+    host.verify(installed.handle, await host.readback(installed.handle));
+
+    document.plugins[0].metadata.exact = 'changed';
+    writeFileSync(catalogFile, JSON.stringify(document));
+    const observed = await host.readback(installed.handle);
+    expect(observed.activation).toBe('active');
+    let rejected = false;
+    try { host.verify(installed.handle, observed); } catch { rejected = true; }
+    expect(rejected).toBe(true);
+  });
+});
+
 function seedMarketplace(root: string, autoUpdate: boolean): void {
+  const catalog = join(root, 'plugins/marketplaces/.plgnz-market');
+  mkdirSync(join(catalog, '.claude-plugin'), { recursive: true });
+  writeFileSync(join(catalog, '.plgnz-install.json'), JSON.stringify({ source: 'plgnz-wrapper', pluginId: 'marketplace@market', fingerprint: '' }));
+  writeFileSync(join(catalog, '.claude-plugin/marketplace.json'), JSON.stringify({ name: 'market', owner: { name: 'plgnz' }, plugins: [] }));
   mkdirSync(join(root, 'plugins'), { recursive: true });
   writeFileSync(join(root, 'plugins/installed_plugins.json'), `${JSON.stringify({ version: 2, plugins: {} })}\n`);
   writeFileSync(join(root, 'plugins/known_marketplaces.json'), `${JSON.stringify({
-    market: { source: { source: 'github', repo: 'example/plugins' }, installLocation: '/tmp/market', autoUpdate },
+    market: { source: { source: 'directory', path: catalog }, installLocation: catalog, autoUpdate, lastUpdated: '' },
   })}\n`);
   writeFileSync(join(root, 'settings.json'), `${JSON.stringify({
     theme: 'dark',
     enabledPlugins: {},
     extraKnownMarketplaces: {
-      market: { source: { source: 'github', repo: 'example/plugins' }, autoUpdate },
+      market: { source: { source: 'directory', path: catalog }, autoUpdate },
     },
   })}\n`);
 }
@@ -547,14 +632,14 @@ async function decideActivation(host: LifecycleHostAdapter, snapshot: FrozenPack
     packageName: snapshot.packageName,
     nativeId: snapshot.nativeId,
     version,
-    sourceType: 'git',
+    sourceType: snapshot.sourceType,
     targetObservation: observed,
     nativeScope: await host.observeNativeMutationScope({
       targetObservation: observed,
       operation,
       packageName: snapshot.packageName,
       nativeId: snapshot.nativeId,
-      sourceType: 'git',
+      sourceType: snapshot.sourceType,
     }),
     nativeProjection: projection,
     planCoverage: createLifecyclePlanCoverage(observed, [{

@@ -3,9 +3,11 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { withLifecycleCliHarness, bytesToText, snapshotTree } from './lifecycle-cli-harness';
 import { parseLifecycleReport } from '../src/lifecycle-report';
+import { hermesPublicRuntime } from './hermes-runtime-fixture';
 
 test('public lifecycle preserves two Hermes physical contexts through apply, update and offline retirement', async () => {
   await withLifecycleCliHarness(harness => {
+    hermesPublicRuntime(harness);
     const source = harness.source('hermes-context-source', {
       'plugin.json': '{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"demo","version":"1.0.0"}\n',
       'skills/demo/SKILL.md': '---\nname: demo\ndescription: demo\n---\nfirst\n',

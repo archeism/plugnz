@@ -27,6 +27,7 @@ export const HOST_STORE_PATHS = {
 
 const BINARY_OVERRIDES = [
   'OPEN_PLUGIN_CLAUDE_CODE_BIN',
+  'OPEN_PLUGIN_HERMES_BIN',
   'OPEN_PLUGIN_GROK_BIN',
   'OPEN_PLUGIN_KIMI_BIN',
   'OPEN_PLUGIN_ZCODE_CLI_BIN',
@@ -390,6 +391,16 @@ if (typeof step.divergeStagedReadback === 'string') {
       const stage = join(prepare, key, 'stage');
       if (!existsSync(stage)) continue;
       writeFileSync(join(stage, 'readback-extra.txt'), step.divergeStagedReadback);
+    }
+  }
+  const claudeHome = process.env.OPEN_PLUGIN_CLAUDE_CODE_ROOT ?? (process.env.OPEN_PLUGIN_HOME === undefined ? undefined : join(process.env.OPEN_PLUGIN_HOME, '.claude'));
+  const claudePrepare = claudeHome === undefined ? '' : join(claudeHome, 'plugins', '.plgnz-lifecycle');
+  if (claudePrepare !== '' && existsSync(claudePrepare)) {
+    for (const attempt of readdirSync(claudePrepare)) {
+      for (const operation of readdirSync(join(claudePrepare, attempt))) {
+        const stage = join(claudePrepare, attempt, operation);
+        if (existsSync(join(stage, '.claude-plugin', 'plugin.json'))) writeFileSync(join(stage, 'readback-extra.txt'), step.divergeStagedReadback);
+      }
     }
   }
 }
