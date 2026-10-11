@@ -76,3 +76,27 @@ capability is inferred from these reader fixtures.
 No real home/native launcher, production pin/main or external repository changed.
 Skills unchanged. Independent review precedes use of this foundation by the next
 transaction slice; all dependent schema/report/consumer changes remain required.
+
+## Independent correction: bind a newly introduced commit to its write generation
+
+Both review axes rejected `ae0ae2a`: the writer allowed a prepared generation-3
+record to become committed in generation 4 while claiming commit generation 3.
+Recomputing the commit digest and removing all activations then bypassed the
+same-generation atomic activation/cleanup check. Author reproduced both an existing
+prepared transition and a newly introduced committed relation: 0 pass / 1 fail /
+26 assertions, 2.62 s. Log `/tmp/plugnz-adoption-backdated-commit-red.log`, SHA-256
+`4e12b5a7eafc29379810c3d798908d7525c7b14487de6f3f185f5412428d51b2`.
+
+The prior-to-next writer guard now requires every newly introduced COMMIT to bind
+exactly `next.stateGeneration`. Previously committed, unchanged history keeps its
+original generation so later legitimate updates/removal remain valid. Regression
+assertions verify refusal before ledger replacement, a valid generation-4 commit
+through the actual writer, and an unchanged historical commit through a subsequent
+generation-5 write with the canonical activation removed.
+
+Latest seven-file focused command above: **60 pass / 0 fail / 737 assertions,
+6.54 s**, typecheck and diff check exit 0. Log
+`/tmp/plugnz-adoption-backdated-commit-freeze.log`, SHA-256
+`de53d895b6541e5f98385324596facd726d103089263fefdfa5e87d02831cada`.
+This is the bounded state/history correction, not native adoption or CAS delivery;
+combined independent re-review is required before downstream use.

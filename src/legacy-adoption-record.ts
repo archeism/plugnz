@@ -40,6 +40,12 @@ export interface LegacyAdoptions { schemaVersion: 1; records: AdoptionRecord[] }
 
 /** Preserve first retention and every closed receipt across ledger replacements. */
 export function assertLegacyAdoptionHistoryTransition(previous: LifecycleStateV2, next: LifecycleStateV2): void {
+  for (const record of next.legacyAdoptions?.records ?? []) {
+    const old = previous.legacyAdoptions?.records.find(retained => retained.admission.admissionId === record.admission.admissionId);
+    if (record.phase === 'committed' && old?.phase !== 'committed' && record.commit?.stateGeneration !== next.stateGeneration) {
+      fail('new adoption commit must bind the atomic replacement generation');
+    }
+  }
   for (const old of previous.legacyAdoptions?.records ?? []) {
     const retained = next.legacyAdoptions?.records.find(record => record.admission.admissionId === old.admission.admissionId);
     if (retained === undefined || canonicalAdoptionJson(retained.legacy) !== canonicalAdoptionJson(old.legacy)

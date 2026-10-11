@@ -124,6 +124,7 @@ test('scopes retains the first original snapshot across closed admission, shared
 
     // Reader-only schema fixtures, not execution or native-CAS evidence. Seal
     // validation must bind the actual retained handle rather than hash claims.
+    const preparedState = JSON.parse(canonicalAdoptionJson(state)) as LifecycleStateV2;
     const modern = state.attempts[2]!; const fresh = retry.admission.fresh;
     const prior: SerializedLifecycleOperation['prior'] = { adapterId: 'cursor', target: retry.admission.target,
       scopeId: fresh.scopeId, packageName: 'demo', nativeId: 'demo', route: 'managed', presence: 'present',
@@ -157,7 +158,22 @@ test('scopes retains the first original snapshot across closed admission, shared
       fingerprints: { source: payloadFingerprint, projected: payloadFingerprint, installed: payloadFingerprint },
       activationState: 'active', readbackState: 'verified', pins: [],
       pending: { operation: 'install', phase: 'cleanup', attemptId: fresh.attemptId } }];
-    writeFileSync(file, JSON.stringify(state));
+    const backdated = JSON.parse(canonicalAdoptionJson(state)) as LifecycleStateV2;
+    backdated.activations = [];
+    const backdatedCommit = backdated.legacyAdoptions!.records[1]!.commit!;
+    backdatedCommit.stateGeneration = preparedState.stateGeneration;
+    const { commitId: _backdatedId, ...backdatedPayload } = backdatedCommit;
+    backdatedCommit.commitId = adoptionDigest('plugnz/legacy-adoption-commit/v1', backdatedPayload);
+    const backdatedTransitions = [preparedState, { ...preparedState,
+      legacyAdoptions: { schemaVersion: 1 as const, records: [preparedState.legacyAdoptions!.records[0]!] } }].map(previous => {
+      writeFileSync(file, JSON.stringify(previous));
+      let rejected = false;
+      try { writeLifecycleState(backdated, { globalPreflight: 'succeeded' }, file); } catch { rejected = true; }
+      return { rejected, retained: canonicalAdoptionJson(readLifecycleState(file).state) === canonicalAdoptionJson(previous) };
+    });
+    expect(backdatedTransitions).toEqual([{ rejected: true, retained: true }, { rejected: true, retained: true }]);
+    writeFileSync(file, JSON.stringify(preparedState));
+    writeLifecycleState(state, { globalPreflight: 'succeeded' }, file);
     const committed = harness.run(['scopes', '--json']);
     expect({ exitCode: committed.exitCode, stderr: committed.stderr }).toEqual({ exitCode: 0, stderr: '' });
     expect(committed.state.after).toEqual(committed.state.before);
@@ -177,10 +193,11 @@ test('scopes retains the first original snapshot across closed admission, shared
 
     // Close only the modern journal. Later canonical activation removal does not
     // invalidate immutable adoption history or rewrite the legacy journal.
+    writeFileSync(file, JSON.stringify(state));
     modern.phase = 'completed'; modern.completedAt = '2026-10-12T00:02:00.000Z';
     modern.journal[0]!.state = 'completed'; state.stateGeneration = 5;
     state.activations = [];
-    writeFileSync(file, JSON.stringify(state));
+    writeLifecycleState(state, { globalPreflight: 'succeeded' }, file);
     const retired = harness.run(['scopes', '--json']);
     expect({ exitCode: retired.exitCode, stderr: retired.stderr }).toEqual({ exitCode: 0, stderr: '' });
     expect((JSON.parse(retired.stdout) as typeof before).scopes[0]!.adoptionHistory.legacyRecords).toEqual([legacy]);
