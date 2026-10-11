@@ -144,7 +144,7 @@ async function withHome(run: (home: string, cliRoot: string) => Promise<void>): 
   }
 }
 
-async function activate(home: string, action: 'install' | 'update', operationId: string, attemptId: string) {
+async function stageActivation(home: string, action: 'install' | 'update', operationId: string, attemptId: string) {
   const packageRoot = join(home, 'package');
   const target = { kind: 'zcode-cli', instance: 'default' } as const;
   const plugin: PluginSource = {
@@ -211,6 +211,11 @@ async function activate(home: string, action: 'install' | 'update', operationId:
   });
   if (decision.kind !== 'selected') throw new Error(`expected a selected ${action} route, got ${decision.kind}`);
   const staged = await zcodeCliLifecycle.stageActivation({ selection: decision, snapshot, pins });
+  return { decision, staged, packageRoot };
+}
+
+async function activate(home: string, action: 'install' | 'update', operationId: string, attemptId: string) {
+  const { decision, staged, packageRoot } = await stageActivation(home, action, operationId, attemptId);
   const directed = await zcodeCliLifecycle.applyLifecycleDirectives(staged);
   const pinned = await zcodeCliLifecycle.applyPins(directed);
   const prepared = await zcodeCliLifecycle.sealActivation(pinned);
@@ -231,6 +236,60 @@ async function prepareRetire(handle: Awaited<ReturnType<typeof activate>>['prepa
 }
 
 describe('ZCode CLI native activation', () => {
+  test('genuine pre-seal cleanup disposes only its stage and preserves unrelated snapshots', async () => {
+    await withHome(async (home, cliRoot) => {
+      writePackage(join(home, 'package'));
+      const { staged } = await stageActivation(home, 'install', 'only-stage-operation', 'only-stage-attempt');
+      const sibling = join(cliRoot, 'plgnz-lifecycle/other-attempt/other-operation');
+      mkdirSync(sibling, { recursive: true }); writeFileSync(join(sibling, 'sentinel'), 'unrelated snapshot bytes');
+      const before = fingerprintTree(sibling);
+      await zcodeCliLifecycle.cleanup(staged, 'aborted-preparation');
+      await zcodeCliLifecycle.cleanup(staged, 'aborted-preparation');
+      expect(existsSync(staged.stagingRoot)).toBe(false);
+      expect(fingerprintTree(sibling)).toBe(before);
+      expect(readFileSync(join(sibling, 'sentinel'), 'utf8')).toBe('unrelated snapshot bytes');
+    });
+  });
+  test('an earlier stage reference cannot retire a later captured owned snapshot', async () => {
+    await withHome(async (home) => {
+      writePackage(join(home, 'package'));
+      const created = await activate(home, 'install', 'sealed-operation', 'sealed-attempt');
+      const before = fingerprintTree(created.prepared.handle.rollbackReference);
+      const stageBefore = fingerprintTree(join(created.staged.stagingRoot, '..', '..', '..'));
+      let rejected = false;
+      try { await zcodeCliLifecycle.cleanup(created.staged, 'aborted-preparation'); } catch { rejected = true; }
+      expect(rejected).toBe(true);
+      expect(fingerprintTree(created.prepared.handle.rollbackReference)).toBe(before);
+      expect(fingerprintTree(join(created.staged.stagingRoot, '..', '..', '..'))).toBe(stageBefore);
+      await zcodeCliLifecycle.cleanup(created.prepared.handle, 'aborted-preparation');
+      expect(existsSync(created.prepared.handle.rollbackReference)).toBe(false);
+      expect(existsSync(created.staged.stagingRoot)).toBe(false);
+    });
+  });
+  for (const stagePresent of [true, false]) {
+    test(`pre-seal cleanup cannot delete a foreign snapshot tree with stage present=${stagePresent}`, async () => {
+      await withHome(async (home, cliRoot) => {
+        writePackage(join(home, 'package'));
+        const { staged } = await stageActivation(home, 'install', 'preseal-operation', 'preseal-attempt');
+        const stage = join(staged.stagingRoot, '..', '..', '..');
+        const snapshotParent = join(cliRoot, 'plgnz-lifecycle');
+        mkdirSync(snapshotParent); writeFileSync(join(snapshotParent, 'owned-sibling'), 'retained original tree');
+        const retained = join(home, 'retained-snapshot-parent'); renameSync(snapshotParent, retained);
+        const foreign = join(home, 'foreign-snapshot-parent');
+        const destination = join(foreign, staged.attemptId, staged.operationId);
+        mkdirSync(destination, { recursive: true }); writeFileSync(join(destination, 'sentinel'), 'foreign snapshot bytes');
+        symlinkSync(foreign, snapshotParent);
+        if (!stagePresent) rmSync(stage, { recursive: true });
+        const foreignBefore = fingerprintTree(foreign), ownedBefore = fingerprintTree(retained), stageBefore = stagePresent ? fingerprintTree(stage) : null;
+        let rejected = false;
+        try { await zcodeCliLifecycle.cleanup(staged, 'aborted-preparation'); } catch { rejected = true; }
+        expect(readFileSync(join(destination, 'sentinel'), 'utf8')).toBe('foreign snapshot bytes');
+        expect(rejected).toBe(true);
+        expect(fingerprintTree(foreign)).toBe(foreignBefore); expect(fingerprintTree(retained)).toBe(ownedBefore);
+        if (stagePresent) expect(fingerprintTree(stage)).toBe(stageBefore);
+      });
+    });
+  }
   test('a native update failure cannot compensate through a retargeted declared root', async () => {
     await withHome(async (home, cliRoot) => {
       const physical = join(home, 'captured-cli'); renameSync(cliRoot, physical); symlinkSync(physical, cliRoot);
@@ -331,13 +390,13 @@ describe('ZCode CLI native activation', () => {
     test(`cleanup preserves a foreign replacement stage using ${phase} authority`, async () => {
       await withHome(async (home) => {
         writePackage(join(home, 'package'));
-        const prepared = await activate(home, 'install', `cleanup-${phase}`, `attempt-${phase}`);
-        const stage = join(prepared.staged.stagingRoot, '..', '..', '..');
+        const created = await stageActivation(home, 'install', `cleanup-${phase}`, `attempt-${phase}`);
+        const sealed = phase === 'durable' ? await zcodeCliLifecycle.sealActivation(await zcodeCliLifecycle.applyPins(await zcodeCliLifecycle.applyLifecycleDirectives(created.staged))) : null;
+        const stage = join(created.staged.stagingRoot, '..', '..', '..');
         const retained = join(home, 'retained-owned-stage');
         renameSync(stage, retained); mkdirSync(stage);
-        const handle = hydrateDurableLifecycleOperation(JSON.parse(JSON.stringify(prepared.prepared.handle)));
-        const reference = phase === 'pre-seal' ? prepared.staged : handle;
-        writeFileSync(join(stage, 'stage-receipt.json'), JSON.stringify({ attemptId: handle.attemptId, operationId: handle.operationId, sourceRevision: 'forged', packageFingerprint: 'forged', projectedFingerprint: handle.projectedFingerprint }));
+        const reference = sealed === null ? created.staged : hydrateDurableLifecycleOperation(JSON.parse(JSON.stringify(sealed.handle)));
+        writeFileSync(join(stage, 'stage-receipt.json'), JSON.stringify({ attemptId: created.staged.attemptId, operationId: created.staged.operationId, sourceRevision: 'forged', packageFingerprint: 'forged', projectedFingerprint: sealed?.handle.projectedFingerprint ?? 'forged' }));
         writeFileSync(join(stage, 'sentinel'), 'foreign user bytes');
         let refused = false;
         try { await zcodeCliLifecycle.cleanup(reference, 'aborted-preparation'); } catch { refused = true; }

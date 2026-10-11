@@ -989,6 +989,15 @@ const zcodeCliLifecycleDefinition: LifecycleHostDefinition = {
       if (captured?.[1] !== sha256(realpathSync(zcodeCliRoot()))) throw new Error('ZCode pre-seal captured physical root was redirected');
     }
     const snapshot = reference.rollbackReference === null ? null : join(capturedNativeRoot(reference.rollbackReference, reference.attemptId, reference.operationId), 'plgnz-lifecycle', reference.attemptId, reference.operationId);
+    if (snapshot === null) {
+      const parent = join(realpathSync(zcodeCliRoot()), 'plgnz-lifecycle');
+      for (const candidate of [parent, join(parent, reference.attemptId), join(parent, reference.attemptId, reference.operationId)]) {
+        try {
+          const stat = lstatSync(candidate);
+          if (stat.isSymbolicLink() || candidate === join(parent, reference.attemptId, reference.operationId)) throw new Error('ZCode pre-seal cleanup has no captured snapshot authority');
+        } catch (error) { if (!isObject(error) || error['code'] !== 'ENOENT') throw error; }
+      }
+    }
     try { if (lstatSync(dirname(stage)).isSymbolicLink()) throw new Error('ZCode cleanup staging parent is redirected'); } catch (error) { if (!isObject(error) || error['code'] !== 'ENOENT') throw error; }
     let stagePresent = true;
     try { lstatSync(stage); } catch (error) {
@@ -999,9 +1008,7 @@ const zcodeCliLifecycleDefinition: LifecycleHostDefinition = {
       assertStageCleanupAuthority(stage, reference);
       rmSync(stage, { recursive: true });
     }
-    if (snapshot === null && !stagePresent && existsSync(join(zcodeCliRoot(), 'plgnz-lifecycle', reference.attemptId, reference.operationId))) throw new Error('ZCode missing pre-seal stage has no snapshot cleanup authority');
     if (snapshot !== null) rmSync(snapshot, { recursive: true, force: true });
-    else if (stagePresent) rmSync(join(realpathSync(zcodeCliRoot()), 'plgnz-lifecycle', reference.attemptId, reference.operationId), { recursive: true, force: true });
     return { cleanupId: `cleanup:${reference.attemptId}:${reference.operationId}`, completed: true };
   },
 };

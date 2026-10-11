@@ -151,3 +151,28 @@ native-failure compensation. Failure injection now uses the controlled fake
 native environment instead of modifying a sealed marketplace. Typecheck and
 diff checks passed. These remain isolated factory/CLI fixture proofs, not a
 fresh full suite or released-native Sandbox admission.
+
+## Pre-seal cleanup cannot infer snapshot authority
+
+Both independent review axes found a further deletion bug in `fdbba1c`:
+an authentic unsealed stage, whose cleanup reference has no rollback reference,
+could delete a foreign operation snapshot through a redirected
+`plgnz-lifecycle` parent. The authentic intact-stage regression was RED;
+the absent-stage control already refused deletion (1 pass, 1 failure,
+4 assertions, 1.88 seconds). Raw evidence is
+`/tmp/plugnz-zcode-preseal-snapshot-red.log`.
+
+Pre-seal cleanup now never deletes an inferred snapshot. Before disposing its
+stage it refuses redirected snapshot ancestors or an existing exact operation
+snapshot without captured durable authority. Unrelated snapshot siblings remain
+untouched. An earlier stage reference cannot dispose a snapshot captured later
+by sealing; the correct asserted durable handle still can. The tests use a
+genuine stage before directives/sealing, not a mutated or forged handle.
+
+The final activation/retirement/generic-contract gate passed 36 tests,
+0 failures, 266 assertions in 53.03 seconds; `bun run check` passed. Raw log:
+`/tmp/plugnz-zcode-preseal-snapshot-focused.log`. Controls preserve foreign
+sentinels with the stage present or absent, valid repeatable pre-seal cleanup,
+unrelated siblings, sealed/durable cleanup and stable native-root links.
+This is a bounded fixture checkpoint pending independent review, not a fresh
+full-suite or released-native Sandbox admission.
