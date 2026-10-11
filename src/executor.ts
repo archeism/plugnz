@@ -288,7 +288,8 @@ async function prepareActivation(
   }
   const frozen = operation.sourceSnapshotId === null ? undefined : plan.frozenSources.get(operation.sourceSnapshotId);
   if (frozen === undefined) return refused(createLifecycleReason('internal', 'internal.invariant', `${action} '${operation.package}' lost its retained frozen source`));
-  if (frozen.snapshot.fingerprint !== context.reference.fingerprint || frozen.snapshot.revision !== context.reference.revision) {
+  if (frozen.snapshot.fingerprint !== context.reference.fingerprint || frozen.snapshot.revision !== context.reference.revision
+    || fingerprintTree(frozen.snapshotDir) !== context.reference.fingerprint) {
     return refused(createLifecycleReason('internal', 'internal.invariant', `${action} '${operation.package}' source bytes drifted from the frozen snapshot`));
   }
   const plugin = frozen.plugins.find((candidate) => candidate.name === operation.package);
@@ -301,6 +302,9 @@ async function prepareActivation(
   const version = await host.adapter.probeVersion(observation.target);
   if (version.kind !== 'detected') {
     return refused(createLifecycleReason('runtime', 'runtime.operation-failed', `${action} '${operation.package}' lost its detected target version`));
+  }
+  if (fingerprintTree(frozen.snapshotDir) !== context.reference.fingerprint) {
+    return refused(createLifecycleReason('internal', 'internal.invariant', `${action} '${operation.package}' retained snapshot changed during target observation`));
   }
   const inventory = inventoryPackageSemantics(plugin);
   const resolvedPins = resolveRecordedPinExecutables(plugin.dir, recordedPins);
