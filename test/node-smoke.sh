@@ -2,13 +2,17 @@
 # node-smoke capability: prove the built bundle honors its contracts under
 # plain Node with no Bun on PATH. Legs: version JSON shape, an isolated
 # add/list/doctor/remove lifecycle on the copy-based cursor target, Node 22
-# via npx, and a no-drift doctor against the real home stores.
+# via npx, and a no-drift doctor against populated isolated stores.
 set -eu
 cd "$(dirname "$0")/.."
 BUNDLE=dist/plugnz.mjs
 NODE_BIN="$(command -v node)"
 [ -x "$BUNDLE" ] || { echo "missing $BUNDLE — run: bun scripts/build.mjs"; exit 1; }
-STRICT_PATH="/usr/bin:/bin:$(dirname "$NODE_BIN")"
+NODE_RUNTIME_DIR="$(mktemp -d)"
+trap 'rm -rf "$NODE_RUNTIME_DIR"' EXIT
+ln -s "$NODE_BIN" "$NODE_RUNTIME_DIR/node"
+STRICT_PATH="$NODE_RUNTIME_DIR:/usr/bin:/bin"
+test "$(env PATH="$STRICT_PATH" node -p 'process.execPath')" = "$("$NODE_BIN" -p 'process.execPath')"
 if env PATH="$STRICT_PATH" sh -c 'command -v bun' >/dev/null 2>&1; then echo "bun still on PATH — smoke must prove a Bun-free runtime"; exit 1; fi
 echo "ok: bun absent from smoke PATH"
 
@@ -32,7 +36,7 @@ done
 if [ "$NODE_MAJOR" = "22" ]; then
   echo "ok: ambient Node 22 job — the version-contract leg above already proved v22"
 elif [ -n "$NODE22" ]; then
-  test "$(env PATH="/usr/bin:/bin:$(dirname "$NODE22")" "$NODE22" "$BUNDLE" --version --json)" = "$EXPECTED_VERSION_JSON"
+  test "$(env PATH="$STRICT_PATH" "$NODE22" "$BUNDLE" --version --json)" = "$EXPECTED_VERSION_JSON"
   echo "ok: $("$NODE22" --version) identity byte-equal (bun-free PATH)"
 elif [ "${REQUIRE_LOCAL_22:-}" = "true" ]; then
   echo "this job requires an on-path Node 22 and none was found"; exit 1
@@ -42,7 +46,7 @@ fi
 
 echo "== isolated lifecycle under plain node (cursor target) =="
 SMOKE_HOME="$(mktemp -d)"
-trap 'rm -rf "$SMOKE_HOME"' EXIT
+trap 'rm -rf "$SMOKE_HOME" "$NODE_RUNTIME_DIR"' EXIT
 mkdir -p "$SMOKE_HOME/source/plugins/demo/skills/example"
 printf '{ "name": "demo", "version": "1.0.0", "description": "smoke fixture" }\n' > "$SMOKE_HOME/source/plugins/demo/plugin.json"
 printf -- '---\nname: example\ndescription: Smoke fixture skill\n---\nBody.\n' > "$SMOKE_HOME/source/plugins/demo/skills/example/SKILL.md"

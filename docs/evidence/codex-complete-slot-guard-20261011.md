@@ -54,7 +54,12 @@ existing lifecycle-route test and new public-slot test were changed.
   `b6cf2f7879602cb3291d41823cf6276e6aa57f9a4dd3bc1dab82ce56c71300f9`.
 
 The root independently checked these hashes before checkpointing. Independent
-review is pending. No real installation, native capability profile, public
+review by `native_git_standards` (gpt-5.6-sol, Codex harness) returned LGTM on
+the three-file correction: 33 changed tests / 184 assertions and 8 dependent
+tests / 48 assertions passed. Parent inode replacement is checked in code;
+parent-mode drift, rather than same-mode inode replacement, has a dedicated
+regression. The combined gate is recorded separately below. No real
+installation, native capability profile, public
 schema, runtime floor or skill was changed by this correction. Historical
 unbound Native references remain readable, but cannot authorize the new stronger
 physical restoration.
