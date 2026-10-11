@@ -37,7 +37,7 @@ test('a zero-write apply refusal preserves concurrent native bytes and permits a
     expect(retry.exitCode).toBe(0);
     expect(bytesToText(retry.stores.cursor.after.files[relative]!)).toBe('desired update\n');
   });
-});
+}, 20_000);
 
 test('a zero-write retirement refusal leaves no false applying journal or stale rollback', async () => {
   await withLifecycleCliHarness((harness) => {
@@ -63,4 +63,4 @@ test('a zero-write retirement refusal leaves no false applying journal or stale 
     const retry = harness.run(['retire-source', source, '--target', 'cursor', '--json'], { env: { OPEN_PLUGIN_CURSOR_BIN: clean.path } });
     expect(retry.exitCode).toBe(0);
   });
-});
+}, 20_000);

@@ -8,7 +8,8 @@ declare const TextDecoder: { new (): { decode(input?: Uint8Array): string } };
 declare const TextEncoder: { new (): { encode(input?: string): Uint8Array } };
 
 const repoRoot = join(import.meta.dir, '..');
-const cli = join(repoRoot, 'bin', 'plugnz.mjs');
+const cliExecutable = process.env['OPEN_PLUGIN_TEST_PACKED_NODE'] || process.execPath;
+const cli = join(repoRoot, process.env['OPEN_PLUGIN_TEST_PACKED_NODE'] ? 'dist/plugnz.mjs' : 'bin/plugnz.mjs');
 
 export const HOST_STORE_PATHS = {
   'claude-code': '.claude',
@@ -258,7 +259,7 @@ class LifecycleCliHarnessImpl implements LifecycleCliHarness {
     const storesBefore = this.storeSnapshots();
     const ambientBefore = snapshotTree(this.ambientHome);
     const stateBefore = readBytes(join(this.home, 'state.json'));
-    const result = spawnSync(process.execPath, [cli, ...args], {
+    const result = spawnSync(cliExecutable, [cli, ...args], {
       cwd: repoRoot,
       encoding: 'utf8',
       env: { ...this.isolatedEnv(), ...options.env },
