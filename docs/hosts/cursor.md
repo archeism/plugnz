@@ -97,3 +97,24 @@ loading.
 
 The separate public marketplace lifecycle and Personal composition evidence is
 recorded in [Personal → plgnz → Cursor composition](../evidence/personal-cursor-composition-20260923.md).
+
+## Outstanding command-runtime proof
+
+The production Managed lifecycle profile currently admits `commands`, while
+the earlier evidence above establishes native-store copying/readback only.
+This remains an evidence gap, not proof commands are unsupported. The current
+official [Cursor plugin reference](https://cursor.com/docs/reference/plugins)
+documents native `commands/` Markdown/text commands, but does not establish the
+adapter's conversion of all canonical command bodies or its argument/resource
+semantics for the exact detected CLI release. Admission has not been removed
+as an incidental audit change.
+
+Complete the proof with an isolated store and fresh session on the profiled
+Cursor executable: discover/invoke a namespaced Markdown command; verify an
+argument-bearing canonical command's exact expansion; verify a package-root
+resource reference reaches the intended resource; and verify a user-only
+command is invocable explicitly but absent from implicit model discovery.
+Capture the exact executable release, source revision and converted bytes,
+native invocation/transcript, and expected/observed sentinels. Existing fixture
+CLI successes and directory-reader discovery do not substitute for that runtime
+evidence. Any failure must be diagnosed before extending the capability claim.
