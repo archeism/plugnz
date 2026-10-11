@@ -1362,7 +1362,7 @@ exec "$real_git" "\${args[@]}"
         })),
         source: state.installs[0]?.source,
         sourceSha: state.installs[0]?.sourceSha,
-        sourceIsFrozen: state.installs[0]?.sourceDir.startsWith(join(harness.home, 'cache', 'source-snapshots')),
+        sourceIsFrozen: (state.installs[0]?.sourceDir ?? '').startsWith(join(harness.home, 'cache', 'source-snapshots')),
         installedBytes: bytesToText(result.stores.cursor.after.files['plugins/local/fixture/resources/value.txt']!),
         durableOutputLeaksCredential: `${result.stdout}\n${result.stderr}\n${stateText}`.includes('super-secret'),
       }).toEqual({

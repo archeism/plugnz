@@ -67,7 +67,7 @@ export function projectedState(bytes: number[]): StateDocument {
   const dir = mkdtempSync(join(tmpdir(), 'plugnz-projected-state-'));
   const file = join(dir, 'state.json');
   try {
-    writeFileSync(file, new Uint8Array(bytes));
+    writeFileSync(file, text);
     const installs = readState(file).map((record) => {
       const row: StateDocument['installs'][number] = {
         host: record.host,
