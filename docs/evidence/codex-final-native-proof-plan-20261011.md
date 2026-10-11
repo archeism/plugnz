@@ -16,6 +16,9 @@ reinterpret that failed gate or enable another capability.
   from the retained V1 fixture. Keep one canonical HTTPS Source/ref across V1,
   V2 and V3; change skill/resource bytes at unchanged manifest version. Record
   every immutable commit. No fixture changes go into product main.
+  Prepared Source: `https://github.com/archeism/plugnz.git#finish/codex-native-proof-final-fixture`;
+  initial V1 is `d42234b1adc9bac2a4d1a93d5cab26070494d751`. This new branch
+  preserves the earlier proof branch; neither ref was force-updated.
 - Fresh Vercel Sandbox in `charfeng1s-projects/workspace-agent-lab`, 2 vCPU / 4 GB,
   30-minute maximum. Two isolated proof homes, no real home, no model request or
   API credentials. Drop all Linux capability sets for permission-failure trials.
