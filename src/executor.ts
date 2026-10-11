@@ -200,7 +200,7 @@ async function runActivation(
       if (recorded === undefined || recorded.ownership.kind === 'legacy-claim'
         || recorded.readbackState !== 'verified' || recorded.activationState !== 'active'
         || prior.route !== recorded.route.kind || prior.route === sealed.handle.route
-        || prior.presence !== 'present' || prior.installedFingerprint !== recorded.fingerprints.installed
+        || prior.presence !== 'present' || prior.installedFingerprint !== prepared.observedPriorFingerprint
         || Object.values(prior.retention).some(row => row.state === 'missing' || row.state === 'not-observed')
         || prior.enablement !== 'enabled' || prior.activation !== 'active') {
         throw new LifecycleHostPhaseError('seal', createLifecycleReason('internal', 'internal.invariant', 'sealed prior route or installed bytes do not prove the recorded migration authority'), new Error('unproven prior route'), false);
@@ -301,6 +301,7 @@ async function prepareActivation(
       readonly pins: ReturnType<typeof createResolvedLifecyclePins>;
       readonly pinNames: readonly string[];
       readonly notices: readonly string[];
+      readonly observedPriorFingerprint: string | null;
     }
   | { readonly kind: 'refused'; readonly reason: LifecycleReason }
 > {
@@ -324,7 +325,7 @@ async function prepareActivation(
   if (action === 'route-migrate') {
     const prior = observation.installations.find(row => row.nativeId === nativeId);
     if (recorded === undefined || prior?.ownership.kind !== 'owned' || prior.ownership.scopeId !== operation.scope.id
-      || prior.presence !== 'present' || prior.installedFingerprint !== recorded.fingerprints.installed
+      || prior.presence !== 'present' || prior.installedFingerprint === null || prior.installedFingerprint === undefined
       || prior.source?.immutableRevision !== recorded.sourceRevision || prior.source?.type !== operation.scope.source.kind
       || (operation.scope.source.kind === 'git' && prior.source?.locator !== operation.scope.source.locator)) {
       return refused(createLifecycleReason('internal', 'internal.invariant', 'route migration has no native ownership/source/installed-byte proof for its recorded prior'));
@@ -390,7 +391,8 @@ async function prepareActivation(
       `${action} '${operation.package}' kept frozen route '${operation.route}'`,
     ));
   }
-  return { kind: 'ready', selection: decision, snapshot, pins, pinNames, notices };
+  return { kind: 'ready', selection: decision, snapshot, pins, pinNames, notices,
+    observedPriorFingerprint: observation.installations.find(row => row.nativeId === nativeId)?.installedFingerprint ?? null };
 }
 
 function sealActivationSnapshot(

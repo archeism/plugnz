@@ -1312,6 +1312,13 @@ function nativeProjection(request: NativeProjectionRequest): NativeProjectionDat
     if (!projectionMatchesPackage(request.snapshot.packageRoot, request.snapshot.packageName)) {
       return { kind: 'requires-managed', reasonId: 'projection-not-identity' };
     }
+    const installed = request.targetObservation.installations.find(row => row.nativeId === request.snapshot.nativeId);
+    const root = codex.listInstalled().find(row => row.id === request.snapshot.nativeId)?.path;
+    if (installed?.source?.immutableRevision === git.resolvedRevision && root !== undefined && !sameTree(root, request.snapshot.packageRoot)) {
+      // Released Codex may reuse its same-revision cache even when owned code
+      // has drifted. Choose repair before mutation, never fall through on failure.
+      return { kind: 'requires-managed', reasonId: 'native-same-revision-cache-drift' };
+    }
     return { kind: 'equivalent', proofId: `codex-marketplace:${binding.marketplace}:${binding.sha}` };
   }
   return { kind: 'requires-managed', reasonId: catalogRefusal(binding, git) };
