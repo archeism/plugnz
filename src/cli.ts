@@ -670,7 +670,16 @@ function splitAddTargets(requested: readonly string[], dryRun: boolean): AddTarg
       }
       return { kind: 'refused', report: reportFor('add', dryRun, [], [], { terminalPhase: 'preflight', mutationStarted: false, reason: failure }) };
     }
-    const present = select(writers, profiles.selected.map((profile) => profile.id));
+    let present: ReturnType<typeof select<HostWriter>>;
+    try {
+      present = select(writers, profiles.selected.map((profile) => profile.id));
+    } catch (error) {
+      return { kind: 'refused', report: reportFor('add', dryRun, [], [], {
+        terminalPhase: 'preflight',
+        mutationStarted: false,
+        reason: reason('internal', 'internal.defect', unknownErrorDiagnostic(error)),
+      }) };
+    }
     if (present.error !== undefined) return { kind: 'usage', diagnostic: present.error, code: 'usage.invalid-selection' };
     if (present.selected.length === 0) return { kind: 'empty' };
     return {
@@ -679,7 +688,16 @@ function splitAddTargets(requested: readonly string[], dryRun: boolean): AddTarg
       writers: present.selected.filter((writer) => !plannerKinds.has(writer.id)),
     };
   }
-  const detected = writers.filter((writer) => writer.detect());
+  let detected: HostWriter[];
+  try {
+    detected = writers.filter((writer) => writer.detect());
+  } catch (error) {
+    return { kind: 'refused', report: reportFor('add', dryRun, [], [], {
+      terminalPhase: 'preflight',
+      mutationStarted: false,
+      reason: reason('internal', 'internal.defect', unknownErrorDiagnostic(error)),
+    }) };
+  }
   if (detected.length === 0) return { kind: 'empty' };
   return {
     kind: 'ready',
