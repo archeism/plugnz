@@ -6,6 +6,7 @@ import type { AddOptions, HostWriter, InstalledPlugin, PinOptions, PinOutcome } 
 import type { PluginSource, ResolvedSource } from '../source';
 import { tomlCommandMarkdown } from '../conversion';
 import { claudeCode, mcpCandidates, observeClaudeCodeVersion, pluginsDir } from './claude-code';
+import { assertClaudeMarketplaceSource } from './claude-native-schema';
 import { pinPluginMcpFiles } from '../mcp-write';
 
 import { createCapabilityEvidenceProfile, type CapabilityEvidenceProfile, type CapabilityStatus } from '../capability-evidence';
@@ -301,18 +302,18 @@ function readMarketplaces(file: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-/** Pinned Claude 2.1.295 Hg/Edt registry envelope; see issue35 native source evidence.
+/** Pinned Claude 2.1.275/2.1.295 native registry schema; see issue35 native source evidence.
  * Native strings have no date/nonempty refinement. Unknown metadata is retained.
- * This validates the global envelope, not a guessed replacement source schema.
+ * Source variants and nested settings plugins are version-aware, read-only checks.
  */
-function assertLifecycleMarketplaceEnvelope(): void {
+function assertLifecycleMarketplaceEnvelope(version: string | undefined): void {
   const file = join(pluginsDir(), 'known_marketplaces.json');
   for (const [name, entry] of Object.entries(readMarketplaces(file))) {
     const invalid = (field: string, expectation: string): never => {
       throw new Error(`Invalid Claude Code marketplace registry: ${file}: ${name}.${field}: expected ${expectation}; repair the native configuration before retrying (no automatic edits)`);
     };
     if (!isRecord(entry)) return invalid('entry', 'object');
-    if (!isRecord(entry['source'])) invalid('source', 'native source object');
+    assertClaudeMarketplaceSource(entry['source'], 'source', version, invalid);
     for (const field of ['installLocation', 'lastUpdated']) if (typeof entry[field] !== 'string') invalid(field, 'string');
     if (entry['autoUpdate'] !== undefined && typeof entry['autoUpdate'] !== 'boolean') invalid('autoUpdate', 'boolean');
   }
@@ -730,7 +731,7 @@ function claudeCodeLifecycleDefinition(contracts: readonly ClaudeNativeRemoteUpd
     id: 'claude-code',
     evidenceProfiles: claudeEvidenceProfiles(detectedVersion, contracts),
     probeVersion: async () => version,
-    observeTarget: async (target) => ({ target, installations: observeClaudeInstallations(target) }),
+    observeTarget: async (target) => ({ target, installations: observeClaudeInstallations(target, detectedVersion) }),
     observeNativeMutationScope: async (request) => ({
       kind: 'bounded',
       mode: 'exact-package',
@@ -750,7 +751,7 @@ function claudeCodeLifecycleDefinition(contracts: readonly ClaudeNativeRemoteUpd
       version: claudeVersionObservation(observeClaudeCodeVersion()),
       targetObservationId: createTargetInventoryObservation('claude-code', {
         target: handle.target,
-        installations: observeClaudeInstallations(handle.target),
+        installations: observeClaudeInstallations(handle.target, detectedVersion),
       }).observationId,
     }),
     stageActivation: async (request) => {
@@ -783,7 +784,7 @@ function claudeCodeLifecycleDefinition(contracts: readonly ClaudeNativeRemoteUpd
     },
     captureActivationPreparation: async (projection, projectedFingerprint) => {
       const installPath = cacheSlot(projection.nativeId, slotVersion(projection.packageVersion, projection.sourceRevision));
-      const prior = claudeReadback(projection, 'none');
+      const prior = claudeReadback(projection, 'none', detectedVersion);
       const nativeCatalog = matchingForeignLifecycleCatalog(projection.nativeId, projection.scopeId, projection.target, projection.stagingRoot, slotVersion(projection.packageVersion, projection.sourceRevision));
       return {
         prior,
@@ -808,13 +809,13 @@ function claudeCodeLifecycleDefinition(contracts: readonly ClaudeNativeRemoteUpd
       };
     },
     captureDisablePreparation: async (request) => ({
-      prior: claudeReadback(activationIdentity(request.activation), 'none'),
+      prior: claudeReadback(activationIdentity(request.activation), 'none', detectedVersion),
       rollbackReference: captureRollback(request.attemptId, request.operationId, request.activation.nativeId),
       rollbackCoverageOperationIds: [...request.selection.affectedOperationIds],
       transition: sessionRestart(),
     }),
     captureRetirementPreparation: async (request) => ({
-      prior: claudeReadback(activationIdentity(request.activation), 'none'),
+      prior: claudeReadback(activationIdentity(request.activation), 'none', detectedVersion),
       rollbackReference: captureRollback(request.attemptId, request.operationId, request.activation.nativeId),
       rollbackCoverageOperationIds: [...request.selection.affectedOperationIds],
       transition: settledTransition(),
@@ -837,6 +838,7 @@ function claudeCodeLifecycleDefinition(contracts: readonly ClaudeNativeRemoteUpd
       const observed = claudeReadback(
         handle,
         handle.action === 'remove' || handle.action === 'retire-orphan' ? handle.route : 'none',
+        detectedVersion,
       );
       return { ...observed, transition: readbackTransition(handle, observed) };
     },
@@ -977,8 +979,8 @@ function claudeSemantics(): Record<PackageSemantic, CapabilityStatus> {
   ])) as Record<PackageSemantic, CapabilityStatus>;
 }
 
-function observeClaudeInstallations(target: LifecycleReadbackData['target']): TargetInstallationData[] {
-  assertLifecycleMarketplaceEnvelope();
+function observeClaudeInstallations(target: LifecycleReadbackData['target'], version: string | undefined): TargetInstallationData[] {
+  assertLifecycleMarketplaceEnvelope(version);
   const registry = readRegistry(join(pluginsDir(), 'installed_plugins.json'));
   const settings = readSettings(join(pluginsDir(), '..', 'settings.json'));
   const enabled = settings['enabledPlugins'];
@@ -1093,8 +1095,9 @@ function activationIdentity(activation: {
 function claudeReadback(
   identity: Pick<LifecycleReadbackData, 'adapterId' | 'target' | 'scopeId' | 'packageName' | 'nativeId'>,
   absentRoute: SelectedLifecycleRoute | 'none',
+  version: string | undefined,
 ): LifecycleReadbackData {
-  assertLifecycleMarketplaceEnvelope();
+  assertLifecycleMarketplaceEnvelope(version);
   const installPath = recordedInstallPath(identity.nativeId);
   const present = installPath !== undefined && existsSync(installPath);
   const retention = {

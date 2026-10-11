@@ -111,6 +111,8 @@ declare const console: {
 
 declare const URL: {
   new(input: string): {
+    protocol: string;
+    hostname: string;
     username: string;
     password: string;
     search: string;

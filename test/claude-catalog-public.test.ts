@@ -68,6 +68,77 @@ test('public Claude rejects malformed foreign source variants and nested setting
   });
 });
 
+test('public Claude blocks invalid native source refinements without repairing foreign metadata', async () => {
+  await withLifecycleCliHarness(harness => {
+    harness.fakeNative('claude', Array.from({ length: 80 }, () => ({ args: ['--version'], stdout: '2.1.295 (Claude Code)\n' })));
+    const source = harness.source('schema-invalid', plugin('demo'));
+    const inline = (nativeSource: unknown): unknown => ({ source: 'settings', name: 'foreign', plugins: [{ name: 'remote', source: nativeSource }] });
+    const cases = [
+      { source: 'unknown' }, { source: 'directory', path: null },
+      { source: 'url', url: 'not a URL' }, { source: 'url', url: 'https://catalog.example/', headers: { X: 1 } },
+      { source: 'github', repo: '', sparsePaths: [1] }, { source: 'git', url: '', skipLfs: null },
+      { source: 'npm', package: 'bad..package' }, { source: 'npm', package: 'valid', registry: 'ftp://registry.example/' },
+      { source: 'settings', name: 'foreign', plugins: [], owner: { name: '' } },
+      { source: 'settings', name: 'foreign', plugins: [{ name: 'bad\u202Ename', source: { source: 'github', repo: '' } }] },
+      inline('./relative'), inline({ source: 'unsupported' }), inline({ source: 'git-subdir', url: '', path: '' }),
+      inline({ source: 'archive', url: 'http://archive.example/plugin.zip' }), inline({ source: 'archive', url: 'https://[::ffff:127.0.0.1]/plugin.zip' }),
+      inline({ source: 'archive', url: 'https://metadata.google.internal/plugin.zip' }), inline({ source: 'archive', url: 'https://archive.example/plugin.zip', sha256: 'a' }),
+      inline({ source: 'command', command: 'echo    /plugin' }), inline({ source: 'command', command: 'echo /plugin', timeout: 601 }),
+    ];
+    for (const nativeSource of cases) {
+      harness.writeHome({ '.claude/plugins/known_marketplaces.json': JSON.stringify({ foreign: { source: nativeSource, installLocation: '', lastUpdated: '', metadata: { opaque: true } } }) });
+      const result = harness.run(['add', source, '--target', 'claude-code', '--json']);
+      expect(result.exitCode).toBe(1);
+      expect(parseLifecycleReport(JSON.parse(result.stdout)).summary.mutationStarted).toBe(false);
+      expect(result.stores['claude-code'].after).toEqual(result.stores['claude-code'].before);
+      expect(result.state.after).toEqual(result.state.before);
+    }
+  });
+});
+
+test('public Claude preserves native-valid source variants and opaque nested metadata', async () => {
+  await withLifecycleCliHarness(harness => {
+    harness.fakeNative('claude', Array.from({ length: 50 }, () => ({ args: ['--version'], stdout: '2.1.295 (Claude Code)\n' })));
+    const source = harness.source('schema-positive', plugin('demo'));
+    const sources = [
+      { source: 'url', url: 'file:///catalog.json', headers: { X: '' }, headersHelper: '' },
+      { source: 'github', repo: '', ref: '', path: '', sparsePaths: [], skipLfs: false },
+      { source: 'git', url: 'git@host:repo', ref: '', sparsePaths: [''] },
+      { source: 'npm', package: '@scope/*', version: '', registry: 'http://registry.example/' },
+      { source: 'file', path: '' }, { source: 'directory', path: '' },
+      { source: 'skills-dir' }, { source: 'hostPattern', hostPattern: '[' }, { source: 'pathPattern', pathPattern: '[' },
+      { source: 'settings', name: 'claude-marketplace', owner: { name: 'owner', email: '', url: 'not-a-url', metadata: { opaque: true } }, plugins: [
+        { name: 'remote', strict: false, source: { source: 'github', repo: '', ref: '', sha: 'a'.repeat(40) }, metadata: { opaque: true } },
+        { name: 'npm', source: { source: 'npm', package: '', version: '' } },
+        { name: 'url', source: { source: 'url', url: 'git@host:repo' } },
+        { name: 'subdir', source: { source: 'git-subdir', url: '', path: ' ' } },
+        { name: 'archive', source: { source: 'archive', url: 'https://10.0.0.1/plugin.zip', sha256: 'A'.repeat(64) } },
+        { name: 'command', source: { source: 'command', command: 'echo /plugin', timeout: 600, mode: 'link' }, headersHelper: '' },
+      ] },
+    ];
+    const known = Object.fromEntries(sources.map((nativeSource, i) => [`foreign-${i}`, { source: { ...nativeSource, opaque: { preserved: true } }, installLocation: '', lastUpdated: '', autoUpdate: false, metadata: { opaque: true } }]));
+    harness.writeHome({ '.claude/plugins/known_marketplaces.json': JSON.stringify(known) });
+    expect(harness.run(['add', source, '--target', 'claude-code', '--json']).exitCode).toBe(0);
+    const after = JSON.parse(readFileSync(join(harness.home, '.claude/plugins/known_marketplaces.json'), 'utf8'));
+    for (const [key, value] of Object.entries(known)) expect(after[key]).toEqual(value);
+  });
+});
+
+test('public Claude source schema follows the detected pinned version for settings names', async () => {
+  for (const version of ['2.1.275', '2.1.295']) await withLifecycleCliHarness(harness => {
+    harness.fakeNative('claude', Array.from({ length: 30 }, () => ({ args: ['--version'], stdout: `${version} (Claude Code)\n` })));
+    const source = harness.source('schema-version', plugin('demo'));
+    harness.writeHome({ '.claude/plugins/known_marketplaces.json': JSON.stringify({ foreign: { source: { source: 'settings', name: 'claude-marketplace', plugins: [] }, installLocation: '', lastUpdated: '' } }) });
+    const result = harness.run(['add', source, '--target', 'claude-code', '--json']);
+    expect(result.exitCode).toBe(version === '2.1.275' ? 1 : 0);
+    if (version === '2.1.275') {
+      expect(parseLifecycleReport(JSON.parse(result.stdout)).summary.mutationStarted).toBe(false);
+      expect(result.stores['claude-code'].after).toEqual(result.stores['claude-code'].before);
+      expect(result.state.after).toEqual(result.state.before);
+    }
+  });
+});
+
 test('public Claude Managed lifecycle registers a native-loadable owned catalog and repairs missing registration', async () => {
   await withLifecycleCliHarness(harness => {
     harness.writeHome({ '.claude/.keep': '' });
