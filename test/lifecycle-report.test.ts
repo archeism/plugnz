@@ -109,6 +109,8 @@ test('versioned historical rollback accounts for change while current Desired re
     { ...report, recovery: { ...report.recovery, schemaVersion: 2 } },
     { ...report, recovery: { ...report.recovery, receipts: [...report.recovery.receipts, ...report.recovery.receipts] } },
     { ...report, recovery: { schemaVersion: 1, receipts: [{ ...report.recovery.receipts[0], status: 'pending' }] } },
+    { ...report, recovery: { schemaVersion: 1, receipts: [{ ...report.recovery.receipts[0], resourceState: 'absent', activationState: 'active-conforming' }] } },
+    { ...report, recovery: { schemaVersion: 1, receipts: [{ ...report.recovery.receipts[0], status: 'pending', settlement: null, finalJournalState: 'completed', reason: createLifecycleReason('recovery', 'recovery.required', 'release failed') }] } },
     { ...report, command: { ...report.command, dryRun: true } },
   ];
   for (const value of negatives) {
@@ -116,6 +118,12 @@ test('versioned historical rollback accounts for change while current Desired re
     try { parseLifecycleReport(value); } catch { rejected = true; }
     expect(rejected).toBe(true);
   }
+});
+
+test('empty additive recovery envelope is valid but never changes aggregate facts', () => {
+  const report = validReport();
+  report.recovery = { schemaVersion: 1, receipts: [] };
+  expect(parseLifecycleReport(report)).toEqual(report);
 });
 
 describe('lifecycle report contract', () => {

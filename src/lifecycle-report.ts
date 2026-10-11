@@ -5,7 +5,7 @@ import {
   type DeploymentScopeIdentity,
 } from './deployment-scope';
 import { unknownErrorDiagnostic } from './error-diagnostic';
-import { parseRecoveryOperationProof, type RecoveryOperationProof } from './recovery-proof';
+import { OPEN_LIFECYCLE_JOURNAL_STATES, parseRecoveryOperationProof, type RecoveryOperationProof } from './recovery-proof';
 import type { JournalState } from './state';
 
 export const LIFECYCLE_REPORT_SCHEMA_VERSION = 1 as const;
@@ -282,6 +282,10 @@ function parseRecoveryReceipts(value: unknown, dryRun: boolean): LifecycleRecove
       const expected = item['settlement'] === 'commit' ? 'completed' : item['settlement'] === 'rollback' ? 'rolled-back' : 'not-attempted';
       if (item['finalJournalState'] !== expected) throw contradiction('completed recovery contradicts its final journal settlement');
     } else if (item['reason'] === null) throw contradiction('uncompleted recovery requires a reason');
+    if (item['status'] === 'pending' && (!oneOf(OPEN_LIFECYCLE_JOURNAL_STATES, item['finalJournalState'])
+      || !isObject(item['reason']) || (item['reason']['code'] !== 'recovery.required' && item['reason']['category'] !== 'readback'))) {
+      throw contradiction('pending recovery requires a durable open journal and recovery/readback reason');
+    }
     if (item['settlement'] === 'commit' || item['settlement'] === 'rollback') {
       if (!original.sealed || !item['readbackVerified']) throw contradiction('verified recovery settlement requires sealed authority and readback');
       if (item['status'] === 'pending' && item['finalJournalState'] !== 'cleanup-pending') throw contradiction('verified pending recovery must remain durably cleanup-pending');
@@ -293,8 +297,9 @@ function parseRecoveryReceipts(value: unknown, dryRun: boolean): LifecycleRecove
     if (item['settlement'] === 'not-attempted' && (original.sealed || original.journalState !== 'pending'
       || item['status'] !== 'completed' || item['mutationStarted'] || item['changed'] || item['readbackVerified']
       || item['resourceState'] !== 'unknown' || item['activationState'] !== 'unknown')) throw contradiction('accepted-intent settlement cannot claim native apply');
-    if (item['readbackVerified'] && (item['resourceState'] === 'unknown' || item['resourceState'] === 'potentially-changed'
-      || item['activationState'] === 'unknown')) throw contradiction('verified recovery cannot claim unknown native state');
+    if (item['readbackVerified'] && !isKnownSafeReadbackState(item['resourceState'], item['activationState'])) {
+      throw contradiction('verified recovery requires a canonical known-safe resource and activation state');
+    }
     return { ...item, original } as unknown as LifecycleRecoveryReceipt;
   });
 }

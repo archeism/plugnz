@@ -44,6 +44,8 @@ rejected. An unsealed missing route remains null, not an invented managed route.
 ## Report envelope
 
 `recovery: { schemaVersion: 1, receipts: [...] }` contains historical receipts.
+An empty envelope is valid and has no aggregate effect; producers normally omit
+it when no recovery was requested. It does not excuse missing eligible originals.
 Each receipt has exactly these fields:
 
 - `original`: the exact precommand open-journal proof above, including its
