@@ -152,3 +152,23 @@ Retained artifacts in the same evidence directory:
 | --- | --- |
 | `plugnz-9e-successful-recovery-accounting.test.ts` | `b6e7a131de3e8ea940c1512b64cbaf3c034acccd6bca5fc181c99304331eb6ba` |
 | `plugnz-9e-successful-recovery-accounting-04.log` | `93d50df9e1aa3c499bb119b5cd4b85109d682d49399a955d54f75e84001742d6` |
+
+## Combined gate and bounded test-budget correction
+
+Frozen integration `3f6c651` passed typecheck but its unmodified `bun test`
+terminated with 667 passes, five skips and two failures (4415 assertions,
+224.31 seconds). Both failures hit Bun's default five-second deadline in the
+existing ZCode multi-CLI activation scenarios. The exact same file passed in
+isolation without a timeout override: five tests, 35 assertions, 13.55 seconds;
+the affected cases took 2.71 and 3.48 seconds. This is not a green full gate and
+is not attributed to a native capability defect from timeout alone.
+
+Only those two multi-CLI test deadlines are now explicitly bounded at 20 seconds;
+assertions and production subprocess timeouts are unchanged. Focused recheck:
+five tests, 35 assertions, 13.52 seconds; typecheck and diff check passed. A fresh
+unmodified full suite on the corrected frozen tree remains required before main.
+
+| Retained log | SHA-256 |
+| --- | --- |
+| `plugnz-3f6-integration-full-timeout.log` | `04886a6c64d9112d4af3498ae8e0337a6e0571ee7f053c6ee8f4b2fe1b46b72c` |
+| `plugnz-3f6-zcode-isolated.log` | `88a698ad077550780e69b6f44a13cf167a9665abe58dab0cc1f8c1042de9f0a3` |
