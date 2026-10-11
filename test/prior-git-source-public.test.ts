@@ -8,6 +8,7 @@ import { parseLifecycleReport } from '../src/lifecycle-report';
 import captured from './fixtures/prior-git-source/producer-88d89c5.json';
 import otherHosts from './fixtures/prior-git-source/other-hosts-88d89c5.json';
 import { repoRoot } from './util';
+import { hermesPublicRuntime } from './hermes-runtime-fixture';
 
 // Frozen stores and ledger captured from an actual 88d89c5 CLI install, not a
 // ledger fabricated to make the new route selectable. Only absolute home paths
@@ -19,6 +20,7 @@ for (const host of ['hermes', 'dcode', 'codex', 'claude-code', 'cursor', 'omp'] 
     if ((mode === 'recovery-after-apply' || mode === 'killed-before-apply') && host !== 'dcode') continue;
     test(`${host} historical Git provenance ${mode}`, async () => {
       await withLifecycleCliHarness(async harness => {
+        if (host === 'hermes') hermesPublicRuntime(harness);
         const files = homes[host]!;
         harness.writeHome(Object.fromEntries(Object.entries(files).map(([path, bytes]) => [path, bytes.replaceAll('{{HOME}}', harness.home)])));
         for (const [path, target] of Object.entries(links[host] ?? {})) {
@@ -41,7 +43,7 @@ for (const host of ['hermes', 'dcode', 'codex', 'claude-code', 'cursor', 'omp'] 
         // Version probing can occur more than once; use an unlimited local probe.
         const dcode = join(harness.home, 'dcode-version');
         writeFileSync(dcode, '#!/bin/sh\necho "deepagents-code 0.1.83"\n'); chmodSync(dcode, 0o755);
-        const probes: Record<string, string> = { OPEN_PLUGIN_CODEX_BIN: 'codex-cli 0.162.0', OPEN_PLUGIN_CLAUDE_CODE_BIN: '2.1.78 (Claude Code)', OPEN_PLUGIN_CURSOR_BIN: '2.4.0', OPEN_PLUGIN_OMP_BIN: '18.1.4' };
+        const probes: Record<string, string> = { OPEN_PLUGIN_CODEX_BIN: 'codex-cli 0.162.0', OPEN_PLUGIN_CLAUDE_CODE_BIN: '2.1.295 (Claude Code)', OPEN_PLUGIN_CURSOR_BIN: '2.4.0', OPEN_PLUGIN_OMP_BIN: '18.1.4' };
         const nativeEnv: Record<string, string> = {};
         for (const [key, version] of Object.entries(probes)) {
           const path = join(harness.home, key);
