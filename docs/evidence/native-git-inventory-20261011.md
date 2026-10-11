@@ -176,3 +176,36 @@ sentinels with the stage present or absent, valid repeatable pre-seal cleanup,
 unrelated siblings, sealed/durable cleanup and stable native-root links.
 This is a bounded fixture checkpoint pending independent review, not a fresh
 full-suite or released-native Sandbox admission.
+
+## Combined main and test-budget verification
+
+`d7583eb` preserves the reviewed cleanup history and merges main `bd2d06f`
+(package 0.0.11). The exact frozen full run had 740 passes, 5 skips, 3 failures,
+5043 assertions in 531.24 seconds; typecheck passed. All three failures hit
+Bun's implicit 5-second case deadline: ZCode fresh-install rollback, ZCode
+failed fresh install, and Grok failed-update rollback. The failed run remains
+retained, not reported as a successful gate:
+`/tmp/plugnz-d758-combined-full.log`, SHA256
+`676616c26f225f5b40458648ba04c16a6be175d35b843a5005b7a87ff418ba18`.
+Its runner was Bun 1.4.0, but ambient-PATH fixture shebangs resolved Bun 1.3.14.
+
+The bounded 20-second diagnostic passed the original rollback assertions:
+4 tests (including an adjacent fresh-install control), 59 assertions, 9.89
+seconds; the three failed cases individually took 2.61, 2.55 and 3.02 seconds.
+Only those three cases gain explicit 20-second budgets. The final focused run
+without a CLI timeout override passed 4 tests, 59 assertions in 8.77 seconds;
+typecheck passed. No assertion or production timeout changed. Raw final log:
+`/tmp/plugnz-d758-final-explicit-deadlines.log`, SHA256
+`11b8eed1db16a003853f26c66ca088763afa016e8edc26ccc71817bdf27db0cd`.
+
+The frozen packed Node gate passed 48 tests, 534 assertions in 255.25 seconds:
+Native Git public CLI, precondition, recovery, route contract and ZCode
+activation/retirement files. CLI-harness subprocesses used Node 22.23.1 and
+the built artifact; factory tests still used Bun 1.4.0. Native CLI boundaries
+were fixtures, not a released-native proof. Artifact SHA256:
+`d82ecd244e9d06647f7ea528ae614fa5bd0face7042f5e1ae3fa7f680e99d1dd`;
+log `/tmp/plugnz-d758-packed-node22.log`, SHA256
+`218183d83afcaf4d0ad12efe14c241b791dfd4d5c89e28c2402a084f94f76812`.
+
+Next full verification pins PATH to Bun 1.4.0 for both runner and fixture
+shebangs. A passing focused/packed gate does not erase the failed full attempt.

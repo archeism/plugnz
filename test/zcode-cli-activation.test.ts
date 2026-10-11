@@ -524,7 +524,7 @@ describe('ZCode CLI native activation', () => {
       const registry = JSON.parse(readFileSync(join(cliRoot, 'plugins', 'installed_plugins.json'), 'utf8')) as { plugins: Array<{ id: string }> };
       expect(registry.plugins.some((row) => row.id === NATIVE)).toBe(false);
     });
-  });
+  }, 20_000);
 
   test('a failed fresh install drops the marketplace registration', async () => {
     await withHome(async (home, cliRoot) => {
@@ -544,7 +544,7 @@ describe('ZCode CLI native activation', () => {
       const after = existsSync(marketsPath) ? JSON.parse(readFileSync(marketsPath, 'utf8')) as Record<string, unknown> : {};
       expect(Object.hasOwn(after, 'plgnz-activation01')).toBe(false);
     });
-  });
+  }, 20_000);
 
   test('a failed update rolls back to the previous activation', async () => {
     await withHome(async (home) => {

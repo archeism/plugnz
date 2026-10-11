@@ -340,7 +340,7 @@ describe('Grok lifecycle SPI', () => {
       expect(readFileSync(join(home, '.grok', 'config.toml'), 'utf8')).toBe('plugin_auto_update = false\n');
       expect(stageNames(home)).toEqual([]);
     });
-  });
+  }, 20_000);
 
   test('rolls a failed fresh install back to an absent plugin', async () => {
     await isolated(async (home, root) => {
