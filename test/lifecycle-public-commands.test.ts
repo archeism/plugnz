@@ -2290,6 +2290,7 @@ describe('public lifecycle commands', () => {
       const registryPath = join(harness.storePath('dcode'), '.state', 'installed_plugins.json');
       const registry = JSON.parse(readFileSync(registryPath, 'utf8')) as { plugins: Record<string, Array<{ installPath: string }>> };
       const installed = registry.plugins['demo@local']![0]!.installPath;
+      const marker = readFileSync(join(installed, '.plgnz-install.json'), 'utf8');
       // The old writer refuses removal when the native ownership marker is gone.
       rmSync(join(installed, '.plgnz-install.json'));
       const result = harness.run(['remove', 'demo@local', '--target', 'dcode', '--json'], { env });
@@ -2305,6 +2306,15 @@ describe('public lifecycle commands', () => {
       expect(activation?.pending?.operation).toBe('remove');
       expect(state.attempts.some((attempt) => attempt.command === 'remove' && attempt.journal.some((row) => row.state === 'applying'))).toBe(true);
       expect(existsSync(join(installed, 'plugin.json'))).toBe(true);
+      writeFileSync(join(installed, '.plgnz-install.json'), marker);
+      const retried = harness.run(['remove', 'demo@local', '--target', 'dcode', '--json'], { env });
+      const retryReport = parseLifecycleReport(JSON.parse(retried.stdout));
+      const finalized = JSON.parse(bytesToText(retried.state.after ?? [])) as typeof state;
+      expect(retried.exitCode).toBe(0);
+      expect(retryReport.plan[0]?.operationId).toBe(report.plan[0]?.operationId);
+      expect(finalized.attempts.some((attempt) => attempt.command === 'remove'
+        && attempt.journal.some((entry) => (entry as { operationId?: string }).operationId === retryReport.plan[0]?.operationId
+          && entry.state === 'completed'))).toBe(true);
     });
   });
 

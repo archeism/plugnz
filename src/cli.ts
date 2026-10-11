@@ -1756,13 +1756,17 @@ export async function main(argv: string[]): Promise<number> {
         preflightFailure = reason('internal', 'internal.invariant', 'install is pending; refusing removal');
         break;
       }
+      const pendingOperationId = claimed?.pending?.operation === 'remove'
+        ? lifecycleState.attempts.find((attempt) => attempt.id === claimed.pending!.attemptId)?.journal.find((entry) =>
+          entry.scopeId === claimed.scopeId && entry.packageId === claimed.packageId && entry.nativeId === claimed.nativeId)?.operationId
+        : undefined;
       pairs.push({
         writer,
         record,
         nativeId: identity.nativeId,
         legacyNativeIds: identity.legacyNativeIds,
         failure: null,
-        operation: planOperation({
+        operation: { ...planOperation({
           command: 'remove',
           scope: selected.scope,
           package: identity.package,
@@ -1770,7 +1774,7 @@ export async function main(argv: string[]): Promise<number> {
           action: 'retire-orphan',
           route: 'managed',
           discriminator: lifecycleVersion === 2 ? String(lifecycleState.stateGeneration) : undefined,
-        }),
+        }), ...(pendingOperationId === undefined ? {} : { operationId: pendingOperationId }) },
       });
     }
     if (preflightFailure !== null) {
