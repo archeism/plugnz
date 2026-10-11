@@ -69,6 +69,8 @@ export type LifecyclePlan =
       readonly kind: 'frozen';
       readonly requestedDryRun: boolean;
       readonly attemptId: string;
+      /** Retained immutable roots; apply never fetches or freezes a mutable Source again. */
+      readonly frozenSources: ReadonlyMap<string, FrozenSource>;
       /** Original add argument. Carries fetch credentials that must not enter the report. */
       readonly transportSource?: string;
       readonly report: LifecycleReport;
@@ -381,7 +383,7 @@ async function planSync(
       requiredCapabilities: [...requiredSemanticsForOperation(inventory, 'install')].sort(),
       adoptionRequested: selected.adoptionRequested,
     });
-    const row = await classifyDesired(item, selected, inventory, nativeId, attemptId, state, command === 'add' || command === 'update', command === 'update');
+    const row = await classifyDesired(item, selected, inventory, nativeId, attemptId, state, command === 'update');
     if (row.kind === 'defect') return row;
     classified.push(row);
   }
@@ -407,7 +409,6 @@ async function classifyDesired(
   nativeId: string,
   attemptId: string,
   state: LifecycleStateV2,
-  applyUpdates: boolean,
   reapplyMatchingUpdate: boolean,
 ): Promise<Classified | Defect> {
   const operationId = operationIdentity('desired-pair', item.scope.id, selected.plugin.name, nativeId, item.frozen.snapshot.fingerprint);
@@ -458,10 +459,12 @@ async function classifyDesired(
   const recordedRoute = activation?.route.kind === 'managed' || activation?.route.kind === 'native' ? activation.route.kind : null;
   const matchingBytes = sameBytes(activation, installation, selected.plugin);
   const action = chosenAction(replacing, recordedRoute, decision.route, matchingBytes, reapplyMatchingUpdate);
-  const plannedOperationId = action === 'update' && matchingBytes && reapplyMatchingUpdate
-    ? operationIdentity('desired-pair', item.scope.id, selected.plugin.name, nativeId, `${item.frozen.snapshot.fingerprint}\0${state.stateGeneration}`)
+  // One intent may be replanned after a verified rollback. The state ledger retains
+  // every attempt, so a new attempt must not reuse that attempt's journal identity.
+  const plannedOperationId = action === 'update'
+    ? operationIdentity('desired-pair', item.scope.id, selected.plugin.name, nativeId, `${item.frozen.snapshot.fingerprint}\0${attemptId}`)
     : operationId;
-  if (action === 'route-migrate' || (action === 'update' && !applyUpdates)) {
+  if (action === 'route-migrate') {
     return classified(
       operationId,
       'desired-pair',
@@ -780,6 +783,7 @@ function frozenPlan(
   prepared: readonly Prepared[],
 ): LifecyclePlan {
   const snapshots: LifecycleSourceSnapshotContext[] = [];
+  const frozenSources = new Map<string, FrozenSource>();
   const seen = new Set<string>();
   for (const item of prepared) {
     if (item.kind !== 'sync') continue;
@@ -787,6 +791,7 @@ function frozenPlan(
     if (seen.has(id)) continue;
     seen.add(id);
     snapshots.push({ id, reference: item.frozen.snapshot });
+    frozenSources.set(id, item.frozen);
   }
   const outcomes = operations.map((row) => outcomeFor(row));
   const failed = outcomes.filter((outcome) => outcome.result !== 'succeeded');
@@ -812,6 +817,7 @@ function frozenPlan(
     kind: 'frozen',
     requestedDryRun: input.dryRun,
     attemptId,
+    frozenSources,
     report,
     scopes,
     operations,
@@ -1121,8 +1127,7 @@ export function resolvePlannedSource(
   transportSource: string | undefined,
   cache: Map<string, FrozenSource>,
 ): FrozenSource {
-  const argument = transportArgument(binding, transportSource);
-  if (argument === undefined) return resolveSource(sourceArgument(binding));
+  const argument = transportArgument(binding, transportSource) ?? sourceArgument(binding);
   const cached = cache.get(argument);
   if (cached !== undefined) return cached;
   const frozen = resolveSource(argument);

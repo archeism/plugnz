@@ -6,8 +6,8 @@
  * real store records an absolute path; materialization rewrites it to the
  * temp dir after copying.
  */
-import { chmodSync, cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { delimiter, dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 
@@ -39,6 +39,23 @@ export interface HostEnv {
   env: Record<string, string>;
 }
 
+/** Native probes are opt-in fixtures, never whatever happens to be installed. */
+export function isolatedHostEnv(home: string): Record<string, string> {
+  const tools = join(home, '.test-tools');
+  mkdirSync(tools, { recursive: true });
+  const bun = join(tools, 'bun');
+  if (!existsSync(bun)) symlinkSync(process.execPath, bun);
+  return {
+    OPEN_PLUGIN_HOME: home,
+    PATH: [tools, '/usr/bin', '/bin'].join(delimiter),
+    OPEN_PLUGIN_CLAUDE_CODE_BIN: join(home, 'missing-claude'),
+    OPEN_PLUGIN_CODEX_BIN: join(home, 'missing-codex'),
+    OPEN_PLUGIN_OMP_BIN: join(home, 'missing-omp'),
+    OPEN_PLUGIN_KIMI_BIN: join(home, 'missing-kimi'),
+    OPEN_PLUGIN_ZCODE_CLI_BIN: join(home, 'missing-zcode'),
+  };
+}
+
 /** Copy `test/fixtures/<host>/` into an existing temp home and patch __HOME__. */
 export function materializeInto(home: string, host: string): void {
   cpSync(join(fixturesRoot, host), home, { recursive: true });
@@ -53,7 +70,7 @@ export function materializeInto(home: string, host: string): void {
 export function materialize(host: string): HostEnv {
   const home = mkdtempSync(join(tmpdir(), `open-plugin-${host}-`));
   materializeInto(home, host);
-  const env: Record<string, string> = { OPEN_PLUGIN_HOME: home };
+  const env = isolatedHostEnv(home);
   if (host === 'omp') {
     env['OPEN_PLUGIN_OMP_ROOT'] = join(home, '.omp');
   }

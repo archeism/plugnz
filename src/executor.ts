@@ -14,7 +14,8 @@ import {
 } from './lifecycle-report';
 import { LifecycleHostPhaseError, createFrozenPackageSnapshot, createLifecyclePlanCoverage, createResolvedLifecyclePins } from './lifecycle-runtime';
 import { ownedActivation, retirementTombstone } from './owned-activation';
-import { lifecycleAttemptIdForPlannedScopes, resolvePlannedSource, type LifecyclePlan, type PlannerHost } from './planner';
+import { lifecycleAttemptIdForPlannedScopes, type LifecyclePlan, type PlannerHost } from './planner';
+import { fingerprintTree } from './fingerprint';
 import { inventoryPackageSemantics, SemanticInventoryError, type PackageSemanticInventory } from './semantic-inventory';
 import { CryptoHasher } from './runtime';
 import type { FrozenSource, PluginSource } from './source';
@@ -70,6 +71,17 @@ async function executeFrozen(
   const ledger = new Ledger(now);
   const refusal = ledger.generationRefusal(plan);
   if (refusal !== null) return refusalReport(plan, refusal);
+  // Validate every retained input before the first host or ledger write, so a
+  // corrupted later Source cannot leave earlier scopes partially applied.
+  try {
+    for (const frozen of plan.frozenSources.values()) {
+      if (fingerprintTree(frozen.snapshotDir) !== frozen.snapshot.fingerprint) {
+        return refusalReport(plan, createLifecycleReason('internal', 'internal.invariant', 'retained frozen source bytes drifted before apply'));
+      }
+    }
+  } catch (error) {
+    return refusalReport(plan, thrownReason(error));
+  }
   const outcomes: LifecycleOperationOutcome[] = [];
   let stopped: LifecycleReason | null = null;
   for (const row of plan.operations) {
@@ -274,8 +286,10 @@ async function prepareActivation(
   if (context === undefined) {
     return refused(createLifecycleReason('internal', 'internal.invariant', `${action} '${operation.package}' has no frozen source snapshot`));
   }
-  const frozen = resolvePlannedSource(operation.scope.source, plan.transportSource, new Map());
-  if (frozen.snapshot.fingerprint !== context.reference.fingerprint || frozen.snapshot.revision !== context.reference.revision) {
+  const frozen = operation.sourceSnapshotId === null ? undefined : plan.frozenSources.get(operation.sourceSnapshotId);
+  if (frozen === undefined) return refused(createLifecycleReason('internal', 'internal.invariant', `${action} '${operation.package}' lost its retained frozen source`));
+  if (frozen.snapshot.fingerprint !== context.reference.fingerprint || frozen.snapshot.revision !== context.reference.revision
+    || fingerprintTree(frozen.snapshotDir) !== context.reference.fingerprint) {
     return refused(createLifecycleReason('internal', 'internal.invariant', `${action} '${operation.package}' source bytes drifted from the frozen snapshot`));
   }
   const plugin = frozen.plugins.find((candidate) => candidate.name === operation.package);
@@ -288,6 +302,9 @@ async function prepareActivation(
   const version = await host.adapter.probeVersion(observation.target);
   if (version.kind !== 'detected') {
     return refused(createLifecycleReason('runtime', 'runtime.operation-failed', `${action} '${operation.package}' lost its detected target version`));
+  }
+  if (fingerprintTree(frozen.snapshotDir) !== context.reference.fingerprint) {
+    return refused(createLifecycleReason('internal', 'internal.invariant', `${action} '${operation.package}' retained snapshot changed during target observation`));
   }
   const inventory = inventoryPackageSemantics(plugin);
   const resolvedPins = resolveRecordedPinExecutables(plugin.dir, recordedPins);
