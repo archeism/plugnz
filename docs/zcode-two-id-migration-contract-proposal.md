@@ -98,6 +98,7 @@ type ZCodeTwoIdProof = {
   aliasMode: "two-physical-ids";
   oldLedgerNativeId: string; oldPhysicalNativeId: string; newNativeId: string;
   oldObservationId: string;
+  oldRetirementRoute: "managed";
   oldMarkerRawDigest: Digest;
   oldReadback: SerializedLifecycleOperation["prior"];
   newPrior: SerializedLifecycleOperation["prior"]; // absent, independently proved
@@ -120,16 +121,12 @@ use the existing framed tree algorithm, prefixed; no unknown extra resource byte
 are ignored. Existing retention observations remain mandatory composite readback,
 but their path/status-only shape is not a substitute for these byte proofs.
 
-Do not force a verified modern activation into `LegacyRecordProof`. The shared
-relation needs a strictly discriminated original variant: existing
-`legacy-unsealed` proof unchanged, or `verified-activation` containing the exact
-strict Scope/activation snapshot and its domain-separated digest. The latter has
-no invented legacy original/recovery receipt and requires current independent
-native correlation. Original snapshots remain retained after update/retirement.
-Legacy eligibility, complete recovery/adoption accounting and first-snapshot
-invariants remain exactly those in `97b411d`. This variant must be frozen with the
-receipt-contract owner before runtime code; two writers must not invent different
-interpretations. No generic modern ownership upgrade is implied.
+Do not force a verified modern activation into `LegacyRecordProof`. The approved
+`75c07bf` foundation is strictly legacy-only; its `legacyAdoptions` v1 fields and
+entries stay unchanged. Coordinate with that owner before runtime/schema edits.
+The exact separate optional envelope proposed below distinguishes origin kinds;
+it reuses shared canonical hashing/first-retention/immutable-commit rules without
+pretending modern history has an unknown legacy operation.
 
 Add explicit `identity-migrate` plan/journal/handle action. Route remains Native
 only if the new route proves it; it is not `install` with an invisible old delete.
@@ -139,6 +136,297 @@ Do not rewrite the old-ID prior into a new-ID single readback to satisfy existin
 single-ID validators. Runtime/serialization, state, reader, report, recovery and
 consumer validators must explicitly understand and check both IDs. Exact schemas,
 digest domains and worked vectors require independent contract review before code.
+
+## Exact origin, relation and public accounting extension
+
+All types below are closed, reject unknown fields/versions, and use the existing
+strict validators for referenced types. Required nullable fields are present.
+`Digest` and canonical `H` are exactly the shared wire's definitions, not a new
+JSON-hashing algorithm. The separate optional state field is:
+
+```ts
+type VerifiedActivationIdentity = {
+  scopeId: string; packageId: string; nativeId: string;
+  sourceRelativeDir: string; sourceRevision: string;
+  ownership: Exclude<OwnershipProofRecord, { kind: "legacy-claim" }>;
+  activatedAt: string | null;
+};
+type VerifiedActivationSnapshot = {
+  scope: DeploymentScopeRecord;
+  activation: ActivationRecord;
+};
+type VerifiedActivationOriginal = {
+  schemaVersion: 1;
+  identity: VerifiedActivationIdentity;
+  originalId: Digest;
+  snapshot: VerifiedActivationSnapshot;
+  recordDigest: Digest;
+};
+type IdentityMigrationOrigin =
+  | { kind: "verified-activation"; original: VerifiedActivationOriginal }
+  | { kind: "legacy-unsealed"; legacy: LegacyRecordProof };
+type IdentityMigrationAdmission = {
+  schemaVersion: 1;
+  origin: IdentityMigrationOrigin;
+  source: SourceSnapshotReference;
+  target: PersistedTargetIdentity;
+  packageName: string; packageVersion: string;
+  sourceRelativeDir: string;
+  projectedFingerprint: Digest;
+  native: ZCodeTwoIdProof;
+  fresh: {
+    attemptId: string; operationId: string; command: "add" | "sync" | "update";
+    baseStateGeneration: number;
+    scopeId: string; packageName: string; nativeId: string;
+    sourceSnapshotId: string; action: "identity-migrate"; route: "native";
+  };
+  admissionId: Digest;
+};
+type IdentityMigrationRecord = {
+  schemaVersion: 1;
+  admission: IdentityMigrationAdmission;
+  seal: PairedIdentitySeal | null; sealDigest: Digest | null;
+  phase: "prepared" | "not-attempted" | "rolled-back" | "committed";
+  commit: IdentityMigrationCommit | null;
+};
+// Optional state-v2 addition; does not change legacyAdoptions-v1:
+// identityMigrations?: { schemaVersion: 1; records: IdentityMigrationRecord[] }
+```
+
+`VerifiedActivationIdentity` is derived field-for-field from the original strict
+activation, never supplied by a caller. Its `originalId` is
+`H("plugnz/verified-activation-identity/v1", identity)`. Require authoritative
+matching active Scope, exact Source/target/context, created/adopted ownership,
+known route, verified active readback, no pending activation/journal for that pair,
+and non-null installed/projected/source fingerprints. Version/path/revision and
+ownership times must be valid strict values. `sourceRelativeDir` is mandatory;
+absence cannot be guessed. Its record digest is
+`H("plugnz/verified-activation-record/v1", snapshot)`.
+
+This stable original key excludes mutable Scope aggregate desired/lastAttempt
+headers, but includes the existing ownership proof and verification time plus
+activation time/revision/path. A newly re-enrolled activation is not silently
+treated as the old origin merely because its name/Native ID matches. If distinct
+live records produce the same key but different exact activation authority, fail
+as contradictory history rather than choosing one.
+
+First atomic prepared retention fixes one exact snapshot/recordDigest per modern
+`originalId`, even after not-attempted/rolled-back fresh relations. Later retries
+reuse it, never recapture newer Scope aggregate headers. While the old activation
+is active, every authority-bearing activation field must still equal the retained
+snapshot; live Scope identity/source/target/context/authority must match. Mutable
+Scope desired/attempt/timestamp aggregate fields may legitimately progress under
+the existing generation CAS and are not permanent snapshot-equality predicates.
+After verified replacement, retain proof/sealed commit permanently; subsequent
+canonical update/remove/retire does not require the old activation to reappear.
+Historical validity is not live Desired conformance or retirement authority.
+
+Legacy origins reuse the exact immutable `LegacyRecordProof`, digest and original
+tuple from the shared wire. Across **both** optional envelopes, all records for
+one legacy original must reuse its first retained snapshot and there may be only
+one open prepared relation/one committed supersession. Existing v1 entries are
+not rewritten into modern origins or rehashed under a different record domain.
+The new origin union alone grants no ownership or legacy recovery authority.
+
+Admission identity is
+`H("plugnz/identity-migration-admission/v1", admission without admissionId)`.
+Strict origin/native/Source/target/fresh-operation correlations are additional
+checks, never replaced by a matching hash. The shared deterministic attempt and
+operation derivation applies unchanged. Expectations are excluded from derivation.
+The exact migration
+input is `operationIdentity("desired-pair", scopeId, packageName, newNativeId,
+sourceFingerprint + "\\0" + attemptId)`; there is only one current Desired pair.
+
+Existing explicit manifest selector may add optional
+`expectedMigration: { schemaVersion: 1; admissionId: Digest }`. It must match a
+real migration and cannot create one. A legacy-unsealed origin also requires
+existing explicit `adoptExisting: true`; a verified modern owned origin does not
+require invented adoption authority. Direct commands freeze admission before
+writes; Personal's two-process flow supplies the preview expectation. Original
+Scope/Source/target/version/native-byte drift or ambiguous correspondence anywhere
+is global zero-write refusal. Own recovery/replan writes cannot silently rebind a
+precommand expectation or refetch Source.
+
+Inventory and public report additions are separately optional/versioned:
+
+```ts
+type IdentityMigrationHistory = {
+  schemaVersion: 1;
+  modernOriginals: VerifiedActivationOriginal[];
+  records: IdentityMigrationRecord[];
+};
+// scopes row: identityMigrationHistory?: IdentityMigrationHistory
+// plan/outcome: identityMigration?: IdentityMigrationAdmission
+type IdentityMigrationReceipt = {
+  origin: IdentityMigrationOrigin;
+  admissionId: Digest;
+  status: "not-attempted" | "pending" | "rolled-back" | "committed";
+  record: IdentityMigrationRecord | null;
+  reason: LifecycleReason | null;
+};
+// report: identityMigrations?: { schemaVersion: 1; receipts: IdentityMigrationReceipt[] }
+```
+
+Modern originals expose each eligible exact precommand activation once, keyed by
+`originalId` plus recordDigest; conflicts are corruption. Historical relation
+snapshots persist even when a live modern original has been replaced. Inventory
+must not fabricate a modern original from an imported legacy claim. All scopes,
+contexts, Source identities and records correlate exactly, not by package names.
+
+A modern receipt matches exactly one requested previewed migration or inventoried
+fresh pending relation. It is never a `RecoveryOperationProof` for the old modern
+activation, never included in the legacy-original accounting set, and never emits
+a legacy recovery/adoption receipt. A resumed fresh journal receives its ordinary
+modern recovery receipt; the origin/migration receipt accounts for the historical
+relation, not a second native mutation. Current outcomes/modern recovery receipts
+carry changed flags once; migration receipts carry no extra changed flag.
+
+For legacy originals, eligible precommand originals form the **disjoint complete**
+union of ordinary recovery receipts, existing v1 adoption receipts, and new
+legacy-unsealed migration receipt origins. One original in two families is invalid;
+all unrelated pending originals retain ordinary not-attempted accounting. A
+committed relation removes blocking eligibility only after strict retained
+original/paired-seal/modern-COMMIT validation. Both histories remain reader-visible.
+
+`committed` requires matching durable committed record, immutable paired commit
+and null reason; `pending` requires prepared/committed record plus exact unresolved
+modern journal and precise reason; `rolled-back` requires verified paired rollback
+and non-null failure reason; `not-attempted` permits null record only before fresh
+intent or an exact no-write settled record. No status settles an unknown original.
+Consumer ordering is precommand scopes → targeted preview/expectation → command
+→ strict coverage/accounting → targeted post-scopes durable-commit verification
+→ later writes, using existing seams and the shared omission exception only.
+
+## Exact paired seal and immutable commit
+
+```ts
+type PairedIdentitySeal = {
+  schemaVersion: 1; admissionId: Digest;
+  adapterId: "zcode-cli"; attemptId: string; operationId: string;
+  scopeId: string; target: PersistedTargetIdentity;
+  packageName: string; action: "identity-migrate"; route: "native";
+  oldRetirementRoute: "managed";
+  source: SourceSnapshotReference;
+  packageFingerprint: Digest; projectedFingerprint: Digest;
+  detectedVersion: string; versionProbeId: string; capabilityEvidenceId: string;
+  mutationGroupId: string; mutationInvocationOperationId: string;
+  affectedNativeIds: [string, string]; affectedOperationIds: [string];
+  old: { nativeId: string; prior: SerializedLifecycleOperation["prior"]; expected: SerializedLifecycleOperation["expected"] };
+  canonical: { nativeId: string; prior: SerializedLifecycleOperation["prior"]; expected: SerializedLifecycleOperation["expected"] };
+  priorRoots: RootProof[]; expectedRoots: RootProof[];
+  priorRetention: RetentionProof[]; expectedRetention: RetentionProof[];
+};
+type IdentityMigrationCommit = {
+  schemaVersion: 1; admissionId: Digest; sealDigest: Digest;
+  verifiedReadback: {
+    old: SerializedLifecycleOperation["expected"];
+    canonical: SerializedLifecycleOperation["expected"];
+    roots: RootProof[]; retention: RetentionProof[];
+  };
+  stateGeneration: number; committedAt: string; commitId: Digest;
+};
+```
+
+The old/canonical readbacks retain their actual distinct native IDs; all other
+adapter/Scope/target/package identity fields match the operation. Old prior is
+present and verified active; canonical prior independently absent with no active
+entry or roots. Old expected is absent/inactive with not-applicable enablement,
+but retained data/options; canonical expected is active/present/enabled with
+exact projected native/resource bytes. Root proofs describe actual filesystem
+post-state, not only registry presence. Old owned payload roots are removed only
+if independently exclusive; shared roots are preserved with exact remaining
+fingerprints and unchanged sibling membership explicitly bound by the native
+proof. A shared path cannot appear as both absent and preserved. If this cannot
+be proved, do not seal this format's migration.
+
+Both affected Native IDs occur exactly once in sorted order, exactly old/new;
+affectedOperationIds is exactly this fresh operation, and group/invocation IDs are
+exactly its operation ID. This proposal does not batch several migrations under
+an invented leader. Detected version/probe and capability evidence match the
+fresh selected route and admission; all package/Source fingerprints use the actual
+documented algorithm, with wire digest prefix validated rather than string-coerced.
+The public seal is the exact projection of the new paired serialized handle,
+excluding private artifact/rollback paths; validators recompute it field-for-field.
+The private handle retains both rollback priors and artifact references, never
+forges an old-ID prior under the canonical new ID.
+
+Existing ZCode explicitly marks Native uninstall unsupported because it drops
+data/options. `route: native` is the new canonical activation route;
+`oldRetirementRoute: managed` is mandatory and visible. A distinct composite
+`identity-migrate` capability profile must prove new Native activation and
+retention-safe adapter-managed old retirement, including paired rollback. It
+cannot borrow current Native install/update support or invoke Native uninstall.
+The old expected absent readback reflects Managed retirement; old prior retains
+the actual Native representation. No prior route is rewritten to hide this fact.
+
+`sealDigest = H("plugnz/identity-migration-seal/v1", seal)`;
+`commitId = H("plugnz/identity-migration-commit/v1", commit without commitId)`.
+Commit verifiedReadback must equal both expected readbacks/roots/retention and
+reflect the actual verified paired observation. Its generation is the one atomic
+replacement generation, not a later cleanup generation. Admission/handle IDs,
+journal `identity-migrate` action/Native route, seal, immutable COMMIT settlement
+and cleanup-pending/completed state must all correlate. Missing/contradictory
+history is loud; later canonical activation updates/removal cannot alter commit.
+
+## Coverage and one atomic Desired pair
+
+Freeze exactly one Desired operation keyed by `(Scope, packageName)` with canonical
+new Native ID and `identity-migrate` action. Its coverage consumes **both** old and
+new IDs; the old owned activation is a transaction dependency, not an independent
+orphan. Global omission planning must subtract admitted old activation identities
+before classifying retire-orphan operations. Another requested remove/retire/pin
+against either ID conflicts globally; no duplicate package outcome or second
+retirement is permitted. An unadmitted old identity remains blocked by the guard,
+never omitted to force convergence. A failed/pending migration blocks Scope prune
+and leaves lastConverged unchanged; a composite verified commit advances it once.
+
+Ledger acceptance retains the old active record unchanged until the composite
+commit. The fresh paired journal is discoverable by its canonical ID **and** old-ID
+dependency; all add/sync/update/remove/retire/pin/recovery guards must find it even
+if no new activation exists yet. Commit CAS atomically replaces the exact old
+active row, writes the canonical owned row, immutable relation/commit/readback and
+fresh COMMIT cleanup-pending journal. No independently persisted intermediate
+ownership upgrade or old-record deletion is valid. Rolled-back attempts retain
+the same origin snapshot and both priors, with no committed replacement relation.
+
+## Worked stable-key/retry/coverage vectors
+
+This canonicalization-only vector is synthetic, not native authority. Local
+Source `/fixtures/catalog` and `zcode-cli/default` derive the existing Scope ID
+below. Canonical payload is the exact one-line JSON (without final newline):
+
+```json
+{"activatedAt":"2026-10-11T00:00:00.000Z","nativeId":"demo@catalog","ownership":{"kind":"created","proofKey":{"key":"sha256:0000000000000000000000000000000000000000000000000000000000000000","kind":"managed-marker"},"verifiedAt":"2026-10-11T00:00:00.000Z"},"packageId":"demo","scopeId":"scope-v1-39b5df12b629b9414c9c752db5ee5f8e437e42195f63f343e991146760e5f7ae","sourceRelativeDir":"plugins/demo","sourceRevision":"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"}
+```
+
+`H("plugnz/verified-activation-identity/v1", payload)` is
+`sha256:da34a68e23a7d78f2b72ead91e9111b0a9a7719136cf701d7cd75b7eb122c557`.
+Changing verification time/revision/path/ownership must change it; mutable Scope
+aggregate headers do not. The record digest separately covers the full original
+snapshot. Executable Bun/Node record/admission/paired-seal/commit golden vectors
+and unknown/missing-field negatives remain required before runtime admission.
+
+Retry example: A retains snapshot S1/digest D1 at generation G1, then rolls back.
+Sibling B changes aggregate Scope header H1→H2 and generation G1→G2 without
+changing A's actual activation/Source/context. A's refreshed admission reuses
+S1/D1 and uses G2/new attempt identity with freshly reproved native bytes. It
+cannot recapture S2 just because H2 differs. Stale G1 expectation refuses globally.
+Re-enrollment with new verified ownership identity is a different origin.
+
+Coverage example: one selected `demo` Desired pair consumes old `demo@catalog`
+and new hashed ID through one `identity-migrate` operation, not an install plus
+old retire-orphan. One composite readback/CAS commits canonical row, exact old-row
+replacement, relation/readback and cleanup-pending journal. Old data/options stay.
+Restart after that point settles only modern cleanup; update/retire cannot alter
+the immutable historical commit or reactivate old history.
+
+Intermediate recovery CAS accepts only the complete prior, complete candidate or
+an exact phase-specific checkpoint proved from the chosen native/managed
+primitives. New installed while old remains active is a reachable checkpoint;
+each managed old cache/registry/flag/resource/marketplace retirement step requires
+its own exact fingerprint/metadata witness. Arbitrary Cartesian combinations or
+unknown partial native-command states stay pending with backups. This checkpoint
+schema and actual fence proof must be reviewed before migration implementation.
 
 ## Transaction, CAS and restart
 
