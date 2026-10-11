@@ -873,15 +873,22 @@ function claudeVersionObservation(observed: ReturnType<typeof observeClaudeCodeV
   return { kind: observed.kind };
 }
 
+// These are loader/store observations, not a semver compatibility range.
+// 2.1.275: docs/hosts/claude-code.md and native root-command probe.
+// 2.1.295: native-plugin-update-capabilities-2026-10-09.md sandbox probe.
+const CLAUDE_MANAGED_RELEASES = new Set(['2.1.275', '2.1.295']);
+
 function claudeEvidenceProfiles(
   version: string | undefined,
   contracts: readonly ClaudeNativeRemoteUpdateContract[],
 ): readonly CapabilityEvidenceProfile[] {
   if (version === undefined) return [];
-  const managed = claudeProfile(version, 'managed', ['local', 'git'], ['install', 'update', 'disable', 'retire']);
+  const managed = CLAUDE_MANAGED_RELEASES.has(version)
+    ? [claudeProfile(version, 'managed', ['local', 'git'], ['install', 'update', 'disable', 'retire'])]
+    : [];
   const native = contracts.filter((contract) => contract.version === version && sandboxPasses(contract));
   if (native.length > 1) throw new Error(`ambiguous Claude Code native update contract for ${version}`);
-  return native.length === 0 ? [managed] : [managed, claudeProfile(version, 'native', ['git'], ['update'])];
+  return native.length === 0 ? managed : [...managed, claudeProfile(version, 'native', ['git'], ['update'])];
 }
 
 function sandboxPasses(contract: ClaudeNativeRemoteUpdateContract): boolean {

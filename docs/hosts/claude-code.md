@@ -45,6 +45,19 @@ deletes only its marked plugin copy and drops the wrapper only once it is empty.
 
 ## Lifecycle
 
+Lifecycle admission requires both an observed executable version and evidence
+for that release. Managed loader/store profiles currently cover `2.1.275`
+(the native loader and command-root probe above) and `2.1.295` (the isolated
+native store/update probe in
+`docs/research/native-plugin-update-capabilities-2026-10-09.md`). A successfully
+parsed older, intermediate, or future release is still `capability.unverified`:
+a version string alone is not proof of its registry layout or semantics.
+This is an evidence inventory, not a claim those other releases are incompatible.
+To extend it, reproduce loader/store, same-version refresh, activation/readback,
+and recovery behavior for the actual release and record that evidence before
+adding its profile. Native-update contract evidence is evaluated separately;
+it does not establish the broader Managed contract for another release.
+
 `add` stages beside the cache slot, validates canonical/native manifest identity
 and native content directories, writes a `.plgnz-install.json`
 source/identity/fingerprint marker, and swaps the staged directory into place.
