@@ -7,6 +7,7 @@ import { join } from 'node:path';
 
 const root = process.cwd();
 assert.match(root, /^\/vercel\/sandbox\/proof\/codex-acquire-[a-z0-9-]+$/);
+writeFileSync(join(root, 'acquisition-script.mjs'), readFileSync(new URL(import.meta.url)), { flag: 'wx' });
 const supplier = '/vercel/sandbox/native/codex-0162';
 const caps = readFileSync('/proc/self/status', 'utf8');
 assert.match(caps, /^NoNewPrivs:\s+1$/m);
