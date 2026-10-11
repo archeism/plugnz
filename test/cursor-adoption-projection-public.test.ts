@@ -120,7 +120,12 @@ test('Cursor read-only adoption proof matches public command/pin projection and 
       mkdirSync(join(root, 'resources/empty'));
       const alias = join(harness.storePath('cursor'), 'plugins/local/demo@personal');
       mkdirSync(alias);
-      noWriteRefusal(request, 'physical alias');
+      writeFileSync(join(alias, 'sentinel.txt'), 'independent alias bytes\n');
+      for (const original of [bareLegacy, legacy]) {
+        const aliasBefore = fingerprintTree(alias);
+        noWriteRefusal({ ...request, legacy: original }, 'physical alias');
+        expect(fingerprintTree(alias)).toBe(aliasBefore);
+      }
       rmSync(alias, { recursive: true });
       const metadataPath = join(source, collectionPath);
       const metadata = readFileSync(metadataPath, 'utf8');

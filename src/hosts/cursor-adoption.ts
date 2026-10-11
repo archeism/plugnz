@@ -61,8 +61,10 @@ export function proveCursorLegacyAdoption(request: CursorLegacyAdoptionProofRequ
   if (canonicalAdoptionJson(pins) !== canonicalAdoptionJson(legacy.snapshot.activation.pins)
     || new Set(pins).size !== pins.length) fail('resolved pins differ from retained original');
   const root = resolve(join(localDir(snapshot.target.instance), snapshot.nativeId));
-  if (legacy.snapshot.activation.nativeId !== snapshot.nativeId
-    && present(join(localDir(snapshot.target.instance), legacy.snapshot.activation.nativeId))) fail('ambiguous second physical alias');
+  for (const alias of logicalAliases) {
+    if (alias !== snapshot.nativeId
+      && present(join(localDir(snapshot.target.instance), alias))) fail('ambiguous second physical alias');
+  }
   const native = readTree(root);
   const fullFingerprint = treeFingerprint(native);
   const markerEntry = native.get(MARKER);

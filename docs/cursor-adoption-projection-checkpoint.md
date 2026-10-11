@@ -133,3 +133,36 @@ all old negatives and zero-write assertions remain intact.
 - Final typecheck and diff check exit 0. Raw logs are copied to the same durable
   evidence directory above. Skills and the broader delivery limitations are
   unchanged; this is a correction checkpoint awaiting independent re-review.
+
+## Competing physical-alias correction
+
+Independent review found that the second-physical-alias check depended on the
+old ledger native ID being qualified. A genuine bare legacy record could therefore
+receive a proof while `plugins/local/demo@personal` also existed. The constructor
+now checks every adapter-approved logical alias other than the selected physical
+native ID, independently of the old ledger spelling. This does not expand alias
+authority or change the wire, admission, planner, CAS, or runtime floor.
+
+The public-store regression exercises both bare and qualified legacy records.
+Each must refuse the competing directory while retaining its sentinel and exact
+fingerprint, as well as unchanged selected native bytes, Source bytes and state.
+Existing positive proofs and all three marketplace layouts remain covered.
+
+- RED: `plugnz-cursor-alias-red.log`, 0 pass / 1 fail / 75 assertions / 1.20s;
+  SHA256 `4859dcdd02656efd9572c69a2405ca56cbc4a6bf99972eb483c2574271f22c08`.
+  The bare-record counterexample returned accepted rather than refusing.
+- Focused GREEN: `plugnz-cursor-alias-green.log`, 1 pass / 279 assertions / 4.33s;
+  SHA256 `ca9f27aa3eb9c47987f6d4acf26892ec91a1ebc9a7a2ec62362593aeeef350b6`.
+- Exact six-file command documented above: `plugnz-cursor-alias-six-suite.log`,
+  18 pass / 0 fail / 475 assertions / 12.48s; SHA256
+  `a1fccb049a4814dedc92d5ecdb7452c44c6ca6333019fa058a515ac152f22404`.
+- Typecheck and diff check exit 0; `plugnz-cursor-alias-check.log` SHA256
+  `8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92`.
+- Frozen source SHA256:
+  `5e308391135c7e6421cd4c3ba95152f4cdc900df4f49c7fae979ae7007fd37d2`;
+  public test SHA256:
+  `07727e87edc64106a6897ff48c51664ee3ea8d0619651df5b5e3040008991a75`.
+
+Raw logs are retained in the durable evidence directory above. Skills are
+unchanged. This scoped correction awaits independent review; it is not native
+runtime certification or delivery of the remaining adoption transaction.
