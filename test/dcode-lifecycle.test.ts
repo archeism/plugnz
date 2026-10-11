@@ -99,7 +99,7 @@ describe('dcode lifecycle', () => {
       expect(marker.sourceRevision).toBe('local');
       expect(marker.fingerprint).toBe('ordinary skill\n');
       expect(marker.projectedFingerprint).toMatch(/^[0-9a-f]{64}$/);
-      expect(JSON.parse(readFileSync(registry(root), 'utf8')).plugins['addy@personal'][0].version).toBe('0.1.0');
+      expect(JSON.parse(readFileSync(registry(root), 'utf8')).plugins['addy@personal'][0].version).toBeUndefined();
       expect(existsSync(hashed(root))).toBe(false);
       expect(readFileSync(join(item.plugin.dir, 'plugin.json'), 'utf8')).toBe(sourceManifest);
       expect(readFileSync(join(installed!.path!, 'plugin.json'), 'utf8')).toContain('"autoUpdate": false');

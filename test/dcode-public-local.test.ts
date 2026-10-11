@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { repoRoot, writeFiles } from './util';
 import { parseLifecycleReport } from '../src/lifecycle-report';
+import { readState } from '../src/state';
+import { fakeDcodeLockInterpreter } from './dcode-fake-lock';
 
 test('public dcode local add returns the removable native id and leaves foreign state intact', () => {
   const root = mkdtempSync(join(tmpdir(), 'plgnz-dcode-public-local-'));
@@ -24,7 +26,7 @@ test('public dcode local add returns the removable native id and leaves foreign 
     const binary = join(root, 'dcode');
     writeFileSync(binary, `#!/bin/sh\nif [ "$1" = "--version" ]; then printf '%s\\n' 'deepagents-code 0.1.83' 'deepagents (SDK) 0.7.23'; exit 0; fi\nexit 91\n`);
     chmodSync(binary, 0o755);
-    const env = { ...process.env, HOME: home, OPEN_PLUGIN_HOME: home, OPEN_PLUGIN_DCODE_ROOT: native, OPEN_PLUGIN_DCODE_BIN: binary };
+    const env = { ...process.env, HOME: home, OPEN_PLUGIN_HOME: home, OPEN_PLUGIN_DCODE_ROOT: native, OPEN_PLUGIN_DCODE_BIN: binary, OPEN_PLUGIN_DCODE_PYTHON_BIN: fakeDcodeLockInterpreter(root) };
     const cli = (...args: string[]) => {
       const outputFlag = args[0] === 'list' ? '--json' : '--legacy-json';
       const result = spawnSync(process.execPath, [join(repoRoot, 'bin/plgnz.mjs'), ...args, outputFlag], { cwd: empty, env, encoding: 'utf8' });
@@ -35,7 +37,7 @@ test('public dcode local add returns the removable native id and leaves foreign 
     expect(addResult.status).toBe(0);
     const nativeId = added.outcomes[0]?.nativeId as string;
     expect(nativeId).toBe('release-smoke@local');
-    const ledger = JSON.parse(readFileSync(join(home, 'state.json'), 'utf8')) as { installs: Array<{ id: string }> };
+    const ledger = { installs: readState(join(home, 'state.json')) };
     expect({
       planned: added.plan[0]?.nativeId,
       reported: added.outcomes[0]?.nativeId,
@@ -52,7 +54,7 @@ test('public dcode local add returns the removable native id and leaves foreign 
     expect(listed.data[0]?.plugins.some((plugin: { id: string }) => plugin.id === nativeId)).toBe(true);
     const recorded = JSON.parse(readFileSync(registry, 'utf8')) as { plugins: Record<string, Array<{ installPath: string; version: string }>> };
     const installedPath = recorded.plugins[nativeId]?.[0]?.installPath;
-    expect(recorded.plugins[nativeId]?.[0]?.version).toBe('0.1.0');
+    expect(recorded.plugins[nativeId]?.[0]?.version).toBeUndefined();
     expect(installedPath?.startsWith(join(native, 'plugins/cache/plgnz/'))).toBe(true);
     const removed = cli('remove', nativeId, '--target', 'dcode');
     expect(removed.code).toBe(0);
@@ -98,7 +100,7 @@ test('public hashed-path adoption migrates one matching row and leaves a sibling
     const binary = join(root, 'dcode');
     writeFileSync(binary, `#!/bin/sh\nif [ "$1" = "--version" ]; then printf '%s\\n' 'deepagents-code 0.1.83' 'deepagents (SDK) 0.7.23'; exit 0; fi\nexit 91\n`);
     chmodSync(binary, 0o755);
-    const env = { ...process.env, HOME: home, OPEN_PLUGIN_HOME: home, OPEN_PLUGIN_DCODE_ROOT: native, OPEN_PLUGIN_DCODE_BIN: binary };
+    const env = { ...process.env, HOME: home, OPEN_PLUGIN_HOME: home, OPEN_PLUGIN_DCODE_ROOT: native, OPEN_PLUGIN_DCODE_BIN: binary, OPEN_PLUGIN_DCODE_PYTHON_BIN: fakeDcodeLockInterpreter(root) };
     const run = (args: string[]) => spawnSync(process.execPath, [join(repoRoot, 'bin/plgnz.mjs'), ...args], { cwd: empty, env, encoding: 'utf8' });
     const refused = run(['add', source, '--target', 'dcode', '--json']);
     expect(refused.status).toBe(1);
@@ -108,14 +110,14 @@ test('public hashed-path adoption migrates one matching row and leaves a sibling
     expect(adopted.status).toBe(0);
     const recorded = JSON.parse(readFileSync(registry, 'utf8')) as { plugins: Record<string, Array<{ installPath: string; version: string }>> };
     const row = recorded.plugins['release-smoke@local']?.[0];
-    expect(row?.version).toBe('0.1.0');
+    expect(row?.version).toBeUndefined();
     expect(row?.installPath.startsWith(join(native, 'plugins/cache/plgnz/'))).toBe(true);
     expect(existsSync(hashed)).toBe(false);
     expect(recorded.plugins['other@local']).toEqual([{ installPath: sibling, version: '0.1.0' }]);
     expect(readFileSync(join(sibling, 'sentinel.txt'), 'utf8')).toBe('keep\n');
     expect(readFileSync(join(source, 'plugin.json'), 'utf8')).toBe('{"name":"release-smoke","version":"0.1.0"}\n');
     const marker = JSON.parse(readFileSync(join(row!.installPath, '.plgnz-install.json'), 'utf8')) as { sourceRevision: string };
-    expect(marker.sourceRevision).toBe('local');
+    expect(marker.sourceRevision).toMatch(/^[0-9a-f]{64}$/);
     expect(JSON.parse(readFileSync(enablement, 'utf8')).enabledPlugins['other@local']).toBe(true);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
