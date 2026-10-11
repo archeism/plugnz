@@ -249,3 +249,46 @@ current RED `/tmp/plugnz-75d-zcode-current-probe.json`, SHA256
 Native commands used a controlled fixture, not a released-native admission.
 The prior successful capture with incomplete Source retention is also retained;
 the v2 replay preserves both Source and home before harness cleanup.
+
+## Historical identity containment (not migration)
+
+The regression now invokes the authentic `75d7bc1` Node artifact in an isolated
+CLI harness, then runs the current producer against the resulting installation.
+The checksummed compressed fixture is 264 KiB, bounded to 2 MiB unpacked, and
+retains repository and bundled dependency license notices. Its provenance and
+both independent SHA256 literals are in
+`test/fixtures/historical-plugnz-75d/README.md`. No history fetch, real host,
+native released CLI or model API is involved.
+
+The new preflight refuses a recorded physical identity change globally before
+any lifecycle mutation. Modern exact package identity is sufficient for this
+refusal. A v1 import preserves its original qualified `packageId`; exact explicit
+Source-relative path plus observed old Native ID and package name can correlate
+it for refusal, but does not grant ownership or permission to migrate. When that
+Source path is missing or contradictory, the same-Scope, actually present old
+Native ID with the selected package name instead yields a loud **unverified**
+correspondence failure. No basename inference or qualified-ID rewriting is used.
+An absent old Native ID alone does not turn a legacy claim into this proof; the
+existing legacy Codex unsupported capability report remains unchanged.
+
+Tests cover authentic modern records, weaker v1 claims and v1 claims without
+Source-relative metadata, each in dry-run/apply and as the last Scope of a
+multi-Scope batch. They assert no outcomes, no ledger changes and no native-store
+changes, including the earlier otherwise valid Scope. The first modern RED was
+0 pass / 2 fail; the v1 RED was 2 pass / 2 fail. The missing-path RED was
+4 pass / 2 fail / 70 assertions, log
+`/tmp/plugnz-historical-native-id-ambiguous-red.log`, SHA256
+`0568b93926c1439b9d7c7a0252489bef7fd18fcf3ca75ce232acb3c73f9e6fde`.
+
+Final focused dependent gate: 59 pass / 0 fail / 421 assertions, 31.96 seconds,
+including the existing Codex report, planner and mutation-contract controls;
+typecheck passed. Log `/tmp/plugnz-historical-native-id-complete-dependents.log`,
+SHA256 `edcee64df7e9e73c2263e043afb377579df2d555c7b8f348c42efda084143d2e`.
+Packed Node 22.23.1 gate: 39 pass / 0 fail / 176 assertions in 33.47 seconds
+(historical identity, public preconditions and CLI-harness controls). Artifact
+SHA256 `3195517292d557ddacb93f8b957b87f6442b7d24bb47b2bc9becdb30935511dc`;
+log `/tmp/plugnz-historical-native-id-complete-node22.log`, SHA256
+`ff7af2f633caf2f3223c29ddc2dcdeaac7c5ccc5df4c2008d323e6dbb5dde549`.
+This fixes duplicate-install containment only. The proven, durable two-physical-ID
+migration, Native Git admission and fresh released-native proofs remain required;
+the earlier `53e40bb` full GREEN is not attributed to this later guard.

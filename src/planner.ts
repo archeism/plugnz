@@ -190,6 +190,30 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
     } else prepared.push(result);
   }
 
+  // A changed physical identity is not a fresh install. Only a separately proven
+  // identity-migration transaction may supersede this recorded activation.
+  for (const item of prepared) {
+    if (item.kind !== 'sync') continue;
+    for (const selected of item.selected) {
+      const nativeId = plannedNativeIdFor(item, selected.plugin);
+      if (nativeId instanceof Error) return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.defect', unknownErrorDiagnostic(nativeId)));
+      const prior = loaded.state.activations.find(row => {
+        if (row.scopeId !== item.scope.id || row.nativeId === nativeId) return false;
+        const observed = item.observation?.installations.find(installation => installation.nativeId === row.nativeId && installation.presence === 'present');
+        if (row.packageId === selected.plugin.name) return row.ownership.kind !== 'legacy-claim' || observed !== undefined;
+        // This correlation only refuses mutation; it grants no alias ownership.
+        return row.ownership.kind === 'legacy-claim' && row.sourceRelativeDir !== undefined
+          && row.sourceRelativeDir === (selected.plugin.relativeDir || '.') && observed?.packageName === selected.plugin.name;
+      });
+      if (prior !== undefined) return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.invariant', `recorded native identity '${prior.nativeId}' differs from planned '${nativeId}'; a proven identity migration is required`));
+      const ambiguousPrior = loaded.state.activations.find(row => row.scopeId === item.scope.id
+        && row.nativeId !== nativeId && row.ownership.kind === 'legacy-claim'
+        && item.observation?.installations.some(installation => installation.nativeId === row.nativeId
+          && installation.presence === 'present' && installation.packageName === selected.plugin.name));
+      if (ambiguousPrior !== undefined) return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.invariant', `historical native identity '${ambiguousPrior.nativeId}' has unverified Source correspondence with planned '${nativeId}'; a proven identity migration is required`));
+    }
+  }
+
   const attemptId = lifecycleAttemptId(loaded.state.stateGeneration, prepared.map((item) => item.identity));
   const recovering = input.recoveryPreflight && loaded.state.attempts.some(attempt => attempt.command !== 'legacy-recovery' && attempt.journal.some(row =>
     prepared.some(item => item.scope.id === row.scopeId) && ['pending', 'applying', 'applied', 'readback-verified', 'rollback', 'cleanup-pending'].includes(row.state)));
