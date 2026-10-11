@@ -351,7 +351,7 @@ function withPendingRemoval(state: LifecycleStateV2, operation: LifecyclePlanOpe
       startedAt: now,
       updatedAt: now,
       journal: [{
-        operationId: `${operation.operationId}-${state.stateGeneration}`,
+        operationId: operation.operationId,
         scopeId: operation.scope.id,
         packageId: activation.packageId,
         nativeId: activation.nativeId,
@@ -1769,6 +1769,7 @@ export async function main(argv: string[]): Promise<number> {
           nativeId: identity.nativeId,
           action: 'retire-orphan',
           route: 'managed',
+          discriminator: lifecycleVersion === 2 ? String(lifecycleState.stateGeneration) : undefined,
         }),
       });
     }
