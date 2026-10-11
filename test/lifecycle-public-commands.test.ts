@@ -7,6 +7,22 @@ import { parseLifecycleReport } from '../src/lifecycle-report';
 import { fingerprintTree } from '../src/fingerprint';
 
 describe('public lifecycle commands', () => {
+  test('a retired package can re-enroll from identical bytes and retire again without journal collisions', async () => {
+    await withLifecycleCliHarness((harness) => {
+      harness.writeHome({ '.cursor/.keep': '' });
+      const source = harness.source('reenrollment', { 'plugin.json': '{"name":"demo","version":"1.0.0"}\n', 'payload.txt': 'identical source\n' });
+      const cursor = harness.fakeNative('cursor', versionSteps(64));
+      const env = { OPEN_PLUGIN_CURSOR_BIN: cursor.path };
+      const ids: string[] = [];
+      for (const verb of ['sync', 'retire-source', 'sync', 'retire-source']) {
+        const result = harness.run([verb, source, '--target', 'cursor', '--json'], { env });
+        expect({ verb, report: parseLifecycleReport(JSON.parse(result.stdout)).outcomes.map((row) => ({ result: row.result, diagnostic: row.reason?.diagnostic ?? null })), exitCode: result.exitCode }).toEqual({ verb, report: [{ result: 'succeeded', diagnostic: null }], exitCode: 0 });
+        ids.push(parseLifecycleReport(JSON.parse(result.stdout)).plan[0]!.operationId);
+      }
+      expect(new Set(ids).size).toBe(4);
+      expect(existsSync(join(harness.storePath('cursor'), 'plugins/local/demo'))).toBe(false);
+    });
+  });
   test('a corrupted retained snapshot in the last scope blocks all batch writes', async () => {
     await withLifecycleCliHarness((harness) => {
       harness.writeHome({ '.cursor/.keep': '' });

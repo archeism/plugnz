@@ -372,7 +372,7 @@ async function planSync(
         requiredCapabilities: [],
         adoptionRequested: selected.adoptionRequested,
       });
-      classified.push(uninventoriedUpdate(item, selected.plugin.name, nativeId));
+      classified.push(uninventoriedUpdate(item, selected.plugin.name, nativeId, attemptId));
       continue;
     }
     const nativeId = item.host === null ? selected.plugin.name : item.host.plannedNativeId(selected.plugin);
@@ -411,7 +411,7 @@ async function classifyDesired(
   state: LifecycleStateV2,
   reapplyMatchingUpdate: boolean,
 ): Promise<Classified | Defect> {
-  const operationId = operationIdentity('desired-pair', item.scope.id, selected.plugin.name, nativeId, item.frozen.snapshot.fingerprint);
+  const operationId = operationIdentity('desired-pair', item.scope.id, selected.plugin.name, nativeId, `${item.frozen.snapshot.fingerprint}\0${attemptId}`);
   const snapshotId = sourceSnapshotId(item.frozen);
   const activation = findActivation(state, item.scope.id, selected.plugin.name, nativeId);
   if (item.host === null || item.observation === null) {
@@ -459,11 +459,6 @@ async function classifyDesired(
   const recordedRoute = activation?.route.kind === 'managed' || activation?.route.kind === 'native' ? activation.route.kind : null;
   const matchingBytes = sameBytes(activation, installation, selected.plugin);
   const action = chosenAction(replacing, recordedRoute, decision.route, matchingBytes, reapplyMatchingUpdate);
-  // One intent may be replanned after a verified rollback. The state ledger retains
-  // every attempt, so a new attempt must not reuse that attempt's journal identity.
-  const plannedOperationId = action === 'update'
-    ? operationIdentity('desired-pair', item.scope.id, selected.plugin.name, nativeId, `${item.frozen.snapshot.fingerprint}\0${attemptId}`)
-    : operationId;
   if (action === 'route-migrate') {
     return classified(
       operationId,
@@ -482,7 +477,7 @@ async function classifyDesired(
       ),
     );
   }
-  return classified(plannedOperationId, 'desired-pair', item.scope, snapshotId, selected.plugin.name, nativeId, action, decision.route, null);
+  return classified(operationId, 'desired-pair', item.scope, snapshotId, selected.plugin.name, nativeId, action, decision.route, null);
 }
 
 async function planOmissions(
@@ -676,7 +671,7 @@ async function selectRetirement(
   attemptId: string,
   source: SourceBinding | null,
 ): Promise<{ readonly kind: 'planned'; readonly operation: FrozenOperation } | Defect> {
-  const operationId = operationIdentity('retirement', scope.id, activation.packageId, activation.nativeId, activation.sourceRevision ?? 'unrecorded');
+  const operationId = operationIdentity('retirement', scope.id, activation.packageId, activation.nativeId, `${activation.sourceRevision ?? 'unrecorded'}\0${attemptId}`);
   const installation = observation.installations.find((row) => row.nativeId === activation.nativeId);
   if (installation === undefined) {
     return { kind: 'planned', operation: notAttemptedRetirement(operationId, scope, activation, 'ownership was not revalidated') };
@@ -864,9 +859,9 @@ function plannedNativeIdFor(item: PreparedSync, plugin: PluginSource): string | 
   }
 }
 
-function uninventoriedUpdate(item: PreparedSync, packageName: string, nativeId: string): Classified {
+function uninventoriedUpdate(item: PreparedSync, packageName: string, nativeId: string, attemptId: string): Classified {
   return classified(
-    operationIdentity('desired-pair', item.scope.id, packageName, nativeId, item.frozen.snapshot.fingerprint),
+    operationIdentity('desired-pair', item.scope.id, packageName, nativeId, `${item.frozen.snapshot.fingerprint}\0${attemptId}`),
     'desired-pair',
     item.scope,
     sourceSnapshotId(item.frozen),
