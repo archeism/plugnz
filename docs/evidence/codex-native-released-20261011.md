@@ -41,7 +41,14 @@ Primitive success: 1,997 ms wall time, controller CPU usage recorded in raw
 `native-primitive-03.result.json`. Failed attempts 01 (missing pre-created
 CODEX_HOME) and 02 (incorrect probe assumption `ref_name`) were retained in the
 Sandbox before cleanup. The successful raw streams, manifest, and skills/list
-response are copied outside Git. Published source inspected at
+response are copied outside Git. All three attempts and their complete isolated
+stores are additionally retained in the 7.6 MB compressed archive
+`/tmp/plugnz-codex-native-evidence/native-primitive-archive.tar.gz`, SHA-256
+`f745bc6b8d79999ce744e5ebf657a117f06d96825e3a447e9d69b811f8393042`.
+Its 1,335-entry inventory was listed successfully; the restored result bytes
+match the separate result SHA-256
+`9848889c473abe424f610f6f53bc6e5a8302da7462e91189022320959e681fb8`.
+No live/loose proof roots were deleted. Published source inspected at
 `c1382380de69521303b416720a52f42d51af6248`: core-plugins Git operations set
 `GIT_OPTIONAL_LOCKS=0`; inspected store/marketplace paths do not establish a
 cross-process mutation lock. Do not infer concurrency-safe whole-store rollback.
