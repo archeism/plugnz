@@ -723,9 +723,6 @@ async function runAdd(argv: string[], mode: MutationOutputMode): Promise<number>
   const split = splitAddTargets(flags.targets, flags.dryRun);
   if (split.kind === 'usage') return emitAddReport(usageReport('add', flags.dryRun, split.diagnostic, split.code), mode);
   if (split.kind === 'refused') return emitAddReport(split.report, mode);
-  if (split.kind === 'ready' && split.planner.length > 0 && flags.adoptExisting && flags.plugins.length === 0) {
-    return emitAddReport(usageReport('add', flags.dryRun, '--adopt-existing requires --plugin'), mode);
-  }
   if (split.kind === 'empty') {
     return emitAddReport(reportFor('add', flags.dryRun, [], [], {
       terminalPhase: 'preflight',
@@ -745,11 +742,31 @@ async function runAdd(argv: string[], mode: MutationOutputMode): Promise<number>
   }
   const reports: LifecycleReport[] = [];
   if (split.writers.length > 0) reports.push(await runWriterAdd(source, split.writers, flags, mode));
-  if (split.planner.length > 0) reports.push(await runPlannerAdd(binding, split.planner, flags));
+  if (split.planner.length > 0) reports.push(await runPlannerAdd(source, binding, split.planner, flags));
   return emitAddReport(reports.length === 1 ? reports[0]! : mergeAddReports(reports), mode);
 }
 
-async function runPlannerAdd(binding: SourceBinding, targets: readonly string[], flags: VerbFlags): Promise<LifecycleReport> {
+function plannerSelectors(source: string, flags: VerbFlags): { selectors?: Array<{ package: string; adoptExisting: boolean }>; error?: LifecycleReport } {
+  if (flags.plugins.length > 0) {
+    return { selectors: flags.plugins.map((packageName) => ({ package: packageName, adoptExisting: flags.adoptExisting })) };
+  }
+  if (!flags.adoptExisting) return {};
+  let resolved;
+  try {
+    resolved = resolveSource(source);
+  } catch (error) {
+    return { error: reportFor('add', flags.dryRun, [], [], {
+      terminalPhase: 'resolve',
+      mutationStarted: false,
+      reason: reason('runtime', 'runtime.operation-failed', unknownErrorDiagnostic(error)),
+    }) };
+  }
+  return { selectors: resolved.plugins.map((plugin) => ({ package: plugin.name, adoptExisting: true })) };
+}
+
+async function runPlannerAdd(source: string, binding: SourceBinding, targets: readonly string[], flags: VerbFlags): Promise<LifecycleReport> {
+  const selected = plannerSelectors(source, flags);
+  if (selected.error !== undefined) return selected.error;
   let manifest;
   try {
     manifest = parseSyncManifest({
@@ -758,9 +775,7 @@ async function runPlannerAdd(binding: SourceBinding, targets: readonly string[],
         operation: 'sync',
         source: binding,
         target: { kind, instance: 'default' },
-        ...(flags.plugins.length === 0 ? {} : {
-          selectors: flags.plugins.map((packageName) => ({ package: packageName, adoptExisting: flags.adoptExisting })),
-        }),
+        ...(selected.selectors === undefined ? {} : { selectors: selected.selectors }),
       })),
     });
   } catch (error) {

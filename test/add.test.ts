@@ -578,7 +578,9 @@ describe('add', () => {
   });
 
   test('claude-code accepts --adopt-existing in a public dry-run without state writes', async () => {
-    await withHostEnvAsync('claude-code', async () => {
+    await withHostEnvAsync('claude-code', async (home) => {
+      const saved = process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'];
+      process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'] = versionShim(home, 'claude', '2.1.295 (Claude Code)');
       const sourceDir = mkdtempSync(join(tmpdir(), 'open-plugin-source-'));
       initGitRepo(sourceDir, pluginsMap);
       const output: string[] = [];
@@ -586,7 +588,11 @@ describe('add', () => {
       console.log = (value: string) => output.push(value);
       try {
         expect(await main(['add', sourceDir, '--target', 'claude-code', '--adopt-existing', '--dry-run', '--legacy-json'])).toBe(0);
-      } finally { console.log = originalLog; }
+      } finally {
+        console.log = originalLog;
+        if (saved === undefined) delete process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'];
+        else process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'] = saved;
+      }
       const outcomes = JSON.parse(output.join('')) as Array<{ plugin: string; target: string; status: string; dryRun: boolean }>;
       expect(outcomes).toEqual([{ plugin: 'new-plugin', target: 'claude-code', status: 'installed', action: 'install', dryRun: true, nativeId: 'new-plugin@local' }]);
       expect(readState()).toEqual([]);
