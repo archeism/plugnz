@@ -20,6 +20,18 @@ const roots: string[] = [];
 afterAll(() => roots.forEach((root) => rmSync(root, { recursive: true, force: true })));
 
 const target = { kind: 'fixture', instance: 'default' } as const;
+test('observed route is observational owned-state evidence, not an unmanaged or absent claim', () => {
+  const row = {
+    nativeId: 'demo', packageName: 'demo', ownership: { kind: 'unmanaged' as const },
+    presence: 'present' as const, enablement: 'enabled' as const, activation: 'active' as const,
+    installedFingerprint: 'a'.repeat(64), installedVersion: '1.0.0', source: null,
+    contentRoots: [{ label: 'plugin', path: '/tmp/fixture-demo', fingerprint: 'a'.repeat(64) }],
+  };
+  const failure = (run: () => unknown): string => { try { run(); return 'did not refuse'; } catch (error) { return String(error); } };
+  expect(failure(() => createTargetInventoryObservation('fixture', { target, installations: [{ ...row, observedRoute: 'managed' }] }))).toContain('observed installed route requires present owned native content');
+  expect(failure(() => createTargetInventoryObservation('fixture', { target, installations: [{ ...row, ownership: { kind: 'owned', proof: 'created', scopeId: 'scope', proofId: 'proof' }, presence: 'absent', observedRoute: 'native' }] }))).toContain('observed installed route requires present owned native content');
+  expect(createTargetInventoryObservation('fixture', { target, installations: [row] }).installations[0]!.observedRoute).toBeUndefined();
+});
 const inventory: PackageSemanticInventory = {
   schemaVersion: 1,
   package: { name: 'demo', version: '1.0.0', fingerprint: 'a'.repeat(64) },

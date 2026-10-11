@@ -419,6 +419,7 @@ function installationRecord(plugin: InstalledPlugin): TargetInventoryData['insta
     presence: 'present',
     enablement: enabled ? 'enabled' : 'disabled',
     activation: enabled ? 'active' : 'inactive',
+    ...(marker === undefined ? {} : { observedRoute: 'native' as const }),
     installedFingerprint: digest,
     installedVersion: declaredVersion(plugin.path),
     source: { type: 'local', immutableRevision: marker?.immutableRevision ?? digest, locator: null },

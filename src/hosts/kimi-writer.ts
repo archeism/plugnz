@@ -1,5 +1,5 @@
 /** Transactional native Kimi Code plugin writer. */
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createCapabilityEvidenceProfile, type CapabilityEvidenceProfile } from '../capability-evidence';
@@ -16,8 +16,10 @@ import type {
 } from '../lifecycle-host';
 import { createTargetInventoryObservation } from '../lifecycle-runtime';
 import { homeRoot } from '../paths';
+import { validateSourceBinding } from '../source-reference';
 import type { PluginSource, ResolvedSource } from '../source';
 import type { CapabilityOperation, PackageSemantic } from '../semantic-inventory';
+import type { PlannerHost } from '../planner';
 import { normalizeCommandSources } from '../conversion';
 import { kimi, mcpCandidates, pluginsDir } from './kimi';
 import { pinPluginMcpFiles } from '../mcp-write';
@@ -29,8 +31,32 @@ declare const TextDecoder: any;
 declare const Response: any;
 
 const MARKER = '.plgnz-install.json';
-type Ownership = { source: string; pluginId: string; fingerprint: string; scopeId?: string };
+type Ownership = { source: string; pluginId: string; fingerprint: string; scopeId?: string; sourceType?: 'local' | 'git'; sourceRevision?: string; sourceLocator?: string | null };
 type Registry = { version: 1; plugins: Array<Record<string, unknown>> };
+
+/** Kimi's native registry uses a bare name; the marketplace suffix is marker metadata. */
+export const samePhysicalKimiNativeIdentity: NonNullable<PlannerHost['samePhysicalNativeIdentity']> = (plugin, prior, observation) => {
+  if (plugin.marketplace === undefined || prior.nativeId !== plugin.name || prior.packageId !== plugin.name) return null;
+  const observed = observation.installations.filter(row => row.packageName === plugin.name && row.presence === 'present');
+  if (observed.length !== 1) return null;
+  const installation = observed[0]!;
+  if (installation.nativeId !== prior.nativeId || installation.ownership.kind !== 'owned'
+    || installation.ownership.scopeId !== prior.scopeId || installation.installedFingerprint === null
+    || installation.contentRoots.length !== 1) return null;
+  const managed = managedPluginPath(plugin.name);
+  const registryFile = join(pluginsDir(), 'installed.json');
+  assertKimiManaged(plugin.name, managed, registryFile);
+  if (!existsSync(managed)) return null;
+  const rows = readRegistry(registryFile).plugins.filter(row => row.id === plugin.name || sameRoot(row.root, managed));
+  if (rows.length !== 1 || rows[0]!.id !== plugin.name || rows[0]!.enabled !== true || !sameRoot(rows[0]!.root, managed)) return null;
+  const root = installation.contentRoots[0]!;
+  const marker = readOwnership(managed);
+  if (!sameRoot(root.path, managed) || root.fingerprint !== installation.installedFingerprint
+    || marker?.pluginId !== prior.nativeId || marker.scopeId !== prior.scopeId
+    || fingerprintTree(managed) !== installation.installedFingerprint) return null;
+  return { priorNativeId: prior.nativeId, plannedNativeId: kimiWriter.plannedNativeId(plugin),
+    observedRoot: root.path, physicalRoot: realpathSync(managed), currentFingerprint: installation.installedFingerprint };
+};
 
 export const kimiWriter: HostWriter = {
   ...kimi,
@@ -251,7 +277,9 @@ function readOwnership(target: string): Ownership | null {
   const value = parseJson(file, 'plgnz ownership marker');
   if (typeof value.source !== 'string' || typeof value.pluginId !== 'string' || typeof value.fingerprint !== 'string') throw new Error(`invalid plgnz ownership marker: ${file}`);
   const scopeId = typeof value.scopeId === 'string' ? value.scopeId : undefined;
-  return { source: value.source, pluginId: value.pluginId, fingerprint: value.fingerprint, ...(scopeId === undefined ? {} : { scopeId }) };
+  const lifecycle = ['sourceType', 'sourceRevision', 'sourceLocator'].some(field => Object.hasOwn(value, field));
+  if (lifecycle && ((value.sourceType !== 'local' && value.sourceType !== 'git') || typeof value.sourceRevision !== 'string' || (value.sourceType === 'git' ? typeof value.sourceLocator !== 'string' : value.sourceLocator !== null))) throw new Error(`invalid plgnz Source ownership marker: ${file}`);
+  return { source: value.source, pluginId: value.pluginId, fingerprint: value.fingerprint, ...(scopeId === undefined ? {} : { scopeId }), ...(lifecycle ? { sourceType: value.sourceType as 'local' | 'git', sourceRevision: value.sourceRevision as string, sourceLocator: value.sourceLocator as string | null } : {}) };
 }
 function rewriteOwnership(target: string, ownership: Ownership): void {
   const marker = join(target, MARKER);
@@ -413,6 +441,9 @@ export const kimiLifecycle: LifecycleHostDefinition = {
       pluginId: projection.nativeId,
       fingerprint: projection.sourceRevision,
       scopeId: projection.scopeId,
+      sourceType: projection.snapshot.sourceType,
+      sourceRevision: projection.sourceRevision,
+      sourceLocator: projection.sourceLocator ?? null,
     } satisfies Ownership));
     return ['kimi.staged-exact'];
   },
@@ -480,9 +511,8 @@ export const kimiLifecycle: LifecycleHostDefinition = {
     if (existsSync(managed) && priorRow?.enabled === true && sameRoot(priorRow.root, managed) && sameTree(prepared.stagingRoot, managed)) {
       if (legacyMarker) {
         rewriteOwnership(managed, {
-          source: marker.source,
+          ...marker,
           pluginId: prepared.handle.nativeId,
-          fingerprint: marker.fingerprint,
           scopeId: prepared.handle.scopeId,
         });
         return { receiptId: `kimi-apply:${prepared.handle.attemptId}:${prepared.handle.operationId}`, changed: true };
@@ -617,12 +647,32 @@ function readKimiInstallations(): TargetInstallationData[] {
       presence: 'present',
       enablement: enabled ? 'enabled' : 'disabled',
       activation: enabled ? 'active' : 'inactive',
+      // Kimi's native installer calls its own destination "managed"; this is
+      // still the native lifecycle route, proven by the exact registry root.
+      ...(owned && resolve(plugin.path) === resolve(managedPluginPath(plugin.name)) ? { observedRoute: 'native' as const } : {}),
       installedFingerprint: digest,
       installedVersion: null,
-      source: owned ? { type: 'local', immutableRevision: marker.fingerprint, locator: null } : null,
+      source: owned ? kimiSourceIdentity(marker) : null,
       contentRoots: [{ label: 'managed', path: plugin.path, fingerprint: digest }],
     };
   });
+}
+
+function kimiSourceIdentity(marker: Ownership): NonNullable<TargetInstallationData['source']> | null {
+  if (marker.sourceType !== undefined && marker.sourceRevision !== undefined) {
+    if (marker.sourceRevision !== marker.fingerprint || (marker.sourceType === 'git' ? marker.sourceLocator !== marker.source : marker.source !== `local:${marker.sourceRevision}`)) throw new Error('Kimi Source ownership receipt is contradictory');
+    return { type: marker.sourceType, immutableRevision: marker.sourceRevision, locator: marker.sourceLocator ?? null };
+  }
+  if (/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(marker.fingerprint) || /^(?:https?|ssh|git):\/\//u.test(marker.source) || marker.source.startsWith('git@')) {
+    // Historical Git snapshots lacked an origin. Expose that incompleteness;
+    // only the private recorded-prior proof may recover canonical authority.
+    if (marker.source === `local:${marker.fingerprint}`) return { type: marker.fingerprint.length === 40 ? 'git' : 'local', immutableRevision: marker.fingerprint, locator: null };
+    if (isAbsolute(marker.source)) return { type: 'local', immutableRevision: marker.fingerprint, locator: null };
+    if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(marker.fingerprint)) throw new Error('Kimi Git ownership marker has no immutable revision');
+    validateSourceBinding({ kind: 'git', locator: marker.source, ref: marker.fingerprint });
+    return { type: 'git', immutableRevision: marker.fingerprint, locator: marker.source };
+  }
+  return { type: 'local', immutableRevision: marker.fingerprint, locator: null };
 }
 
 function kimiMutationScope(operation: CapabilityOperation, nativeId: string): NativeMutationScopeData {

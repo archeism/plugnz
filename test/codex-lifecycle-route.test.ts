@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fingerprintTree } from '../src/fingerprint';
 import { codexLifecycle, codexMarketplaceCheckoutRollback } from '../src/hosts/codex-writer';
@@ -22,6 +23,115 @@ const otherId = 'other-plugin@demo-market';
 const foreignId = 'foreign-plugin@other-market';
 
 describe('codex native marketplace upgrade route', () => {
+  test('a failed native call with exact native metadata restores the prior full checkout', async () => {
+    await withCodexBinary(async home => {
+      const original = frozenSnapshot(home);
+      const checkout = join(home, '.codex/.tmp/marketplaces/demo-market');
+      cpSync(original.snapshotRoot, checkout, { recursive: true });
+      const git = (args: string[]): string => {
+        const result = spawnSync('git', ['-C', checkout, '-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', ...args], { encoding: 'utf8' });
+        if (result.status !== 0) throw new Error(result.stderr);
+        return result.stdout.trim();
+      };
+      git(['init']); git(['config', 'remote.origin.url', sourceLocator]);
+      writeFileSync(join(checkout, 'packages/demo-plugin/plugin.json'), '{"name":"demo-plugin","version":"prior"}\n');
+      git(['add', '.']); git(['commit', '-m', 'prior']);
+      const priorRevision = git(['rev-parse', 'HEAD']);
+      cpSync(original.snapshotRoot, checkout, { recursive: true });
+      git(['add', '.']); git(['commit', '-m', 'candidate']);
+      const revision = git(['rev-parse', 'HEAD']);
+      git(['checkout', '--detach', priorRevision]);
+      chmodSync(checkout, 0o755);
+      const prior = fingerprintTree(checkout);
+      const snapshot = createFrozenPackageSnapshot({ ...original, immutableRevision: revision, nativeGit: { locator: sourceLocator, resolvedRevision: revision } });
+      if (!isUpdateSnapshot(snapshot)) throw new Error('fixture action drift');
+      writeCatalog(home, revision, [demoId]); installPlugin(home, 'demo-plugin', demoId, true);
+      writeFiles(home, {
+        '.codex/upgrade-mode': 'checkout-metadata-failure\n',
+        '.codex/candidate-revision': revision,
+        '.codex/candidate-metadata.json': JSON.stringify({ source_type: 'git', source: sourceLocator, ref_name: revision, sparse_paths: [], revision }),
+      });
+      const prepared = await prepareUpdate(snapshot, createResolvedLifecyclePins([]));
+      expect(prepared.handle.route).toBe('native');
+      let diagnostic = '';
+      try { await codexLifecycle.apply(prepared); } catch (error) { diagnostic = String(error); }
+      expect(diagnostic).toContain('native cache permission failure');
+      expect(git(['rev-parse', 'HEAD'])).toBe(revision);
+      await codexLifecycle.rollback(prepared.handle);
+      expect(fingerprintTree(checkout)).toBe(prior);
+      expect(git(['rev-parse', 'HEAD'])).toBe(priorRevision);
+      expect(statSync(checkout).mode & 0o777).toBe(0o755);
+    });
+  });
+  test('a checkout changed after preparation blocks before any native mutation', async () => {
+    await withCodexBinary(async home => {
+      const snapshot = frozenSnapshot(home);
+      writeCatalog(home, frozenSha, [demoId]); installPlugin(home, 'demo-plugin', demoId, true);
+      const checkout = join(home, '.codex/.tmp/marketplaces/demo-market');
+      writeFiles(checkout, { 'HEAD': 'prior checkout\n' });
+      const prepared = await prepareUpdate(snapshot, createResolvedLifecyclePins([]));
+      writeFiles(checkout, { 'HEAD': 'external checkout\n' });
+      let diagnostic = '';
+      try { await codexLifecycle.apply(prepared); } catch (error) { diagnostic = String(error); }
+      expect(diagnostic).toContain('checkout changed after rollback capture');
+      expect(readFileSync(join(checkout, 'HEAD'), 'utf8')).toBe('external checkout\n');
+      expect(readFileSync(join(home, 'codex-invocations.log'), 'utf8').includes('marketplace upgrade')).toBe(false);
+    });
+  });
+  test('an obsolete ref_name field cannot establish native immutable binding', async () => {
+    await withCodexBinary(async home => {
+      const snapshot = frozenSnapshot(home);
+      writeCatalog(home, frozenSha, [demoId]); installPlugin(home, 'demo-plugin', demoId, true);
+      const path = join(home, '.codex/config.toml');
+      writeFileSync(path, readFileSync(path, 'utf8').replace('ref =', 'ref_name ='));
+      expect(selectedRoute(await selectedUpdate(snapshot, createResolvedLifecyclePins([]))).route).toBe('managed');
+    });
+  });
+  test('native rollback accepts the exact unchanged captured checkout and prior code', async () => {
+    await withCodexBinary(async home => {
+      const snapshot = frozenSnapshot(home);
+      writeCatalog(home, frozenSha, [demoId]); installPlugin(home, 'demo-plugin', demoId, true);
+      const checkout = join(home, '.codex/.tmp/marketplaces/demo-market');
+      writeFiles(checkout, { 'HEAD': 'prior checkout\n', 'catalog.json': 'prior catalog\n' });
+      const prior = fingerprintTree(checkout);
+      const prepared = await prepareUpdate(snapshot, createResolvedLifecyclePins([]));
+      await codexLifecycle.rollback(prepared.handle);
+      expect(fingerprintTree(checkout)).toBe(prior);
+      codexLifecycle.verifyRollback(prepared.handle, await codexLifecycle.readback(prepared.handle));
+    });
+  });
+  test('foreign checkout appearing after apply blocks every rollback restore write', async () => {
+    await withCodexBinary(async home => {
+      const snapshot = frozenSnapshot(home);
+      writeCatalog(home, frozenSha, [demoId]); installPlugin(home, 'demo-plugin', demoId, true);
+      const prepared = await prepareUpdate(snapshot, createResolvedLifecyclePins([]));
+      await codexLifecycle.apply(prepared);
+      const checkout = join(home, '.codex/.tmp/marketplaces/demo-market');
+      writeFiles(checkout, { 'foreign.txt': 'external owned content\n' });
+      const before = fingerprintTree(join(home, '.codex'));
+      let diagnostic = '';
+      try { await codexLifecycle.rollback(prepared.handle); } catch (error) { diagnostic = String(error); }
+      expect(diagnostic).toContain('refusing rollback before any restore write');
+      expect(fingerprintTree(join(home, '.codex'))).toBe(before);
+      expect(existsSync(join(home, '.codex/.plgnz-rollback', prepared.handle.attemptId, prepared.handle.operationId, 'manifest.json'))).toBe(true);
+    });
+  });
+  test('foreign cache and config changes block rollback before any restore write', async () => {
+    for (const surface of ['cache', 'config']) {
+      await withCodexBinary(async home => {
+        const snapshot = frozenSnapshot(home);
+        writeCatalog(home, frozenSha, [demoId]); installPlugin(home, 'demo-plugin', demoId, true);
+        const prepared = await prepareUpdate(snapshot, createResolvedLifecyclePins([]));
+        if (surface === 'cache') writeFiles(home, { '.codex/plugins/cache/demo-market/demo-plugin/1.0.0/foreign.txt': 'valuable external content\n' });
+        else writeFileSync(join(home, '.codex/config.toml'), readFileSync(join(home, '.codex/config.toml'), 'utf8').replace('enabled = true', 'enabled = false'));
+        const before = fingerprintTree(join(home, '.codex'));
+        let diagnostic = '';
+        try { await codexLifecycle.rollback(prepared.handle); } catch (error) { diagnostic = String(error); }
+        expect(diagnostic).toContain('refusing rollback before any restore write');
+        expect(fingerprintTree(join(home, '.codex'))).toBe(before);
+      });
+    }
+  });
   test('refuses native marketplace upgrade unless the catalog is bound to the frozen SHA and every affected plugin is owned', async () => {
     await withHostEnvAsync('codex', async (home) => {
       const binary = join(home, 'bin', 'codex');
@@ -126,7 +236,7 @@ describe('codex native marketplace upgrade route', () => {
           '[marketplaces.demo-market]',
           'source_type = "git"',
           `source = "${sourceLocator}"`,
-          `ref_name = "${frozenSha}"`,
+          `ref = "${frozenSha}"`,
           '',
           '[plugins."demo-plugin@demo-market"]',
           'enabled = true',
@@ -317,7 +427,7 @@ describe('codex native marketplace upgrade route', () => {
           '[marketplaces.demo-market]',
           'source_type = "git"',
           `source = "${sourceLocator}"`,
-          'ref_name = "main"',
+          'ref = "main"',
           '',
           '[plugins."demo-plugin@demo-market"]',
           'enabled = true',
@@ -451,6 +561,13 @@ if [ -n "$CODEX_HOME" ] && [ -f "$CODEX_HOME/upgrade-mode" ]; then
 fi
 if [ "$mode" = "stderr" ]; then
   echo 'Failed to upgrade marketplace \`demo-market\`: simulated stderr failure' >&2
+  exit 1
+fi
+if [ "$mode" = "checkout-metadata-failure" ]; then
+  checkout="$CODEX_HOME/.tmp/marketplaces/demo-market"
+  git -C "$checkout" checkout --detach "$(cat "$CODEX_HOME/candidate-revision")" || exit 2
+  cp "$CODEX_HOME/candidate-metadata.json" "$checkout/.codex-marketplace-install.json"
+  echo 'native cache permission failure' >&2
   exit 1
 fi
 if [ "$mode" = "partial" ]; then
@@ -628,7 +745,7 @@ function writeCatalog(home: string, refName: string, pluginIds: readonly string[
       '[marketplaces.demo-market]',
       'source_type = "git"',
       `source = "${sourceLocator}"`,
-      `ref_name = "${refName}"`,
+      `ref = "${refName}"`,
       '',
       tables,
     ].join('\n'),

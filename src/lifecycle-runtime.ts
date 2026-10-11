@@ -1280,6 +1280,8 @@ function normalizeInstallation(input: TargetInstallationData): TargetInstallatio
   stable(input.nativeId, 'target inventory native id');
   if (input.packageName !== null) stable(input.packageName, 'target inventory package name');
   if (input.installedVersion !== null) stable(input.installedVersion, 'target installed version');
+  if (input.observedRoute !== undefined && (input.observedRoute !== 'native' && input.observedRoute !== 'managed')) invariant('observed installed route is invalid');
+  if (input.observedRoute !== undefined && (input.presence !== 'present' || input.ownership.kind !== 'owned')) invariant('observed installed route requires present owned native content');
   const source = input.source === null ? null : normalizeInstalledSource(input.source);
   const contentRoots = normalizeContentRoots(input.contentRoots, input.presence === 'present');
   if (input.presence === 'present') {
@@ -1304,8 +1306,10 @@ function normalizeInstalledSource(input: NonNullable<TargetInstallationData['sou
   stable(input.immutableRevision, 'target source revision');
   if (input.type === 'git') {
     immutableGitRevision(input.immutableRevision);
-    if (input.locator === null) invariant('installed Git source needs a credential-free locator');
-    validateSourceBinding({ kind: 'git', locator: input.locator, ref: input.immutableRevision });
+    // Inventory may faithfully expose a historical owned marker with an
+    // incomplete origin. It is not Source authority; preparation must obtain
+    // a canonical locator from the strict recorded scope, never this null.
+    if (input.locator !== null) validateSourceBinding({ kind: 'git', locator: input.locator, ref: input.immutableRevision });
   } else if (input.type === 'local') {
     if (input.locator !== null) invariant('installed local source locator must be omitted');
   } else {
@@ -1463,6 +1467,7 @@ function cleanupReference(
       operationId: target.handle.operationId,
       attemptId: target.handle.attemptId,
       artifactId: target.handle.artifactId,
+      rollbackReference: target.handle.rollbackReference,
     });
   }
   if ('schemaVersion' in target) {
@@ -1473,6 +1478,7 @@ function cleanupReference(
       operationId: target.operationId,
       attemptId: target.attemptId,
       artifactId: target.artifactId,
+      rollbackReference: target.rollbackReference,
     });
   }
   if (target.adapterId !== adapterId) invariant('cleanup projection belongs to another adapter');
@@ -1482,6 +1488,7 @@ function cleanupReference(
     operationId: target.operationId,
     attemptId: target.attemptId,
     artifactId: target.stagingId,
+    rollbackReference: null,
   });
 }
 

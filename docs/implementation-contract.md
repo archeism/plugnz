@@ -14,6 +14,18 @@ Mutation `--json` writes only the schema-v1 `LifecycleReport` envelope to stdout
 
 On a dry run, `action` is prospective but `resourceState` and `activationState` describe the native inventory actually observed during preflight. A successful install preview can therefore report `absent`/`inactive`; a retirement preview can report `present`/`active-conforming`. Preview success means the operation is admissible, not that deployment has happened. Applied success still requires verified terminal state. Absent resources cannot report active activation, and previews never report mutation or potentially changed resources. `test/dryrun-observations.test.ts` proves the public CLI distinction used by Personal status.
 
+Migration preflight also requires an independently observed prior route. The
+writer SPI's optional `TargetInstallationData.observedRoute` comes from the
+owned native representation or validated lifecycle receipt, never a copied
+ledger route. The observation factory rejects this claim for absent/unmanaged
+content. Unknown prior routes retain the prior with a loud `unverified` outcome;
+a known native/ledger route contradiction is a global zero-write internal
+defect, including dry-run. Execution repeats the check on fresh inventory and
+still verifies the captured prior and rollback/readback before mutation.
+`test/lifecycle-public-commands.test.ts` proves a ledger-only Cursor Native
+claim cannot stage or update even an otherwise independent sibling; the SPI
+migration test proves unknown prior route cannot become a selectable migration.
+
 Operation result answers whether the Desired operation converged, not whether a protective containment step ran. `retain-prior` and `disable-nonconforming` therefore remain failed pair outcomes with their exact structured reason; resource, activation, and changed fields separately show the retained prior activation or successful reversible disablement. This preserves pair-local diagnostics and prevents containment from serializing as a successful install.
 
 Applied reversible disablement uses the host lifecycle SPI, verifies inactive enablement, preserves prior bytes and Source metadata, and does not advance `lastConverged`. Its original capability reason survives successful containment. A precondition refusal never rolls back another writer's bytes; a started mutation that fails uses its sealed rollback handle even if no receipt returned. Unverified disable rollback records a pending `disable-nonconforming` intent and blocks further scope planning. Live recovery resources are released separately from retained durable rollback artifacts. Public Bun and packed-Node proofs live in `test/disable-public.test.ts` and `test/precondition-public.test.ts`.
@@ -49,3 +61,40 @@ Conversion accepts Markdown/TOML commands and skill directories only when it pre
 ## First increment and verification record
 
 The first code increment is the bundled Addy → Codex path (nine commands, 25 skills): diagnostics/source, conversion/staging, lifecycle, then native transcript. Each increment starts RED, records the focused command/output and saved action/result, and stays releasable. A native evidence record includes profile/version, source identity/fingerprint, selected target, transcript/readback, elapsed time, and failures. At `0.0.x`, releases are patch-only; no npm publication or fleet rollout is in scope.
+
+## Route migration admission
+
+A selected route change is an update capability operation with a distinct
+`route-migrate` snapshot and journal identity. Before native writes, execution
+requires the observed native ownership, canonical Source identity, immutable
+prior revision, and installed fingerprint to match the recorded activation.
+The sealed readback must then prove that same active prior route and exact
+retention observations before applying the different selected route. Ledger-only
+route claims are refused without rollback or native mutation. Staging and
+rollback snapshots are removed only by the explicit verified/aborted cleanup
+boundary. The generic SPI tests prove transaction mechanics, not any harness's
+Native capability; real released-harness snapshot and collateral-scope proof
+must precede enabling Native eligibility.
+
+Cleanup references privately preserve an asserted durable handle's existing
+`rollbackReference`; pre-seal projections supply `null`. This adapter-only
+authority supports canonical physical-root revalidation even when a staged
+artifact has already been disposed or retirement has no artifact. It changes
+neither the persisted handle schema nor public reports. Adapters must verify
+the exact bounded operation reference before deleting snapshots, preserve
+stable declared store symlinks, and refuse a retargeted physical root. Mutable
+receipts cannot manufacture that authority.
+
+Route contradictions are global zero-write defects for every recorded owned
+activation in a requested scope, including omissions and explicit retirement,
+and fresh disable/retire preparation checks the route again. Kimi's native
+installer names its destination `plugins/managed`; that directory is Native
+storage, not evidence of a plugnz Managed route.
+
+An unchanged live installation does not require an update primitive (SPEC.md
+acceptance sequence: install → unchanged re-add). When update admission is a
+gap, an ordinary sync may report unchanged only with exact recorded/observed
+route, Source type/revision/origin, verified conforming owned bytes, and fresh
+install-semantic admission on that same route. It neither stages nor mutates.
+Explicit update, changed desired bytes, dirty installed bytes, or unknown route
+still require update support and retain their loud limitation.

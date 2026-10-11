@@ -26,6 +26,7 @@ import {
   createResolvedLifecyclePins,
 } from './lifecycle-runtime';
 import { ownedActivation } from './owned-activation';
+import { bindRecordedPriorSource } from './prior-source-proof';
 import { sameSourceBinding } from './scope-inventory';
 import { CryptoHasher } from './runtime';
 import {
@@ -102,7 +103,17 @@ export interface PlannerHost {
   readonly kinds: readonly string[];
   readonly adapter: LifecycleHostAdapter;
   readonly plannedNativeId: (plugin: PluginSource) => string;
+  /** Private, read-only physical identity correlation; never grants Source ownership. */
+  readonly samePhysicalNativeIdentity?: (plugin: PluginSource, prior: ActivationRecord, observation: TargetInventoryObservation) => SamePhysicalNativeIdentityEvidence | null;
   readonly announceDryRun?: (operation: LifecyclePlanOperation) => void;
+}
+
+export interface SamePhysicalNativeIdentityEvidence {
+  readonly priorNativeId: string;
+  readonly plannedNativeId: string;
+  readonly observedRoot: string;
+  readonly physicalRoot: string;
+  readonly currentFingerprint: string;
 }
 
 export interface PlanLifecycleInput {
@@ -189,6 +200,47 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
     } else prepared.push(result);
   }
 
+  // A changed physical identity is not a fresh install. Only a separately proven
+  // identity-migration transaction may supersede this recorded activation.
+  for (const item of prepared) {
+    if (item.kind !== 'sync') continue;
+    for (const selected of item.selected) {
+      const nativeId = plannedNativeIdFor(item, selected.plugin);
+      if (nativeId instanceof Error) return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.defect', unknownErrorDiagnostic(nativeId)));
+      const samePhysicalIds = new Set<string>();
+      try {
+        if (item.observation !== null && item.host?.samePhysicalNativeIdentity !== undefined) {
+          for (const row of loaded.state.activations) {
+            if (row.scopeId !== item.scope.id || row.nativeId === nativeId) continue;
+            const proof = item.host.samePhysicalNativeIdentity(selected.plugin, row, item.observation);
+            const observed = item.observation.installations.find(installation => installation.nativeId === row.nativeId);
+            if (proof !== null && proof.priorNativeId === row.nativeId && proof.plannedNativeId === nativeId
+              && proof.physicalRoot.length > 0 && observed?.presence === 'present'
+              && observed.packageName === selected.plugin.name && observed.ownership.kind === 'owned'
+              && observed.ownership.scopeId === item.scope.id && observed.installedFingerprint === proof.currentFingerprint
+              && observed.contentRoots.some(root => root.path === proof.observedRoot && root.fingerprint === proof.currentFingerprint)) samePhysicalIds.add(row.nativeId);
+          }
+        }
+      } catch (error) {
+        return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.defect', unknownErrorDiagnostic(error)));
+      }
+      const prior = loaded.state.activations.find(row => {
+        if (row.scopeId !== item.scope.id || row.nativeId === nativeId || samePhysicalIds.has(row.nativeId)) return false;
+        const observed = item.observation?.installations.find(installation => installation.nativeId === row.nativeId && installation.presence === 'present');
+        if (row.packageId === selected.plugin.name) return row.ownership.kind !== 'legacy-claim' || observed !== undefined;
+        // This correlation only refuses mutation; it grants no alias ownership.
+        return row.ownership.kind === 'legacy-claim' && row.sourceRelativeDir !== undefined
+          && row.sourceRelativeDir === (selected.plugin.relativeDir || '.') && observed?.packageName === selected.plugin.name;
+      });
+      if (prior !== undefined) return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.invariant', `recorded native identity '${prior.nativeId}' differs from planned '${nativeId}'; a proven identity migration is required`));
+      const ambiguousPrior = loaded.state.activations.find(row => row.scopeId === item.scope.id
+        && row.nativeId !== nativeId && !samePhysicalIds.has(row.nativeId) && row.ownership.kind === 'legacy-claim'
+        && item.observation?.installations.some(installation => installation.nativeId === row.nativeId
+          && installation.presence === 'present' && installation.packageName === selected.plugin.name));
+      if (ambiguousPrior !== undefined) return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.invariant', `historical native identity '${ambiguousPrior.nativeId}' has unverified Source correspondence with planned '${nativeId}'; a proven identity migration is required`));
+    }
+  }
+
   const attemptId = lifecycleAttemptId(loaded.state.stateGeneration, prepared.map((item) => item.identity));
   const recovering = input.recoveryPreflight && loaded.state.attempts.some(attempt => attempt.command !== 'legacy-recovery' && attempt.journal.some(row =>
     prepared.some(item => item.scope.id === row.scopeId) && ['pending', 'applying', 'applied', 'readback-verified', 'rollback', 'cleanup-pending'].includes(row.state)));
@@ -226,6 +278,12 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
       classifiable = { ...item, selected: selectedPackages };
     }
     const classifiableState = pendingNativeIds.size === 0 ? loaded.state : { ...loaded.state, activations: loaded.state.activations.filter(row => row.scopeId !== item.scope.id || !pendingNativeIds.has(row.nativeId)) };
+    for (const activation of classifiableState.activations.filter(row => row.scopeId === item.scope.id)) {
+      const installation = item.observation?.installations.find(row => row.nativeId === activation.nativeId);
+      if ((activation.route.kind === 'managed' || activation.route.kind === 'native') && installation?.observedRoute !== undefined && installation.observedRoute !== activation.route.kind) {
+        return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.invariant', `recorded route '${activation.route.kind}' contradicts observed owned route '${installation.observedRoute}' for '${activation.nativeId}'`));
+      }
+    }
     const planned = await planPrepared(classifiable, attemptId, input.validatedAt, classifiableState, command);
     if (planned.kind === 'defect') return zeroWrite(command, input.dryRun, planned.reason, planned.terminalPhase);
     for (const journal of pendingJournals) {
@@ -507,6 +565,10 @@ async function classifyDesired(
   const installation = item.observation.installations.find((row) => row.nativeId === nativeId);
   const collision = foreignOwnership(item.observation, nativeId, item.scope.id, item.entry.target);
   if (collision !== null) return defect(collision);
+  const recordedRoute = activation?.route.kind === 'managed' || activation?.route.kind === 'native' ? activation.route.kind : null;
+  if (recordedRoute !== null && installation?.observedRoute !== undefined && installation.observedRoute !== recordedRoute) {
+    return defect(createLifecycleReason('internal', 'internal.invariant', `recorded route '${recordedRoute}' contradicts observed owned route '${installation.observedRoute}' for '${nativeId}'`));
+  }
   if (installation?.presence === 'present' && installation.ownership.kind === 'unmanaged' && !selected.adoptionRequested) {
     return defect(createLifecycleReason(
       'internal',
@@ -515,6 +577,10 @@ async function classifyDesired(
     ));
   }
   const replacing = installation?.presence === 'present' && installation.ownership.kind === 'owned';
+  if (replacing && item.scope.source.kind === 'git' && installation?.source?.locator != null
+    && installation.source.locator !== item.scope.source.locator) {
+    return defect(createLifecycleReason('internal', 'internal.ambiguous-ownership', 'owned native Git origin differs from the recorded deployment Source'));
+  }
   const capabilityOperation = replacing ? 'update' : 'install';
   let version: TargetVersionObservation;
   try {
@@ -522,9 +588,27 @@ async function classifyDesired(
   } catch (error) {
     return defect(createLifecycleReason('internal', 'internal.defect', unknownErrorDiagnostic(error)));
   }
-  const decision = await selectPairRoute(item, selected.plugin, inventory, nativeId, operationId, attemptId, capabilityOperation, version);
+  const decision = await selectPairRoute(item, selected.plugin, inventory, nativeId, operationId, attemptId, capabilityOperation, version, state.scopes.find(row => row.id === item.scope.id), activation);
   if (decision.kind === 'defect') return decision;
   if (decision.kind === 'gap') {
+    // A byte-identical live prior needs no update primitive. Revalidate the
+    // desired semantic projection on its exact existing route, never substitute
+    // another route or use this path for explicit update/repair.
+    if (!reapplyMatchingUpdate && recordedRoute !== null && installation?.observedRoute === recordedRoute
+      && priorKind(activation) === 'conforming' && activation?.pending === undefined
+      && installation.ownership.kind === 'owned' && installation.ownership.scopeId === item.scope.id
+      && installation.presence === 'present' && installation.activation === 'active' && installation.enablement === 'enabled'
+      && sameBytes(activation, installation, selected.plugin)
+      && activation?.sourceRevision === item.frozen.snapshot.revision
+      && installation.source?.immutableRevision === activation.sourceRevision
+      && installation.source.type === sourceTypeOf(item.entry.source)
+      && (item.scope.source.kind !== 'git' || installation.source.locator === item.scope.source.locator)) {
+      const unchanged = await selectPairRoute(item, selected.plugin, inventory, nativeId, operationId, attemptId, 'install', version, state.scopes.find(row => row.id === item.scope.id), activation, true);
+      if (unchanged.kind === 'defect') return unchanged;
+      if (unchanged.kind === 'selected' && unchanged.route === recordedRoute && !unchanged.provenanceRepair) {
+        return classified(operationId, 'desired-pair', item.scope, snapshotId, selected.plugin.name, nativeId, 'unchanged', recordedRoute, null);
+      }
+    }
     const prior = priorKind(activation);
     if (prior === 'nonconforming') {
       const disabled = await selectDisable(item, nativeId, operationId, attemptId, version, activation, installation);
@@ -538,28 +622,13 @@ async function classifyDesired(
     }
     return classified(operationId, 'desired-pair', item.scope, snapshotId, selected.plugin.name, nativeId, 'not-attempted', 'none', decision.reason);
   }
-  const recordedRoute = activation?.route.kind === 'managed' || activation?.route.kind === 'native' ? activation.route.kind : null;
-  const matchingBytes = sameBytes(activation, installation, selected.plugin)
+  if (recordedRoute !== null && recordedRoute !== decision.route && installation?.observedRoute === undefined) {
+    return classified(operationId, 'desired-pair', item.scope, snapshotId, selected.plugin.name, nativeId, 'retain-prior', recordedRoute,
+      createLifecycleReason('capability', 'capability.unverified', 'route migration has no independently observed prior route', 'migration-prior-route'));
+  }
+  const matchingBytes = !decision.provenanceRepair && sameBytes(activation, installation, selected.plugin)
     && installation?.activation === 'active' && installation.enablement === 'enabled';
   const action = chosenAction(replacing, recordedRoute, decision.route, matchingBytes, reapplyMatchingUpdate);
-  if (action === 'route-migrate') {
-    return classified(
-      operationId,
-      'desired-pair',
-      item.scope,
-      snapshotId,
-      selected.plugin.name,
-      nativeId,
-      'retain-prior',
-      recordedRoute ?? decision.route,
-      createLifecycleReason(
-        'capability',
-        'capability.unsupported',
-        `${action} of '${selected.plugin.name}' is not applied by this execution slice`,
-        action,
-      ),
-    );
-  }
   return classified(operationId, 'desired-pair', item.scope, snapshotId, selected.plugin.name, nativeId, action, decision.route, null);
 }
 
@@ -662,7 +731,10 @@ async function selectPairRoute(
   attemptId: string,
   operation: 'install' | 'update',
   version: TargetVersionObservation,
-): Promise<{ readonly kind: 'selected'; readonly route: 'native' | 'managed' } | { readonly kind: 'gap'; readonly reason: LifecycleReason } | Defect> {
+  recordedScope?: DeploymentScopeRecord,
+  activation?: ActivationRecord,
+  observeExistingOnly = false,
+): Promise<{ readonly kind: 'selected'; readonly route: 'native' | 'managed'; readonly provenanceRepair: boolean } | { readonly kind: 'gap'; readonly reason: LifecycleReason } | Defect> {
   if (item.host === null || item.observation === null) {
     return { kind: 'gap', reason: createLifecycleReason('capability', 'capability.unverified', 'missing lifecycle adapter', 'lifecycle-adapter') };
   }
@@ -681,6 +753,7 @@ async function selectPairRoute(
       nativeId,
       sourceType: sourceTypeOf(item.entry.source),
       immutableRevision: item.frozen.snapshot.revision,
+      ...(item.scope.source.kind === 'git' ? { nativeGit: { locator: item.scope.source.locator, resolvedRevision: item.frozen.snapshot.revision } } : {}),
       snapshotRoot: item.frozen.snapshotDir,
       packageRoot: plugin.dir,
       relativePackagePath: plugin.relativeDir && plugin.relativeDir.length > 0 ? plugin.relativeDir : '.',
@@ -688,12 +761,18 @@ async function selectPairRoute(
       packageFingerprint: plugin.contentFingerprint,
       inventory,
     });
+    const provenanceRepair = bindRecordedPriorSource(snapshot, item.scope, recordedScope, activation, item.observation.installations.find(row => row.nativeId === nativeId));
+    const installed = item.observation.installations.find(row => row.nativeId === nativeId);
+    if (item.scope.source.kind === 'git' && installed?.presence === 'present' && installed.ownership.kind === 'owned'
+      && (installed.source === null || installed.source.locator === null) && !provenanceRepair) {
+      return defect(createLifecycleReason('internal', 'internal.invariant', 'owned Git installation has incomplete native provenance and no exact recorded prior Source proof'));
+    }
     const planCoverage = createLifecyclePlanCoverage(item.observation, [{
       nativeId,
       operationId,
       operation,
       mutationGroupId: operationId,
-      authorization: operation === 'update' ? 'observed-owned' : 'planned-create',
+      authorization: operation === 'update' || observeExistingOnly ? 'observed-owned' : 'planned-create',
     }]);
     const nativeScope = await item.host.adapter.observeNativeMutationScope({
       targetObservation: item.observation,
@@ -726,7 +805,7 @@ async function selectPairRoute(
       pins,
     });
     if (decision.kind === 'capability-gap') return { kind: 'gap', reason: decision.gaps[0] };
-    return { kind: 'selected', route: decision.route };
+    return { kind: 'selected', route: decision.route, provenanceRepair };
   } catch (error) {
     return defect(createLifecycleReason('internal', 'internal.defect', unknownErrorDiagnostic(error)));
   }

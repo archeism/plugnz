@@ -1012,7 +1012,7 @@ describe('public lifecycle commands', () => {
     });
   }, 20_000);
 
-  test('sync updates an independent pair while an unimplemented migration stays loud, and an ungated cursor instance is refused', async () => {
+  test('a contradictory recorded route blocks the whole batch without staging, and an ungated cursor instance is refused', async () => {
     await withLifecycleCliHarness((harness) => {
       harness.writeHome({ '.cursor/.keep': '' });
       const keptJson = '{"name":"kept","version":"1.0.0","description":"kept"}\n';
@@ -1063,35 +1063,33 @@ describe('public lifecycle commands', () => {
       const refused = (label: string, args: string[]) => {
         const result = harness.run(args, { env });
         const report = parseLifecycleReport(JSON.parse(result.stdout));
-        const reasons = report.outcomes.map((outcome) => outcome.reason?.code ?? report.summary.failureCategory);
         expect({
           label,
           exitCode: result.exitCode,
           stderr: result.stderr,
           mutationStarted: report.summary.mutationStarted,
           changed: report.summary.changed,
-          capability: reasons.includes('capability.unsupported'),
+          reason: report.summary.reason?.code,
           succeededMutation: report.outcomes.filter((outcome) => outcome.result === 'succeeded' && (outcome.action === 'update' || outcome.action === 'route-migrate')).map((outcome) => outcome.package),
         }).toEqual({
           label,
           exitCode: 1,
           stderr: '',
-          mutationStarted: label === 'apply',
-          changed: label === 'apply',
-          capability: true,
-          succeededMutation: ['kept'],
+          mutationStarted: false,
+          changed: false,
+          reason: 'internal.invariant',
+          succeededMutation: [],
         });
-        if (label === 'dry-run') {
-          expect(snapshotTree(cursorStore)).toEqual(storeBeforeRefusal);
-          expect(readFileSync(statePath, 'utf8')).toBe(stateBeforeRefusal);
-        } else {
-          expect(Object.entries(result.stores.cursor.after.files).filter(([path]) => path.endsWith('kept/plugin.json')).map(([, bytes]) => bytesToText(bytes))).toEqual([
-            '{"name":"kept","version":"1.0.0","description":"changed"}\n',
-          ]);
-        }
+        expect(snapshotTree(cursorStore)).toEqual(storeBeforeRefusal);
+        expect(readFileSync(statePath, 'utf8')).toBe(stateBeforeRefusal);
       };
       refused('dry-run', ['sync', '--manifest', manifest, '--dry-run', '--json']);
       refused('apply', ['sync', '--manifest', manifest, '--json']);
+      refused('retire dry-run', ['retire-source', source, '--target', 'cursor', '--dry-run', '--json']);
+      refused('retire apply', ['retire-source', source, '--target', 'cursor', '--json']);
+      writeFileSync(manifest, JSON.stringify({ schemaVersion: 1, entries: [{ operation: 'sync', source: { kind: 'local', locator: source }, target: { kind: 'cursor', instance: 'default' }, selectors: [{ package: 'kept' }] }] }));
+      refused('omission dry-run', ['sync', '--manifest', manifest, '--dry-run', '--json']);
+      refused('omission apply', ['sync', '--manifest', manifest, '--json']);
 
       const side = harness.run(
         ['sync', source, '--target', 'cursor', '--instance', 'side', '--json'],

@@ -24,6 +24,77 @@ afterAll(() => {
 });
 
 describe('lifecycle executor', () => {
+  test('fresh owned retirement and disable refuse a route contradiction introduced after global preflight', async () => {
+    for (const action of ['retire', 'disable'] as const) {
+    const root = temp('fresh-retirement-route');
+    const home = join(root, 'home'); mkdirSync(home);
+    const source = writePlugin(join(root, 'sources'), 'alpha');
+    const host = boundHost('codex', join(root, 'codex'), action === 'retire' ? ['install', 'update', 'retire'] : ['install', 'disable']);
+    await withHome(home, async () => {
+      const installed = expectFrozen(await planLifecycle({ manifest: manifest([syncEntry(source, 'codex')]), dryRun: false, validatedAt: now, hosts: [host.planner] }));
+      expect((await executeLifecycle({ plan: installed, hosts: [host.planner], now })).exitCode).toBe(0);
+      const scopeId = readLifecycleState().state.scopes[0]!.id;
+      if (action === 'disable') {
+        const loaded = readLifecycleState();
+        writeLifecycleState({ ...loaded.state, stateGeneration: loaded.state.stateGeneration + 1, activations: loaded.state.activations.map(row => ({ ...row, activationState: 'nonconforming' as const })) }, { globalPreflight: 'succeeded' });
+        writeFileSync(join(source, 'payload.txt'), 'changed desired bytes\n');
+      }
+      const retirement = expectFrozen(await planLifecycle({ manifest: action === 'retire' ? manifest([{ operation: 'retire-source', scopeId, target: { kind: 'codex', instance: 'default' } }]) : manifest([syncEntry(source, 'codex')]), dryRun: false, validatedAt: now, hosts: [host.planner] }));
+      expect(retirement.operations[0]!.operation.action).toBe(action === 'retire' ? 'retire-orphan' : 'disable-nonconforming');
+      const registryPath = join(host.fake.root, 'host/registry.json');
+      const registry = JSON.parse(readFileSync(registryPath, 'utf8')); registry.alpha.route = 'native';
+      writeFileSync(registryPath, JSON.stringify(registry));
+      const before = host.fake.hostMutationState();
+      const refused = await executeLifecycle({ plan: retirement, hosts: [host.planner], now });
+      expect(refused.exitCode).toBe(1);
+      expect(refused.report.summary.mutationStarted).toBe(false);
+      expect(refused.report.outcomes[0]!.reason!.code).toBe('internal.invariant');
+      expect(host.fake.hostMutationState()).toEqual(before);
+      expect(host.fake.events.includes(action)).toBe(false);
+    });
+    }
+  });
+  // SPI contract coverage only; real Codex Native capability requires the
+  // separately retained released-CLI Sandbox probe, not this fixture profile.
+  test('SPI route migration journals both directions against a genuinely applied prior and retains plugin data', async () => {
+    const root = temp('migration-spi');
+    const home = join(root, 'home'); mkdirSync(home);
+    const source = writePlugin(join(root, 'sources'), 'alpha');
+    const fake = new FakeLifecycleHost(realpathSync(mkdirTemp(join(root, 'host'))), [managedProfile(['install', 'update']), managedProfile(['update'], 'native')]);
+    const planner: PlannerHost = { kinds: ['codex'], adapter: fake.adapter, plannedNativeId: plugin => plugin.name };
+    await withHome(home, async () => {
+      const plan = () => planLifecycle({ manifest: manifest([syncEntry(source, 'codex')]), dryRun: false, validatedAt: now, hosts: [planner] });
+      const installed = expectFrozen(await plan());
+      expect((await executeLifecycle({ plan: installed, hosts: [planner], now })).exitCode).toBe(0);
+      const data = join(fake.root, 'host/plugin-data/alpha');
+      writeFileSync(data, 'user data\n');
+      fake.nativeScope = { kind: 'bounded', mode: 'exact-package', affectedNativeIds: ['alpha'] };
+      for (const route of ['native', 'managed'] as const) {
+        fake.nativeProjection = route === 'native' ? { kind: 'equivalent', proofId: 'fixture-equivalence' } : { kind: 'requires-managed', reasonId: 'fixture-policy' };
+        const migration = expectFrozen(await plan());
+        expect(migration.operations[0]!.operation.action).toBe('route-migrate');
+        const result = await executeLifecycle({ plan: migration, hosts: [planner], now });
+        expect(result.report.outcomes[0]!.reason).toBe(null);
+        expect(result.exitCode).toBe(0);
+        const state = readLifecycleState().state;
+        expect(state.activations[0]!.route.kind).toBe(route);
+        expect(state.attempts.at(-1)!.journal[0]!.action).toBe('route-migrate');
+        expect(state.attempts.at(-1)!.journal[0]!.state).toBe('completed');
+        expect(readFileSync(data, 'utf8')).toBe('user data\n');
+        if (route === 'native') {
+          fake.nativeProjection = { kind: 'requires-managed', reasonId: 'fixture-policy' };
+          fake.omitObservedRoute = true;
+          const before = fake.hostMutationState();
+          const unknownPrior = expectFrozen(await plan());
+          expect(unknownPrior.operations[0]!.operation.action).toBe('retain-prior');
+          expect(unknownPrior.operations[0]!.reason?.code).toBe('capability.unverified');
+          expect((await executeLifecycle({ plan: unknownPrior, hosts: [planner], now })).exitCode).toBe(1);
+          expect(fake.hostMutationState()).toEqual(before);
+          fake.omitObservedRoute = false;
+        }
+      }
+    });
+  });
   test('retirement which mutates then throws before its receipt rolls back through the sealed handle', async () => {
     const root = temp('partial-retirement');
     const home = join(root, 'home');
@@ -1204,14 +1275,14 @@ function boundHost(kind: string, root: string, operations: readonly CapabilityOp
   };
 }
 
-function managedProfile(operations: readonly CapabilityOperation[]) {
+function managedProfile(operations: readonly CapabilityOperation[], route: 'managed' | 'native' = 'managed') {
   const semantics = Object.fromEntries(PACKAGE_SEMANTICS.map((semantic) => [semantic, 'supported'])) as Record<PackageSemantic, CapabilityStatus>;
   return createCapabilityEvidenceProfile({
     host: 'fixture',
     detectedVersion: '1.0.0',
     sourceTypes: ['local', 'git'],
     operations,
-    route: 'managed',
+    route,
     operationStatus: 'supported',
     semantics,
     evidence: ['docs/adr/0002-preflight-before-native-activation.md'],

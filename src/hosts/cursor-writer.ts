@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { createCapabilityEvidenceProfile } from '../capability-evidence';
 import { discoverCommands } from '../conversion';
 import { fingerprintTree } from '../fingerprint';
+import { recordedPriorSource } from '../prior-source-proof';
 import type { AddOptions, HostWriter, InstalledPlugin, PinOptions, PinOutcome } from '../host';
 import type {
   CleanupDisposition,
@@ -418,7 +419,21 @@ const cursorLifecycleDefinition: LifecycleHostDefinition = {
   async observeNativeMutationScope() {
     return { kind: 'unavailable' };
   },
-  async observeNativeProjection() {
+  async observeNativeProjection(request) {
+    if ('snapshot' in request) {
+      const proof = recordedPriorSource(request.snapshot);
+      if (proof !== undefined) {
+        const installed = request.targetObservation.installations.find(row => row.nativeId === request.snapshot.nativeId);
+        for (const root of installed?.contentRoots ?? []) {
+          const marker = readOwnership(root.path);
+          if (marker === null || !ownsNativeDirectory(marker.pluginId, proof.nativeId) || marker.scopeId !== proof.scopeId
+            || marker.source !== proof.revision || marker.fingerprint !== proof.sourceFingerprint
+            || marker.sourceType !== 'git' || marker.sourceRevision !== proof.revision || marker.sourceLocator != null) {
+            throw new Error('Cursor historical Git marker does not match recorded prior Source proof');
+          }
+        }
+      }
+    }
     return { kind: 'unverified', reasonId: MARKETPLACE_REFRESH_UNVERIFIED };
   },
   async revalidateTargetPrecondition(handle) {
@@ -698,10 +713,12 @@ function readLocalInstallation(entry: string, dir: string): TargetInventoryData[
       contentRoots: [{ label: 'local', path: resolve(dir), fingerprint: digest }],
     };
   }
+  const ownership = ownershipOf(entry, marker);
   return {
     nativeId: entry,
     packageName: manifest.name,
-    ownership: ownershipOf(entry, marker),
+    ownership,
+    ...(ownership.kind === 'owned' ? { observedRoute: 'managed' as const } : {}),
     presence: 'present',
     enablement: 'enabled',
     activation: 'active',

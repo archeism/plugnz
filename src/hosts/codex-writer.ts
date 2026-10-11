@@ -6,13 +6,15 @@
  * code (AGENTS.md: doctor is read-only by construction;
  * test/doctor-imports.test.ts pins it).
  */
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { parse as parseToml } from 'smol-toml';
 import { createCapabilityEvidenceProfile, type CapabilityEvidenceProfile, type CapabilityStatus } from '../capability-evidence';
 import { projectPluginForCodex } from '../conversion';
 import { fingerprintTree } from '../fingerprint';
+import { codexMarketplaceSourceFingerprint } from './codex-marketplace-proof';
+import { capturePriorSourceRepair, priorSourceRepairAllows, recordedPriorSource, releasePriorSourceRepair, type PriorSourceProof } from '../prior-source-proof';
 import type { AddOptions, HostWriter, InstalledPlugin, PinOptions, PinOutcome } from '../host';
 import type {
   ActivationPreparationCapture,
@@ -241,7 +243,17 @@ function validVersionSegment(value: string): boolean {
   return value === 'local' || /^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u.test(value);
 }
 
-function readOwnership(dir: string): { source: string; pluginId: string; fingerprint: string } | null {
+interface CodexOwnership {
+  source: string;
+  pluginId: string;
+  fingerprint: string;
+  scopeId?: string;
+  sourceType?: 'local' | 'git';
+  sourceRevision?: string;
+  route?: 'native' | 'managed';
+}
+
+function readOwnership(dir: string): CodexOwnership | null {
   const file = join(dir, OWNERSHIP);
   if (!existsSync(file)) return null;
   try {
@@ -249,7 +261,15 @@ function readOwnership(dir: string): { source: string; pluginId: string; fingerp
     if (typeof value !== 'object' || value === null) throw new Error('marker must be an object');
     const record = value as Record<string, unknown>;
     if (typeof record['source'] !== 'string' || typeof record['pluginId'] !== 'string' || typeof record['fingerprint'] !== 'string') throw new Error('marker fields are invalid');
-    return { source: record['source'], pluginId: record['pluginId'], fingerprint: record['fingerprint'] };
+    const marker: CodexOwnership = { source: record['source'], pluginId: record['pluginId'], fingerprint: record['fingerprint'] };
+    if (['scopeId', 'sourceType', 'sourceRevision', 'route'].some(key => record[key] !== undefined)) {
+      if (typeof record['scopeId'] !== 'string' || record['scopeId'].length === 0
+        || (record['sourceType'] !== 'local' && record['sourceType'] !== 'git')
+        || typeof record['sourceRevision'] !== 'string' || record['sourceRevision'].length === 0
+        || (record['route'] !== 'native' && record['route'] !== 'managed')) throw new Error('lifecycle marker fields are invalid');
+      return { ...marker, scopeId: record['scopeId'], sourceType: record['sourceType'], sourceRevision: record['sourceRevision'], route: record['route'] };
+    }
+    return marker;
   } catch (error) {
     throw new Error(`invalid plgnz ownership marker: ${file} (${(error as Error).message})`);
   }
@@ -380,23 +400,27 @@ function bytesKey(path: string): string {
   return Array.from(read(path)).join(',');
 }
 
-function assertNoWinningForeignVersion(slot: string, requested: string, id: string, source: string): void {
+function assertNoWinningForeignVersion(slot: string, requested: string, id: string, source: string, handle?: DurableLifecycleOperation): void {
   for (const version of readdirSync(slot)) {
     const candidate = join(slot, version);
     if (!statSync(candidate).isDirectory() || version === requested) continue;
     const marker = readOwnership(candidate);
-    if (wins(version, requested) && (marker?.pluginId !== id || marker.source !== source)) {
+    if (wins(version, requested) && (marker?.pluginId !== id || marker.source !== source)
+      && !(handle !== undefined && marker !== null && fingerprintTree(candidate) === handle.prior.installedFingerprint
+        && priorSourceRepairAllows(handle, proof => historicalGitMarker(marker, proof)))) {
       throw new Error(`foreign Codex cache version ${version} would remain active over ${requested}`);
     }
   }
 }
 
-function cleanupOwnedVersions(slot: string, active: string, id: string, source: string): void {
+function cleanupOwnedVersions(slot: string, active: string, id: string, source: string, handle?: DurableLifecycleOperation): void {
   for (const version of readdirSync(slot)) {
     const candidate = join(slot, version);
     if (candidate === active || !statSync(candidate).isDirectory()) continue;
     const marker = readOwnership(candidate);
-    if (marker?.pluginId === id && marker.source === source) rmSync(candidate, { recursive: true, force: true });
+    if (marker?.pluginId === id && (marker.source === source || (handle !== undefined
+      && fingerprintTree(candidate) === handle.prior.installedFingerprint
+      && priorSourceRepairAllows(handle, proof => historicalGitMarker(marker, proof))))) rmSync(candidate, { recursive: true, force: true });
   }
 }
 
@@ -441,7 +465,7 @@ type CodexCatalogBinding =
 
 const CODEX_ROUTE_VERSION = '0.162.0';
 const NATIVE_UPGRADE_TIMEOUT_MS = 120_000;
-/** Codex advances the marketplace checkout itself. plgnz does not capture that git state. */
+/** The native primitive has no whole-checkout rollback; adapter compensation captures its Git state separately. */
 export const codexMarketplaceCheckoutRollback = 'unverified' as const;
 
 function nativeUpgradeTimeout(): number {
@@ -452,14 +476,15 @@ function nativeUpgradeTimeout(): number {
   return parsed;
 }
 const RELOAD_EFFECTIVE = { requirement: 'reload', status: 'effective' } as const;
-const UPDATE_SEMANTICS = ['auto-update-control', 'readback', 'rollback', 'activation-reload'] as const satisfies readonly PackageSemantic[];
+const UPDATE_SEMANTICS = ['ordinary-skills', 'resources', 'auto-update-control', 'readback', 'rollback', 'activation-reload'] as const satisfies readonly PackageSemantic[];
 const MANAGED_SEMANTICS = [...UPDATE_SEMANTICS, 'retirement', 'retention-safety'] as const satisfies readonly PackageSemantic[];
 
 const codexEvidenceProfiles: readonly CapabilityEvidenceProfile[] = [
-  codexRouteProfile('native', ['update'], UPDATE_SEMANTICS, ['docs/research/native-plugin-update-capabilities-2026-10-09.md']),
-  codexRouteProfile('managed', ['update', 'retire'], MANAGED_SEMANTICS, [
+  codexRouteProfile('native', ['update'], UPDATE_SEMANTICS, ['docs/research/native-plugin-update-capabilities-2026-10-09.md', 'docs/evidence/codex-native-released-20261011.md']),
+  codexRouteProfile('managed', ['install', 'update', 'retire'], MANAGED_SEMANTICS, [
     'docs/hosts/codex.md',
     'docs/adr/0004-retain-plugin-state-on-removal.md',
+    'docs/evidence/codex-native-released-20261011.md',
   ]),
 ];
 
@@ -529,6 +554,13 @@ function codexRouteProfile(
 }
 
 function revalidateCodexTarget(handle: DurableLifecycleOperation): { version: ReturnType<typeof probeCodexVersion>; targetObservationId: string } {
+  const bundle = rollbackBundle(handle.attemptId, handle.operationId);
+  if (existsSync(join(bundle, 'marketplace.json'))) {
+    const metadata = JSON.parse(readFileSync(join(bundle, 'marketplace.json'), 'utf8')) as { marketplace: string; fingerprint: string | null };
+    const checkout = marketplaceCheckout(metadata.marketplace);
+    const actual = existsSync(checkout) ? fingerprintTree(checkout) : null;
+    if (actual !== metadata.fingerprint) throw new Error('Codex marketplace checkout changed after rollback capture');
+  }
   const version = probeCodexVersion();
   const observation = createTargetInventoryObservation('codex', {
     target: handle.target,
@@ -548,11 +580,15 @@ function stageCodexActivation(request: Parameters<LifecycleHostDefinition['stage
   if (!validVersionSegment(version)) throw new Error(`unsafe Codex plugin version: ${version}`);
   ensureNativeManifest(stagingRoot, request.snapshot.packageName, version);
   validateStage(stagingRoot);
-  const source = request.snapshot.nativeGit?.locator ?? request.snapshot.immutableRevision;
+  const source = request.snapshot.nativeGit?.locator ?? `scope:${request.snapshot.scopeId}`;
   writeFileSync(join(stagingRoot, OWNERSHIP), JSON.stringify({
     source,
     pluginId: request.snapshot.nativeId,
     fingerprint: request.snapshot.packageFingerprint,
+    scopeId: request.snapshot.scopeId,
+    sourceType: request.snapshot.sourceType,
+    sourceRevision: request.snapshot.immutableRevision,
+    route: request.selection.route,
   }));
   return { stagingId, stagingRoot };
 }
@@ -573,7 +609,9 @@ function captureCodexActivation(projection: PinsAppliedProjection, projectedFing
     packageName: projection.packageName,
     nativeId: projection.nativeId,
   });
+  capturePriorSourceRepair(projection, prior.installedFingerprint);
   saveCodexRollback(projection.attemptId, projection.operationId, projection.affectedNativeIds);
+  if (projection.route === 'native') captureMarketplaceRollback(projection);
   return {
     prior,
     expected: {
@@ -636,9 +674,10 @@ function applyManagedCodexActivation(prepared: PreparedActivationMutation): Muta
   mkdirSync(slot, { recursive: true });
   assertNoSymlinks(slot);
   const source = readOwnership(stagingRoot)?.source ?? handle.sourceLocator ?? handle.sourceRevision;
-  assertNoWinningForeignVersion(slot, version, handle.nativeId, source);
+  assertNoWinningForeignVersion(slot, version, handle.nativeId, source, handle);
   const marker = readOwnership(targetDir);
-  if (marker !== null && (marker.source !== source || marker.pluginId !== handle.nativeId)) {
+  if (marker !== null && (marker.source !== source || marker.pluginId !== handle.nativeId)
+    && !(fingerprintTree(targetDir) === handle.prior.installedFingerprint && priorSourceRepairAllows(handle, proof => historicalGitMarker(marker, proof)))) {
     throw new Error(`codex cache slot ${targetDir} has a different owned source identity; refusing to replace it`);
   }
   const before = cacheFingerprint(handle.nativeId);
@@ -652,7 +691,7 @@ function applyManagedCodexActivation(prepared: PreparedActivationMutation): Muta
     throw error;
   }
   activation.commit();
-  cleanupOwnedVersions(slot, targetDir, handle.nativeId, source);
+  cleanupOwnedVersions(slot, targetDir, handle.nativeId, source, handle);
   return {
     receiptId: `apply:${handle.attemptId}:${handle.operationId}`,
     changed: before !== cacheFingerprint(handle.nativeId),
@@ -675,6 +714,7 @@ function applyNativeMarketplaceUpgrade(prepared: PreparedActivationMutation): Mu
   });
   const stdout = decodeBytes(result.stdout);
   const stderr = decodeBytes(result.stderr).trim();
+  captureAttemptedMarketplace(prepared.handle);
   const parsed = parseUpgradeJson(stdout);
   const rewritten = fingerprintAffected(prepared.handle.affectedNativeIds);
   const errors = parsed?.errors ?? [];
@@ -730,9 +770,8 @@ function restampNativeUpgrade(prepared: PreparedActivationMutation): void {
     if (ownedPrior === null) continue;
     assertManagedPath(codexHome(), path);
     writeFileSync(join(path, OWNERSHIP), JSON.stringify({
-      source: ownedPrior.source,
+      ...ownedPrior,
       pluginId: nativeId,
-      fingerprint: ownedPrior.fingerprint,
     }));
   }
 }
@@ -740,7 +779,7 @@ function restampNativeUpgrade(prepared: PreparedActivationMutation): void {
 function priorInstallMarker(
   prepared: PreparedActivationMutation,
   nativeId: string,
-): { source: string; pluginId: string; fingerprint: string } | null {
+): CodexOwnership | null {
   const bundle = rollbackBundle(prepared.handle.attemptId, prepared.handle.operationId);
   const manifestPath = join(bundle, 'manifest.json');
   if (!existsSync(manifestPath)) return null;
@@ -773,13 +812,17 @@ function readCodexInstall(handle: DurableLifecycleOperation): LifecycleReadbackD
     scopeId: handle.scopeId,
     packageName: handle.packageName,
     nativeId: handle.nativeId,
-    route: handle.route,
+    route: cacheFingerprint(handle.nativeId) === handle.prior.installedFingerprint ? handle.prior.route : handle.route,
   });
 }
 
 function cleanupCodexStage(reference: CleanupReference): CleanupResultData {
+  releasePriorSourceRepair(reference);
   const stage = resolve(join(codexHome(), '.plgnz-lifecycle', `${reference.attemptId}:${reference.operationId}`));
   if (existsSync(stage)) rmSync(stage, { recursive: true, force: true });
+  const rollback = rollbackBundle(reference.attemptId, reference.operationId);
+  assertManagedPath(codexHome(), rollback);
+  if (existsSync(rollback)) rmSync(rollback, { recursive: true, force: true });
   return { cleanupId: `cleanup:${reference.attemptId}:${reference.operationId}`, completed: true };
 }
 
@@ -806,17 +849,18 @@ function readInstall(identity: {
       ...shared,
       route: identity.route ?? 'none',
       presence: 'absent',
-      enablement: plugin?.enabled === false ? 'disabled' : 'unknown',
+      enablement: plugin?.enabled === true ? 'enabled' : 'disabled',
       activation: 'inactive',
       installedFingerprint: null,
       contentRoots: [],
     };
   }
   const installedFingerprint = fingerprintTree(plugin.path);
-  const owned = readOwnership(plugin.path)?.pluginId === identity.nativeId;
+  const marker = readOwnership(plugin.path);
+  const owned = marker?.pluginId === identity.nativeId;
   return {
     ...shared,
-    route: identity.route ?? (owned ? 'managed' : 'none'),
+    route: owned && marker.route !== undefined ? marker.route : identity.route ?? (owned ? 'managed' : 'none'),
     presence: 'present',
     enablement: plugin.enabled ? 'enabled' : 'disabled',
     activation: plugin.enabled ? 'active' : 'inactive',
@@ -961,6 +1005,8 @@ function restoreCodexRollback(handle: DurableLifecycleOperation): MutationResult
   const manifestPath = join(bundle, 'manifest.json');
   if (!existsSync(manifestPath)) throw new Error(`codex lifecycle rollback bundle is missing: ${handle.operationId}`);
   const manifest = parseRollbackManifest(readFileSync(manifestPath, 'utf8'));
+  assertMarketplaceRollbackCurrent(handle);
+  if (handle.route === 'native') assertNativeRollbackSurfaces(handle, manifest, bundle);
   const before = rollbackSurface(manifest.installs.map((install) => install.nativeId));
   restorePluginTables(manifest.tables);
   for (const install of manifest.installs) {
@@ -978,8 +1024,123 @@ function restoreCodexRollback(handle: DurableLifecycleOperation): MutationResult
     }
     removeUnsnapshotVersions(install.slot, install.versions);
   }
+  restoreMarketplaceRollback(handle);
   const after = rollbackSurface(manifest.installs.map((install) => install.nativeId));
   return { receiptId: `rollback:${handle.attemptId}:${handle.operationId}`, changed: before !== after };
+}
+
+function marketplaceCheckout(marketplace: string): string {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(marketplace)) throw new Error('unsafe Codex marketplace identity');
+  const path = resolve(join(codexHome(), '.tmp', 'marketplaces', marketplace));
+  assertManagedPath(codexHome(), path);
+  return path;
+}
+
+function assertNativeRollbackSurfaces(handle: DurableLifecycleOperation, manifest: ReturnType<typeof parseRollbackManifest>, bundle: string): void {
+  const config = existsSync(configFile()) ? readFileSync(configFile(), 'utf8') : '';
+  for (const table of manifest.tables) {
+    if (extractPluginTable(config, table.nativeId) !== table.block) throw new Error('Codex affected plugin config changed outside the captured native attempt; refusing rollback before any restore write');
+  }
+  const projections = handle.affectedOperationIds.map(id => join(codexHome(), '.plgnz-lifecycle', `${handle.attemptId}:${id}`));
+  for (const install of manifest.installs) {
+    const projected = projections.find(path => existsSync(path) && readOwnership(path)?.pluginId === install.nativeId);
+    const desired = (path: string): boolean => {
+      const marker = readOwnership(path);
+      return projected !== undefined && (marker === null || (marker.pluginId === install.nativeId && marker.scopeId === handle.scopeId)) && sameTree(path, projected);
+    };
+    if (install.existed && existsSync(install.cachePath)) {
+      const saved = join(bundle, 'cache', install.saved);
+      if (fingerprintTree(install.cachePath) !== fingerprintTree(saved) && !desired(install.cachePath)) throw new Error('Codex prior cache changed outside the captured native attempt; refusing rollback before any restore write');
+    }
+    if (install.slot === null || !existsSync(install.slot)) continue;
+    for (const version of slotVersions(install.slot)) {
+      if (install.versions.includes(version)) continue;
+      if (!desired(join(install.slot, version))) throw new Error('Codex new cache version is not the proven attempt projection; refusing rollback before any restore write');
+    }
+  }
+}
+
+function captureMarketplaceRollback(projection: PinsAppliedProjection): void {
+  const marketplace = marketplaceOf(projection.nativeId);
+  if (marketplace === null) throw new Error('native Codex mutation has no bounded marketplace');
+  const checkout = marketplaceCheckout(marketplace);
+  const bundle = rollbackBundle(projection.attemptId, projection.operationId);
+  const fingerprint = existsSync(checkout) ? fingerprintTree(checkout) : null;
+  if (fingerprint !== null) {
+    const snapshot = join(bundle, 'marketplace');
+    cpSync(checkout, snapshot, { recursive: true });
+    if (fingerprintTree(snapshot) !== fingerprint || fingerprintTree(checkout) !== fingerprint) throw new Error('Codex marketplace checkout changed during rollback capture');
+  }
+  writeFileSync(join(bundle, 'marketplace.json'), JSON.stringify({ marketplace, fingerprint, sourceFingerprint: projection.snapshot.snapshotFingerprint }));
+}
+
+/** Capture only a clean checkout of the exact immutable Source consumed by this call. */
+function captureAttemptedMarketplace(handle: DurableLifecycleOperation): void {
+  const metadata = join(rollbackBundle(handle.attemptId, handle.operationId), 'marketplace.json');
+  if (!existsSync(metadata)) return;
+  const marketplace = marketplaceOf(handle.nativeId);
+  if (marketplace === null || handle.sourceLocator === null) return;
+  const checkout = marketplaceCheckout(marketplace);
+  if (!existsSync(checkout)) return;
+  const capture = JSON.parse(readFileSync(metadata, 'utf8')) as Record<string, unknown>;
+  if (typeof capture['sourceFingerprint'] !== 'string' || !/^[0-9a-f]{64}$/u.test(capture['sourceFingerprint'])) throw new Error('invalid Codex captured Source fingerprint');
+  const git = (args: readonly string[]): string | null => {
+    const result = spawnSync(['git', '-C', checkout, ...args]);
+    return result.exitCode === 0 ? decodeBytes(result.stdout).trim() : null;
+  };
+  if (git(['rev-parse', 'HEAD']) !== handle.sourceRevision
+    || git(['config', '--get', 'remote.origin.url']) !== handle.sourceLocator
+    || codexMarketplaceSourceFingerprint(checkout, { locator: handle.sourceLocator, revision: handle.sourceRevision }) !== capture['sourceFingerprint']) return;
+  writeFileSync(metadata, JSON.stringify({ ...capture, attemptedFingerprint: fingerprintTree(checkout) }));
+}
+
+/** Validate before any cache/config restoration, never overwrite a later foreign checkout. */
+function assertMarketplaceRollbackCurrent(handle: DurableLifecycleOperation): void {
+  const metadata = join(rollbackBundle(handle.attemptId, handle.operationId), 'marketplace.json');
+  if (!existsSync(metadata)) return;
+  const row = JSON.parse(readFileSync(metadata, 'utf8')) as Record<string, unknown>;
+  const marketplace = marketplaceOf(handle.nativeId);
+  if (marketplace === null || row['marketplace'] !== marketplace
+    || (row['fingerprint'] !== null && (typeof row['fingerprint'] !== 'string' || !/^[0-9a-f]{64}$/u.test(row['fingerprint'])))
+    || (row['attemptedFingerprint'] !== undefined && (typeof row['attemptedFingerprint'] !== 'string' || !/^[0-9a-f]{64}$/u.test(row['attemptedFingerprint'])))) throw new Error('invalid Codex marketplace rollback capture');
+  const checkout = marketplaceCheckout(marketplace);
+  const current = existsSync(checkout) ? fingerprintTree(checkout) : null;
+  if (current !== row['fingerprint'] && current !== row['attemptedFingerprint']) {
+    throw new Error('Codex marketplace checkout changed outside the captured native attempt; refusing rollback before any restore write');
+  }
+  if (row['fingerprint'] !== null && fingerprintTree(join(rollbackBundle(handle.attemptId, handle.operationId), 'marketplace')) !== row['fingerprint']) {
+    throw new Error('Codex retained marketplace rollback bytes drifted');
+  }
+}
+
+function restoreMarketplaceRollback(handle: DurableLifecycleOperation): void {
+  const bundle = rollbackBundle(handle.attemptId, handle.operationId);
+  const metadata = join(bundle, 'marketplace.json');
+  if (!existsSync(metadata)) return;
+  const capture: unknown = JSON.parse(readFileSync(metadata, 'utf8'));
+  if (typeof capture !== 'object' || capture === null || Array.isArray(capture)) throw new Error('invalid Codex marketplace rollback capture');
+  const row = capture as Record<string, unknown>;
+  const marketplace = marketplaceOf(handle.nativeId);
+  if (row['marketplace'] !== marketplace || marketplace === null
+    || (row['fingerprint'] !== null && (typeof row['fingerprint'] !== 'string' || !/^[0-9a-f]{64}$/u.test(row['fingerprint'])))) throw new Error('invalid Codex marketplace rollback identity');
+  const checkout = marketplaceCheckout(marketplace);
+  if (row['fingerprint'] === null) {
+    if (existsSync(checkout)) rmSync(checkout, { recursive: true });
+    return;
+  }
+  const snapshot = join(bundle, 'marketplace');
+  if (fingerprintTree(snapshot) !== row['fingerprint']) throw new Error('Codex retained marketplace rollback bytes drifted');
+  const parent = dirname(checkout);
+  mkdirSync(parent, { recursive: true });
+  const scratch = mkdtempSync(join(parent, '.plgnz-marketplace-restore-'));
+  try {
+    cpSync(snapshot, scratch, { recursive: true });
+    // cpSync into an existing mkdtemp directory retains its 0700 root mode.
+    chmodSync(scratch, statSync(snapshot).mode & 0o777);
+    if (fingerprintTree(scratch) !== row['fingerprint']) throw new Error('Codex marketplace restore staging drifted');
+    activate(scratch, checkout, parent).commit();
+    if (fingerprintTree(checkout) !== row['fingerprint']) throw new Error('Codex marketplace rollback did not verify');
+  } finally { rmSync(scratch, { recursive: true, force: true }); }
 }
 
 function pluginSlot(nativeId: string): string | null {
@@ -1118,7 +1279,7 @@ function parseRollbackVersions(value: unknown): string[] {
 function installationRecord(plugin: InstalledPlugin): TargetInstallationData {
   const owned = plugin.path === undefined ? null : readOwnership(plugin.path);
   const ownership = owned?.pluginId === plugin.id
-    ? { kind: 'owned' as const, proof: 'created' as const, scopeId: `codex:${plugin.id}`, proofId: `marker:${plugin.id}` }
+    ? { kind: 'owned' as const, proof: 'created' as const, scopeId: owned.scopeId ?? `codex:${plugin.id}`, proofId: `marker:${plugin.id}` }
     : { kind: 'unmanaged' as const };
   if (plugin.path === undefined) {
     return {
@@ -1144,12 +1305,25 @@ function installationRecord(plugin: InstalledPlugin): TargetInstallationData {
     activation: plugin.enabled ? 'active' : 'inactive',
     installedFingerprint,
     installedVersion: plugin.version ?? null,
-    source: null,
+    ...(owned?.pluginId === plugin.id && owned.scopeId !== undefined && owned.route !== undefined ? { observedRoute: owned.route } : {}),
+    source: owned?.pluginId === plugin.id && owned.sourceType !== undefined && owned.sourceRevision !== undefined
+      ? { type: owned.sourceType, immutableRevision: owned.sourceRevision, locator: owned.sourceType === 'git' && owned.source !== `scope:${owned.scopeId}` ? owned.source : null } : null,
     contentRoots: [{ label: 'plugin', path: plugin.path, fingerprint: installedFingerprint }],
   };
 }
 
 function nativeProjection(request: NativeProjectionRequest): NativeProjectionData {
+  if ('snapshot' in request) {
+    const proof = recordedPriorSource(request.snapshot);
+    if (proof !== undefined) {
+      const installed = request.targetObservation.installations.find(row => row.nativeId === request.snapshot.nativeId);
+      for (const root of installed?.contentRoots ?? []) {
+        const marker = readOwnership(root.path);
+        if (marker === null || !historicalGitMarker(marker, proof)) throw new Error('Codex historical Git marker does not match recorded prior Source proof');
+      }
+      return { kind: 'requires-managed', reasonId: 'recorded-prior-origin-repair' };
+    }
+  }
   if (!('snapshot' in request) || request.operation !== 'update') {
     return { kind: 'requires-managed', reasonId: 'native-upgrade-update-only' };
   }
@@ -1162,16 +1336,28 @@ function nativeProjection(request: NativeProjectionRequest): NativeProjectionDat
     if (!projectionMatchesPackage(request.snapshot.packageRoot, request.snapshot.packageName)) {
       return { kind: 'requires-managed', reasonId: 'projection-not-identity' };
     }
+    const installed = request.targetObservation.installations.find(row => row.nativeId === request.snapshot.nativeId);
+    const root = codex.listInstalled().find(row => row.id === request.snapshot.nativeId)?.path;
+    if (installed?.source?.immutableRevision === git.resolvedRevision && root !== undefined && !sameTree(root, request.snapshot.packageRoot)) {
+      // Released Codex may reuse its same-revision cache even when owned code
+      // has drifted. Choose repair before mutation, never fall through on failure.
+      return { kind: 'requires-managed', reasonId: 'native-same-revision-cache-drift' };
+    }
     return { kind: 'equivalent', proofId: `codex-marketplace:${binding.marketplace}:${binding.sha}` };
   }
   return { kind: 'requires-managed', reasonId: catalogRefusal(binding, git) };
+}
+
+function historicalGitMarker(marker: CodexOwnership, proof: Readonly<PriorSourceProof>): boolean {
+  return marker.source === `scope:${proof.scopeId}` && marker.scopeId === proof.scopeId && marker.pluginId === proof.nativeId
+    && marker.fingerprint === proof.sourceFingerprint && marker.sourceType === 'git' && marker.sourceRevision === proof.revision && marker.route === proof.route;
 }
 
 function catalogBinding(marketplace: string): CodexCatalogBinding {
   const config = readConfigDocument();
   const entry = table(table(config?.['marketplaces'])?.[marketplace]);
   if (entry === null) return { kind: 'absent', marketplace };
-  const ref = typeof entry['ref_name'] === 'string' ? entry['ref_name'] : null;
+  const ref = entry['source_type'] === 'git' && typeof entry['ref'] === 'string' ? entry['ref'] : null;
   const source = typeof entry['source'] === 'string' ? entry['source'] : null;
   const sha = ref?.toLowerCase() ?? '';
   if (source !== null && /^[0-9a-f]{40}$/u.test(sha)) return { kind: 'sha-bound', marketplace, sha, source };

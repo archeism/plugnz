@@ -11,6 +11,7 @@ import { pinPluginMcpFiles } from '../mcp-write';
 
 import { createCapabilityEvidenceProfile, type CapabilityEvidenceProfile, type CapabilityStatus } from '../capability-evidence';
 import { fingerprintTree } from '../fingerprint';
+import { recordedPriorSource } from '../prior-source-proof';
 import { createLifecycleHostAdapter, createTargetInventoryObservation, selectLifecycleRoute } from '../lifecycle-runtime';
 import type {
   DurableLifecycleOperation,
@@ -856,6 +857,20 @@ function nativeProjection(
   request: NativeProjectionRequest,
   detectedVersion: string | undefined,
 ): NativeProjectionData {
+  if ('snapshot' in request) {
+    const proof = recordedPriorSource(request.snapshot);
+    if (proof !== undefined) {
+      const installed = request.targetObservation.installations.find(row => row.nativeId === request.snapshot.nativeId);
+      for (const root of installed?.contentRoots ?? []) {
+        const marker = readOwnership(root.path);
+        if (marker === null || marker.pluginId !== proof.nativeId || marker.scopeId !== proof.scopeId
+          || marker.source !== proof.revision || marker.fingerprint !== proof.sourceFingerprint) {
+          throw new Error('Claude historical Git marker does not match recorded prior Source proof');
+        }
+      }
+      return { kind: 'requires-managed', reasonId: 'recorded-prior-origin-repair' };
+    }
+  }
   const evidence = claudeRouteEvidence(contracts, routeFacts(request, detectedVersion));
   switch (evidence.route) {
     case 'native':
@@ -1006,6 +1021,7 @@ function observeClaudeInstallations(target: LifecycleReadbackData['target'], ver
     const sha = row['gitCommitSha'];
     const revision = typeof sha === 'string' && /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(sha) ? sha : undefined;
     const locator = marker === null ? undefined : gitLocator(marker.source);
+    const observedRoute = marker?.pluginId === id && marker.scopeId !== undefined ? observedOwnedRoute(installPath) : undefined;
     const on = enabledPlugins[id] === true;
     const at = id.indexOf('@');
     installations.push({
@@ -1022,6 +1038,7 @@ function observeClaudeInstallations(target: LifecycleReadbackData['target'], ver
       presence: 'present',
       enablement: on ? 'enabled' : 'disabled',
       activation: on ? (lifecycleCatalogConforms(id, installPath, target) ? 'active' : 'nonconforming') : 'inactive',
+      ...(observedRoute !== undefined ? { observedRoute } : {}),
       installedFingerprint: digest,
       installedVersion: typeof row['version'] === 'string' ? row['version'] : null,
       source: revision !== undefined && locator !== undefined
@@ -1142,6 +1159,16 @@ function installedRoute(installPath: string): SelectedLifecycleRoute {
     return 'managed';
   }
   return 'managed';
+}
+
+function observedOwnedRoute(installPath: string): SelectedLifecycleRoute | undefined {
+  const file = join(installPath, '.plgnz-lifecycle.json');
+  if (!existsSync(file)) return undefined;
+  const value: unknown = JSON.parse(readFileSync(file, 'utf8'));
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('Claude owned lifecycle receipt is malformed');
+  const route = (value as Record<string, unknown>)['route'];
+  if (route !== 'managed' && route !== 'native') throw new Error('Claude owned lifecycle receipt route is invalid');
+  return route;
 }
 
 function retained(path: string): LifecycleReadbackData['retention']['pluginData'] {

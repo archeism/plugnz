@@ -9,6 +9,7 @@ import { inventoryPackageSemantics } from './semantic-inventory';
 import { readLifecycleState, type ActivationRecord, type LifecycleAttemptRecord, type PendingPhase } from './state';
 import { writeLifecycleState } from './state-write';
 import { parseSerializedLifecycleOperation } from './lifecycle-operation-record';
+import { bindRecordedPriorSource } from './prior-source-proof';
 
 /** Pin the recorded active bytes offline, using the same sealed mutation SPI as update. */
 export async function runOfflineLifecyclePin(host: HostWriter, plugin: InstalledPlugin, dryRun: boolean): Promise<PinOutcome> {
@@ -43,7 +44,7 @@ export async function runOfflineLifecyclePin(host: HostWriter, plugin: Installed
     cpSync(plugin.path, frozenRoot, { recursive: true });
     const packageFingerprint = fingerprintTree(frozenRoot);
     if (packageFingerprint !== activation.fingerprints.installed) throw new Error('pin active bytes differ from recorded readback');
-    const target = { kind: scope.target.kind, instance: scope.target.instance };
+    const target = { ...scope.target };
     const observed = await adapter.observeTarget(target);
     const installed = observed.installations.find(row => row.nativeId === plugin.id);
     if (installed?.ownership.kind !== 'owned' || installed.ownership.scopeId !== scope.id || installed.installedFingerprint !== packageFingerprint || installed.enablement !== 'enabled') throw new Error('pin native identity or bytes differ from the recorded owned activation');
@@ -51,6 +52,8 @@ export async function runOfflineLifecyclePin(host: HostWriter, plugin: Installed
     const sourceType = scope.source.kind;
     const inventory = inventoryPackageSemantics({ dir: frozenRoot, name: activation.packageId, ...(plugin.version === undefined ? {} : { version: plugin.version }), contentFingerprint: packageFingerprint });
     const snapshot = createFrozenPackageSnapshot({ operationId, attemptId, scopeId: scope.id, target, action: 'update', packageName: activation.packageId, nativeId: plugin.id, sourceType, immutableRevision: activation.sourceRevision, snapshotRoot: frozenRoot, packageRoot: frozenRoot, relativePackagePath: '.', snapshotFingerprint: packageFingerprint, packageFingerprint, ...(sourceType === 'git' ? { nativeGit: { locator: scope.source.locator, resolvedRevision: activation.sourceRevision } } : {}), inventory });
+    const repair = bindRecordedPriorSource(snapshot, { id: scope.id, source: scope.source, target: scope.target }, scope, activation, installed);
+    if (sourceType === 'git' && (installed.source === null || installed.source.locator === null) && !repair) throw new Error('offline pin has incomplete Git provenance without exact recorded prior Source proof');
     const pins = createResolvedLifecyclePins(preview.changes.map(change => ({ server: change.server, executable: change.to })).sort((left, right) => left.server < right.server ? -1 : left.server > right.server ? 1 : 0));
     const nativeScope = await adapter.observeNativeMutationScope({ targetObservation: observed, operation: 'update', packageName: activation.packageId, nativeId: plugin.id, sourceType });
     const nativeProjection = await adapter.observeNativeProjection({ targetObservation: observed, operation: 'update', snapshot, pins });

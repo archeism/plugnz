@@ -57,6 +57,8 @@ export interface TargetInstallationData {
   readonly presence: 'present' | 'absent';
   readonly enablement: 'enabled' | 'disabled' | 'unknown';
   readonly activation: 'active' | 'inactive' | 'nonconforming' | 'unknown';
+  /** Independently observed owned representation/receipt, never copied from the ledger. */
+  readonly observedRoute?: SelectedLifecycleRoute;
   readonly installedFingerprint: string | null;
   readonly installedVersion: string | null;
   readonly source: {
@@ -548,6 +550,8 @@ export interface CleanupReference {
   readonly operationId: string;
   readonly attemptId: string;
   readonly artifactId: string | null;
+  /** Private asserted handle authority; never projected into public reports. */
+  readonly rollbackReference: string | null;
 }
 
 export interface MutationResultData {

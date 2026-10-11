@@ -8,7 +8,7 @@ import { dcodeLifecycle, dcodeWriter } from './hosts/dcode-writer';
 import { announceCursorDryRun, cursorManagedLifecycle, cursorWriter } from './hosts/cursor-writer';
 import { createGrokLifecycleAdapter, grokWriter } from './hosts/grok-writer';
 import { hermesLifecycle, hermesWriter } from './hosts/hermes-writer';
-import { kimiLifecycle, kimiWriter } from './hosts/kimi-writer';
+import { kimiLifecycle, kimiWriter, samePhysicalKimiNativeIdentity } from './hosts/kimi-writer';
 import { ompLifecycle, ompWriter } from './hosts/omp-writer';
 import { zcodeCliLifecycle, zcodeCliWriter } from './hosts/zcode-cli-writer';
 
@@ -44,7 +44,7 @@ export function createLifecyclePlannerHosts(): readonly PlannerHost[] {
     plannerHost('claude-code', createClaudeCodeLifecycleHost(), claudeCodeWriter.plannedNativeId),
     plannerHost('codex', codexLifecycle, codexWriter.plannedNativeId),
     plannerHost('dcode', dcodeLifecycle, dcodeWriter.plannedNativeId),
-    plannerHost('kimi', createLifecycleHostAdapter(kimiLifecycle), kimiWriter.plannedNativeId),
+    { ...plannerHost('kimi', createLifecycleHostAdapter(kimiLifecycle), kimiWriter.plannedNativeId), samePhysicalNativeIdentity: samePhysicalKimiNativeIdentity },
     plannerHost('cursor', cursorManagedLifecycle, cursorWriter.plannedNativeId, announceCursorDryRun),
     plannerHost('omp', ompLifecycle, ompWriter.plannedNativeId),
     plannerHost('hermes', hermesLifecycle, hermesWriter.plannedNativeId),

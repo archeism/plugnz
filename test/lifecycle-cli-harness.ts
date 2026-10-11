@@ -137,6 +137,8 @@ export interface CliRunResult {
 }
 
 export interface RunOptions {
+  /** A checksummed historical CLI fixture; retains the same isolated environment and snapshots. */
+  cliArtifact?: { executable: string; entrypoint: string };
   /** Boundary controls such as fake native binary paths. Isolation paths are locked. */
   env?: Record<string, string>;
   /** Bound process termination proofs so a retained native child cannot hang the test runner. */
@@ -262,7 +264,7 @@ class LifecycleCliHarnessImpl implements LifecycleCliHarness {
     const storesBefore = this.storeSnapshots();
     const ambientBefore = snapshotTree(this.ambientHome);
     const stateBefore = readBytes(join(this.home, 'state.json'));
-    const result = spawnSync(cliExecutable, [cli, ...args], {
+    const result = spawnSync(options.cliArtifact?.executable ?? cliExecutable, [options.cliArtifact?.entrypoint ?? cli, ...args], {
       cwd: repoRoot,
       encoding: 'utf8',
       ...(options.timeoutMs === undefined ? {} : { timeout: options.timeoutMs }),

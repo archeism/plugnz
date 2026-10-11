@@ -1,5 +1,22 @@
 # Released Codex native administration probe
 
+## Current correction acceptance
+
+The later corrected adapter at `a14b27c` passes actual released 0.162.0 Native
+V1/V2/V3 trials in fresh isolated homes: same-version update and SDK discovery,
+exact full-surface rollback (including permission modes), and zero-overwrite
+foreign-change refusal with sealed pending recovery. Independent real-restore
+verification is retained in archive `codex-permissions-final-native.tar.gz`,
+SHA256 `bb585b10b75fd0cfa1a90be2c1e4f7ac3931677d1d59e6ac5c513fce505337c8`.
+This supersedes the historical public-route negative-gate status below, not
+the finding that Codex's own primitive lacks whole-marketplace rollback.
+Frozen corrected producer full gate: 758 pass, 5 existing skips, zero fail,
+5215 assertions, 763 tests, 71 files, 447.75 seconds under Bun 1.4.0.
+Both independent correction reviews approved the bounded delta.
+Current-main combined integration remains required; this is not a whole-program
+completion claim. Full acceptance receipt is retained on the proof branch in
+`docs/evidence/codex-permissions-final-native-20261011.md`.
+
 Measured in disposable Vercel Sandbox `plugnz-codex-native-20261011`, project
 `workspace-agent-lab`, 2 vCPU / 4 GB, bounded 30-minute lifetime. No model API
 credentials or real installation were used. Codex package version 0.162.0;

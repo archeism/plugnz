@@ -40,6 +40,7 @@ interface RegistryRow {
 type Registry = Record<string, RegistryRow>;
 
 export class FakeLifecycleHost {
+  readonly cleanupReferences: CleanupReference[] = [];
   readonly events: string[] = [];
   readonly adapter: LifecycleHostAdapter;
   version = '1.0.0';
@@ -52,6 +53,7 @@ export class FakeLifecycleHost {
   failureValue: unknown = new Error('injected fake lifecycle failure');
   readbackFingerprintOverride: string | null = null;
   omitObservedSource = false;
+  omitObservedRoute = false;
   transition: ActivationTransitionObservation = { requirement: 'none', status: 'effective' };
   expectedTransition: ActivationTransitionObservation = { requirement: 'none', status: 'effective' };
   activationExpectation: {
@@ -249,6 +251,7 @@ export class FakeLifecycleHost {
         return { receiptId: `rollback:${handle.attemptId}:${handle.operationId}`, changed: true };
       },
       cleanup: async (reference, disposition) => {
+        this.cleanupReferences.push(reference);
         this.hit(`cleanup:${disposition}`);
         rmSync(join(this.preparationRoot, safe(reference.attemptId), safe(reference.operationId)), { recursive: true, force: true });
         return { cleanupId: `cleanup:${reference.attemptId}:${reference.operationId}`, completed: true };
@@ -350,6 +353,7 @@ export class FakeLifecycleHost {
           presence: 'present' as const,
           enablement: row.enabled ? 'enabled' as const : 'disabled' as const,
           activation: row.enabled ? 'active' as const : 'inactive' as const,
+          ...(this.omitObservedRoute ? {} : { observedRoute: row.route }),
           installedFingerprint: digest,
           installedVersion: row.installedVersion,
           source: this.omitObservedSource ? null : {
