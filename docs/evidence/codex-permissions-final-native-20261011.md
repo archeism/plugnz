@@ -40,8 +40,8 @@ Allocated archive 13572 KiB; real restore
 `/tmp/plugnz-codex-permissions-final-restore.vpb7Gw`, 51036 KiB.
 Independent same-harness review verified exact artifact, eight restored surface
 digests, both native statuses/HEADs, four SDK responses, journal correlations,
-cleanup/refusal boundaries and retained data. Different-model review unavailable;
-no model-independence claim.
+cleanup/refusal boundaries and retained data. Review used the same harness;
+no different-model or different-harness independence claim.
 
 Official immutable npm URL/integrity and native executable SHA256
 `50ed828f357c655a3c82054d346cab8434f24901f14ec19b8267571bdd008b38`
