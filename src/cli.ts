@@ -4,7 +4,7 @@ import { hosts } from './hosts';
 import { cleanupWriters, writers } from './hosts/writers';
 import { resolveSource, sourceBindingForArgument, type PluginSource, type SourceBinding } from './source';
 import { runFrozenLifecycle } from './lifecycle-command';
-import { lifecyclePlannerHosts } from './lifecycle-hosts';
+import { createLifecyclePlannerHosts, lifecyclePlannerHostKinds } from './lifecycle-hosts';
 import { isScopeId, projectScopeInventory, renderScopeInventory, sameSourceBinding } from './scope-inventory';
 import { parseSyncManifest, SyncManifestValidationError } from './sync-manifest';
 import { readLifecycleState, readState, type LifecycleStateV2 } from './state';
@@ -638,7 +638,7 @@ function renderLifecycleReport(report: LifecycleReport): string {
   return [header, ...rows, summary, ...diagnostic].join('\n');
 }
 
-const plannerKinds = new Set(lifecyclePlannerHosts.flatMap((host) => [...host.kinds]));
+const plannerKinds = new Set<string>(lifecyclePlannerHostKinds);
 
 type AddTargetSplit =
   | { readonly kind: 'usage'; readonly diagnostic: string; readonly code?: Extract<LifecycleReasonCode, `usage.${string}`> }
@@ -747,7 +747,7 @@ async function runPlannerAdd(binding: SourceBinding, targets: readonly string[],
   const executed = await runFrozenLifecycle({
     manifest,
     dryRun: flags.dryRun,
-    hosts: lifecyclePlannerHosts,
+    hosts: createLifecyclePlannerHosts(),
     now: new Date().toISOString(),
     command: 'add',
   });
@@ -1037,7 +1037,7 @@ async function runRecordedLifecycleRemove(
   const executed = await runFrozenLifecycle({
     manifest,
     dryRun: flags.dryRun,
-    hosts: lifecyclePlannerHosts,
+    hosts: createLifecyclePlannerHosts(),
     now: new Date().toISOString(),
     command: 'remove',
   });
@@ -1138,7 +1138,7 @@ async function runRecordedLifecycleUpdate(flags: VerbFlags, state: LifecycleStat
   const executed = await runFrozenLifecycle({
     manifest,
     dryRun: flags.dryRun,
-    hosts: lifecyclePlannerHosts,
+    hosts: createLifecyclePlannerHosts(),
     now: new Date().toISOString(),
     command: 'update',
   });
@@ -1312,7 +1312,7 @@ async function executeManifest(value: unknown, dryRun: boolean, json: boolean): 
   const executed = await runFrozenLifecycle({
     manifest,
     dryRun,
-    hosts: lifecyclePlannerHosts,
+    hosts: createLifecyclePlannerHosts(),
     now: new Date().toISOString(),
   });
   return emitValidatedReport(executed.report, json);

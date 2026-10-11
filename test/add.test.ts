@@ -21,6 +21,13 @@ import { LifecycleReportValidationError, parseLifecycleReport } from '../src/lif
 
 const plannedNativeId: HostWriter['plannedNativeId'] = (plugin) => plugin.name;
 
+function versionShim(home: string, name: string, stdout: string): string {
+  const path = join(home, name);
+  writeFileSync(path, `#!/bin/sh\nprintf '%s\\n' ${JSON.stringify(stdout)}\n`);
+  chmodSync(path, 0o755);
+  return path;
+}
+
 const pluginsMap = {
   'plugin.json': JSON.stringify({ name: "new-plugin", mcpServers: { demo: { command: "demo" } } }, null, 2),
   'mcp.json': JSON.stringify({ mcpServers: { demo: { command: "demo" } } }, null, 2)
@@ -184,6 +191,25 @@ describe('add', () => {
     });
   });
 
+  test('claude-code > copies a local plugin when the CLI version is detected', async () => {
+    await withHostEnvAsync('claude-code', async (home) => {
+      const saved = process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'];
+      process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'] = versionShim(home, 'claude', '2.1.295 (Claude Code)');
+      try {
+        const sourceDir = mkdtempSync(join(tmpdir(), 'open-plugin-source-'));
+        initGitRepo(sourceDir, pluginsMap);
+        expect(await main(['add', sourceDir, '--target', 'claude-code'])).toBe(0);
+        const plugin = claudeCode.listInstalled().find((row) => row.name === 'new-plugin');
+        expect(plugin !== undefined).toBe(true);
+        expect(plugin?.path !== undefined && existsSync(plugin.path)).toBe(true);
+        expect(readState().some((record) => record.host === 'claude-code')).toBe(true);
+      } finally {
+        if (saved === undefined) delete process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'];
+        else process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'] = saved;
+      }
+    });
+  });
+
   test('codex > refuses a local add when the CLI version is not detected', async () => {
     await withHostEnvAsync('codex', async () => {
       const sourceDir = mkdtempSync(join(tmpdir(), 'open-plugin-source-'));
@@ -264,6 +290,23 @@ describe('add', () => {
       expect(output.join('\n')).toContain("target 'cursor' has no verified native install profile for version 'directory' and local Sources");
       expect(cursor.listInstalled().map((plugin) => plugin.id)).toEqual(before);
       expect(readState().some((record) => record.host === 'cursor' && record.id === 'new-plugin')).toBe(false);
+    });
+  });
+
+  test('cursor > copies a local plugin when the managed CLI admits mcp', async () => {
+    await withHostEnvAsync('cursor', async (home) => {
+      const saved = process.env['OPEN_PLUGIN_CURSOR_BIN'];
+      process.env['OPEN_PLUGIN_CURSOR_BIN'] = versionShim(home, 'cursor', '2.4.0');
+      try {
+        const sourceDir = mkdtempSync(join(tmpdir(), 'open-plugin-source-'));
+        initGitRepo(sourceDir, pluginsMap);
+        expect(await main(['add', sourceDir, '--target', 'cursor'])).toBe(0);
+        expect(cursor.listInstalled().some((row) => row.name === 'new-plugin')).toBe(true);
+        expect(readState().some((record) => record.host === 'cursor')).toBe(true);
+      } finally {
+        if (saved === undefined) delete process.env['OPEN_PLUGIN_CURSOR_BIN'];
+        else process.env['OPEN_PLUGIN_CURSOR_BIN'] = saved;
+      }
     });
   });
 

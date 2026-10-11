@@ -19,13 +19,27 @@ function plannerHost(
   return { kinds: [kind], adapter, plannedNativeId };
 }
 
-export const lifecyclePlannerHosts: readonly PlannerHost[] = [
-  plannerHost('claude-code', createClaudeCodeLifecycleHost(), claudeCodeWriter.plannedNativeId),
-  plannerHost('codex', codexLifecycle, codexWriter.plannedNativeId),
-  plannerHost('kimi', createLifecycleHostAdapter(kimiLifecycle), kimiWriter.plannedNativeId),
-  plannerHost('cursor', cursorManagedLifecycle, cursorWriter.plannedNativeId),
-  plannerHost('omp', ompLifecycle, ompWriter.plannedNativeId),
-  plannerHost('hermes', hermesLifecycle, hermesWriter.plannedNativeId),
-  plannerHost('grok', createGrokLifecycleAdapter(), grokWriter.plannedNativeId),
-  plannerHost('zcode-cli', zcodeCliLifecycle, zcodeCliWriter.plannedNativeId),
-];
+export const lifecyclePlannerHostKinds = [
+  'claude-code',
+  'codex',
+  'kimi',
+  'cursor',
+  'omp',
+  'hermes',
+  'grok',
+  'zcode-cli',
+] as const;
+
+/** Fresh adapters for one command. Claude snapshots its CLI at construction. */
+export function createLifecyclePlannerHosts(): readonly PlannerHost[] {
+  return [
+    plannerHost('claude-code', createClaudeCodeLifecycleHost(), claudeCodeWriter.plannedNativeId),
+    plannerHost('codex', codexLifecycle, codexWriter.plannedNativeId),
+    plannerHost('kimi', createLifecycleHostAdapter(kimiLifecycle), kimiWriter.plannedNativeId),
+    plannerHost('cursor', cursorManagedLifecycle, cursorWriter.plannedNativeId),
+    plannerHost('omp', ompLifecycle, ompWriter.plannedNativeId),
+    plannerHost('hermes', hermesLifecycle, hermesWriter.plannedNativeId),
+    plannerHost('grok', createGrokLifecycleAdapter(), grokWriter.plannedNativeId),
+    plannerHost('zcode-cli', zcodeCliLifecycle, zcodeCliWriter.plannedNativeId),
+  ];
+}
