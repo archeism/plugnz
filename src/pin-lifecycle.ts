@@ -33,8 +33,9 @@ export async function runOfflineLifecyclePin(host: HostWriter, plugin: Installed
   const attempt: LifecycleAttemptRecord = { id: attemptId, command: 'update', phase: 'accepted', mutationStarted: false, scopeIds: [scope.id], journal: [{ operationId, scopeId: scope.id, packageId: activation.packageId, nativeId: activation.nativeId, action: 'update', state: 'pending', route: activation.route, startedAt: now, updatedAt: now }], startedAt: now, updatedAt: now };
   const persist = (nextActivation: ActivationRecord): void => {
     if (readLifecycleState().state.stateGeneration !== state.stateGeneration) throw new Error('pin ledger changed concurrently; refusing stale commit');
-    state = { ...state, stateGeneration: state.stateGeneration + 1, activations: state.activations.map(row => row.scopeId === activation.scopeId && row.nativeId === activation.nativeId ? nextActivation : row), attempts: [...state.attempts.filter(row => row.id !== attemptId), { ...attempt, journal: attempt.journal.map(row => ({ ...row })) }] };
-    writeLifecycleState(state, { globalPreflight: 'succeeded' });
+    const next = { ...state, stateGeneration: state.stateGeneration + 1, activations: state.activations.map(row => row.scopeId === activation.scopeId && row.nativeId === activation.nativeId ? nextActivation : row), attempts: [...state.attempts.filter(row => row.id !== attemptId), { ...attempt, journal: attempt.journal.map(row => ({ ...row })) }] };
+    writeLifecycleState(next, { globalPreflight: 'succeeded' });
+    state = next;
   };
   const pending = (phase: PendingPhase): void => persist({ ...activation, pending: { operation: 'update', phase, attemptId, startedAt: now }, readbackState: 'pending' });
   try {
