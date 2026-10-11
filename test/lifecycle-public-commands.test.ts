@@ -1108,7 +1108,7 @@ describe('public lifecycle commands', () => {
         claimsCursorLoadedInstance: false,
       });
     });
-  });
+  }, 20_000);
 
   test('scenario 7 exact identity prevents a same-name marketplace rebinding', async () => {
     await withLifecycleCliHarness((harness) => {

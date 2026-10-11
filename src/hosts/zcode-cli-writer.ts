@@ -39,7 +39,7 @@ type Ownership = { owner: 'plgnz'; schema: 1; logicalId: string; nativeId: strin
 export const zcodeCliWriter: HostWriter = {
   ...zcodeCli,
   supportsAdoption: false,
-  plannedNativeId: (plugin) => plugin.marketplace === undefined ? plugin.name : `${plugin.name}@${plugin.marketplace}`,
+  plannedNativeId: (plugin) => `${plugin.name}@${ownedMarketplace(plugin.marketplace === undefined ? plugin.name : `${plugin.name}@${plugin.marketplace}`)}`,
   async add(plugin: PluginSource, resolved: ResolvedSource, opts?: AddOptions): Promise<void | 'unchanged'> {
     if (opts?.adoptExisting) throw new Error('Official ZCode adoption is not implemented; refusing an unowned native install');
     assertName(plugin.name, 'plugin name');
@@ -409,7 +409,7 @@ function installationFor(native: ReturnType<typeof readZcodeNativeRecords>[numbe
     nativeId: native.id,
     packageName: native.name,
     ownership: owned
-      ? { kind: 'owned', proof: 'created', scopeId: marker.logicalId, proofId: `marker:${native.id}` }
+      ? { kind: 'owned', proof: 'created', scopeId: marker.scopeId ?? marker.logicalId, proofId: `marker:${native.id}` }
       : { kind: 'unmanaged' },
     presence: 'present',
     enablement: enabled ? 'enabled' : 'disabled',
@@ -418,10 +418,19 @@ function installationFor(native: ReturnType<typeof readZcodeNativeRecords>[numbe
     installedFingerprint: digest,
     installedVersion: native.version,
     source: owned
-      ? { type: 'local', immutableRevision: marker.fingerprint, locator: null }
+      ? zcodeSourceIdentity(marker)
       : null,
     contentRoots: [{ label: 'native', path: root, fingerprint: digest }],
   };
+}
+
+function zcodeSourceIdentity(marker: NonNullable<ReturnType<typeof readZcodeOwnership>>): TargetInstallationData['source'] {
+  if (marker.sourceType !== undefined && marker.sourceRevision !== undefined) {
+    if (marker.source !== marker.sourceRevision) throw new Error('ZCode Source ownership receipt is contradictory');
+    return { type: marker.sourceType, immutableRevision: marker.sourceRevision, locator: marker.sourceLocator ?? null };
+  }
+  if (/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(marker.source)) return { type: 'git', immutableRevision: marker.source, locator: null };
+  return { type: 'local', immutableRevision: marker.source, locator: null };
 }
 
 function inventoryFor(target: LifecycleTargetIdentity): TargetInventoryData {
@@ -762,6 +771,9 @@ const zcodeCliLifecycleDefinition: LifecycleHostDefinition = {
     mkdirSync(dirname(pluginStage), { recursive: true });
     mkdirSync(resourcesStage, { recursive: true });
     projectZcodePlugin(snapshot.packageRoot, pluginStage, resourcesStage, resourceRoot, snapshot.nativeId, snapshot.nativeId, nativeVersion, snapshot.packageFingerprint, snapshot.immutableRevision);
+    const marker = readZcodeOwnership(pluginStage);
+    if (marker === null) throw new Error('staged ZCode ownership is missing');
+    writeFileSync(join(pluginStage, MARKER), `${JSON.stringify({ ...marker, scopeId: snapshot.scopeId, sourceType: snapshot.sourceType, sourceRevision: snapshot.immutableRevision, sourceLocator: snapshot.nativeGit?.locator ?? null }, null, 2)}\n`);
     writeFileSync(join(marketStage, 'marketplace.json'), `${JSON.stringify({ name: market, plugins: [{ name: snapshot.packageName, source: `./plugins/${snapshot.packageName}` }] }, null, 2)}\n`);
     rejectCommandCollisions(marketStage, snapshot.nativeId, nativeById(snapshot.nativeId)?.installPath);
     return { stagingId: `stage:${request.selection.attemptId}:${request.selection.operationId}`, stagingRoot: pluginStage };

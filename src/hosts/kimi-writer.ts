@@ -16,6 +16,7 @@ import type {
 } from '../lifecycle-host';
 import { createTargetInventoryObservation } from '../lifecycle-runtime';
 import { homeRoot } from '../paths';
+import { validateSourceBinding } from '../source-reference';
 import type { PluginSource, ResolvedSource } from '../source';
 import type { CapabilityOperation, PackageSemantic } from '../semantic-inventory';
 import { normalizeCommandSources } from '../conversion';
@@ -29,7 +30,7 @@ declare const TextDecoder: any;
 declare const Response: any;
 
 const MARKER = '.plgnz-install.json';
-type Ownership = { source: string; pluginId: string; fingerprint: string; scopeId?: string };
+type Ownership = { source: string; pluginId: string; fingerprint: string; scopeId?: string; sourceType?: 'local' | 'git'; sourceRevision?: string; sourceLocator?: string | null };
 type Registry = { version: 1; plugins: Array<Record<string, unknown>> };
 
 export const kimiWriter: HostWriter = {
@@ -251,7 +252,9 @@ function readOwnership(target: string): Ownership | null {
   const value = parseJson(file, 'plgnz ownership marker');
   if (typeof value.source !== 'string' || typeof value.pluginId !== 'string' || typeof value.fingerprint !== 'string') throw new Error(`invalid plgnz ownership marker: ${file}`);
   const scopeId = typeof value.scopeId === 'string' ? value.scopeId : undefined;
-  return { source: value.source, pluginId: value.pluginId, fingerprint: value.fingerprint, ...(scopeId === undefined ? {} : { scopeId }) };
+  const lifecycle = ['sourceType', 'sourceRevision', 'sourceLocator'].some(field => Object.hasOwn(value, field));
+  if (lifecycle && ((value.sourceType !== 'local' && value.sourceType !== 'git') || typeof value.sourceRevision !== 'string' || (value.sourceType === 'git' ? typeof value.sourceLocator !== 'string' : value.sourceLocator !== null))) throw new Error(`invalid plgnz Source ownership marker: ${file}`);
+  return { source: value.source, pluginId: value.pluginId, fingerprint: value.fingerprint, ...(scopeId === undefined ? {} : { scopeId }), ...(lifecycle ? { sourceType: value.sourceType as 'local' | 'git', sourceRevision: value.sourceRevision as string, sourceLocator: value.sourceLocator as string | null } : {}) };
 }
 function rewriteOwnership(target: string, ownership: Ownership): void {
   const marker = join(target, MARKER);
@@ -413,6 +416,9 @@ export const kimiLifecycle: LifecycleHostDefinition = {
       pluginId: projection.nativeId,
       fingerprint: projection.sourceRevision,
       scopeId: projection.scopeId,
+      sourceType: projection.snapshot.sourceType,
+      sourceRevision: projection.sourceRevision,
+      sourceLocator: projection.sourceLocator ?? null,
     } satisfies Ownership));
     return ['kimi.staged-exact'];
   },
@@ -480,9 +486,8 @@ export const kimiLifecycle: LifecycleHostDefinition = {
     if (existsSync(managed) && priorRow?.enabled === true && sameRoot(priorRow.root, managed) && sameTree(prepared.stagingRoot, managed)) {
       if (legacyMarker) {
         rewriteOwnership(managed, {
-          source: marker.source,
+          ...marker,
           pluginId: prepared.handle.nativeId,
-          fingerprint: marker.fingerprint,
           scopeId: prepared.handle.scopeId,
         });
         return { receiptId: `kimi-apply:${prepared.handle.attemptId}:${prepared.handle.operationId}`, changed: true };
@@ -622,10 +627,27 @@ function readKimiInstallations(): TargetInstallationData[] {
       ...(owned && resolve(plugin.path) === resolve(managedPluginPath(plugin.name)) ? { observedRoute: 'native' as const } : {}),
       installedFingerprint: digest,
       installedVersion: null,
-      source: owned ? { type: 'local', immutableRevision: marker.fingerprint, locator: null } : null,
+      source: owned ? kimiSourceIdentity(marker) : null,
       contentRoots: [{ label: 'managed', path: plugin.path, fingerprint: digest }],
     };
   });
+}
+
+function kimiSourceIdentity(marker: Ownership): NonNullable<TargetInstallationData['source']> | null {
+  if (marker.sourceType !== undefined && marker.sourceRevision !== undefined) {
+    if (marker.sourceRevision !== marker.fingerprint || (marker.sourceType === 'git' ? marker.sourceLocator !== marker.source : marker.source !== `local:${marker.sourceRevision}`)) throw new Error('Kimi Source ownership receipt is contradictory');
+    return { type: marker.sourceType, immutableRevision: marker.sourceRevision, locator: marker.sourceLocator ?? null };
+  }
+  if (/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(marker.fingerprint) || /^(?:https?|ssh|git):\/\//u.test(marker.source) || marker.source.startsWith('git@')) {
+    // Historical Git snapshots lacked an origin. Expose that incompleteness;
+    // only the private recorded-prior proof may recover canonical authority.
+    if (marker.source === `local:${marker.fingerprint}`) return { type: marker.fingerprint.length === 40 ? 'git' : 'local', immutableRevision: marker.fingerprint, locator: null };
+    if (isAbsolute(marker.source)) return { type: 'local', immutableRevision: marker.fingerprint, locator: null };
+    if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(marker.fingerprint)) throw new Error('Kimi Git ownership marker has no immutable revision');
+    validateSourceBinding({ kind: 'git', locator: marker.source, ref: marker.fingerprint });
+    return { type: 'git', immutableRevision: marker.fingerprint, locator: marker.source };
+  }
+  return { type: 'local', immutableRevision: marker.fingerprint, locator: null };
 }
 
 function kimiMutationScope(operation: CapabilityOperation, nativeId: string): NativeMutationScopeData {
