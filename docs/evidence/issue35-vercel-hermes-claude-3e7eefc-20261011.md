@@ -96,7 +96,8 @@ proof; the failure stopped that runner before those steps.
 ## Preservation, resources and honest limits
 
 Raw archive:
-`/tmp/plugnz-vercel-3e7-proof.uOUMIe/proof-evidence.tar.gz` (476 KiB allocated).
+`/home/charlesfengyc/.local/state/plugnz-evidence/20261011/issue35-3e7eefc-vercel.tar.gz`
+(476 KiB allocated; durable copy verified against the original temporary archive).
 SHA-256: `137d5020885882301ec3730595c5a5000b5d4cbd88c0fc85a31352e5f4c76a7b`.
 It retains failed/successful attempt homes and ledgers, source fixtures,
 proof scripts, exact packaged CLI, stdout/stderr/debug logs, dependencies and
@@ -110,7 +111,8 @@ streams against their hashes, the packaged CLI hash, both failed and successful
 Hermes homes/ledgers, the failed Claude home/ledger, loader acceptance and native
 rejection log. Restore command:
 `tar -xzf proof-evidence.tar.gz -C <isolated-restore-directory>`.
-Verifier: `/tmp/plugnz-vercel-3e7-proof.uOUMIe/verify-restore.mjs`.
+Verifier:
+`/home/charlesfengyc/.local/state/plugnz-evidence/20261011/verify-issue35-3e7eefc-restore.mjs <isolated-restore-directory>`.
 
 Fresh source allocated 67,336 KiB before dependencies and 92,256 KiB afterward.
 Final task directory 344,808 KiB, uv cache 37,520 KiB, npm metadata cache 1,876
@@ -125,7 +127,10 @@ and egress 795 KiB. Persistent Sandboxes automatically snapshot on stop
 Actual snapshot `snap_BvLZCdX0ZR3JKj8KWDz1csJmAIM1` is **942 MiB**, expiring
 30 days after its last use. That retention size exceeds the active-store
 400 MiB allowance; no cause or within-budget retention claim is invented.
-The discrepancy was escalated. No snapshot/resource was deleted, no full
+The discrepancy was escalated; the stopped snapshot is explicitly retained.
+The next proof budget must include the observed roughly 1 GiB automatic snapshot
+retention separately from the roughly 375 MiB active stores and archive scratch,
+before launching or resuming another session. No snapshot/resource was deleted, no full
 snapshot restore was attempted, and future cleanup requires verified complete
 preservation and independent review. Reading/copying from the stopped persistent
 Sandbox may auto-resume it; metadata-only list/config calls do not run a proof.
