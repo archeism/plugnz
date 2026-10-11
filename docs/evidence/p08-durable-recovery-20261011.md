@@ -188,3 +188,14 @@ is required, not inferred from the focused success.
 | --- | --- |
 | `plugnz-3f18-integration-full-timeout.log` | `31494c011f75cebd97f6614030321ae59f858f37dd04773197e10face7527d6d` |
 | `plugnz-3f18-dcode-kill-isolated.log` | `2ef65add1a4d4dec93a6f2210ec6002d8526948d3eda23ab7f2e9268bb86e9b4` |
+
+The final frozen integration `6d4b551239f1fc293a3772049aa60118e4e422d7`
+passed the unmodified full `bun test` under Bun 1.4.0: 669 passes, five existing
+skips, zero failures, 4416 assertions across 674 tests in 62 files (245.69
+seconds). `bun run check` also passed on that exact commit. Independent reviews
+approved the bounded failure-accounting changes and both test-only deadline
+corrections. This accepts the bounded checkpoint, not the outstanding successful
+recovery aggregate/changed-intent receipt contract or complete P08 program.
+
+Retained full log: `plugnz-6d4-integration-full.log`, SHA-256
+`eff578733a373d7b72fc84601f5ebc67737196218b9afd39021a7ee84337641c`.
