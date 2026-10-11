@@ -9,7 +9,7 @@
 import { existsSync, lstatSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 import type { HostReader, InstalledPlugin, McpServerEntry } from '../host';
-import { hermesRoot } from '../paths';
+import { hermesConfigPath, hermesRoot } from '../paths';
 import { collectPluginServers } from '../mcp';
 import { hermesCommandCompanionId } from '../hermes-identity';
 import { parsePersistedTargetIdentity, type PersistedTargetIdentity } from '../target-identity';
@@ -27,11 +27,12 @@ export const hermesTargetProfile: TargetProfile<'hermes'> = {
   kind: 'hermes',
   parseSyncTarget(value, label) {
     const target = parseHermesIdentity(value, label);
-    if (target.context === undefined) invalidTargetArgument(`${label} hermes requires target context`);
-    const unknown = Object.keys(target.context).find(key => key !== 'root' && key !== 'configPath');
+    const context = target.context ?? (target.instance === 'default' ? defaultHermesContext() : undefined);
+    if (context === undefined) invalidTargetArgument(`${label} hermes requires target context`);
+    const unknown = Object.keys(context).find(key => key !== 'root' && key !== 'configPath');
     if (unknown !== undefined) invalidTargetArgument(`${label} hermes context has unsupported field '${unknown}'`);
-    const root = canonicalAbsolutePath(target.context['root'], `${label} context root`);
-    const configPath = canonicalAbsolutePath(target.context['configPath'], `${label} context configPath`);
+    const root = canonicalAbsolutePath(context['root'], `${label} context root`);
+    const configPath = canonicalAbsolutePath(context['configPath'], `${label} context configPath`);
     return { kind: 'hermes', instance: target.instance, context: { configPath, root } };
   },
   parseRetirementTarget(value, label) {
@@ -107,9 +108,14 @@ function canonicalAbsolutePath(value: unknown, label: string): string {
   return value;
 }
 
+function defaultHermesContext(): { readonly root: string; readonly configPath: string } {
+  return { root: resolve(hermesRoot()), configPath: resolve(hermesConfigPath()) };
+}
+
 function hermesContext(target: PersistedTargetIdentity): { root: string; configPath: string } {
-  const root = target.context?.['root'];
-  const configPath = target.context?.['configPath'];
+  const provided = target.context ?? (target.instance === 'default' ? defaultHermesContext() : undefined);
+  const root = provided?.['root'];
+  const configPath = provided?.['configPath'];
   if (typeof root !== 'string' || typeof configPath !== 'string') {
     invalidTargetArgument('canonical hermes target is missing root/configPath context');
   }
