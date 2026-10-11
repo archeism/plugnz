@@ -31,7 +31,16 @@ archive receipt predates the configured actual Sandbox expiration. The receipt
 reports 14 same-filesystem hardlinked staging files and zero measured allocated
 filesystem growth. This does not measure a 512-MiB archive/download workload.
 
-Independent source review is a separate gate. Genuine acquisition and native
+Independent Standards review of frozen
+`2a38c822c0b3427026065db9a1a4b4a9c6fa1690` against `cbe2d2b` subsequently
+returned bounded LGTM. Its independent pinned Bun 1.4 controller/namespace gate
+passed nine tests and 54 assertions with zero failures; diff check was clean.
+It verified namespace separation, literal-path omission, same-filesystem
+hardlink validation, no regular-file chmod/chown, preservation of unknown and
+partial bodies, and restored supplier inventory validation. No required blocker
+was found. This review and the fresh restore clear the method gate only.
+
+Genuine acquisition and native
 trials must use a fresh Sandbox with sufficient actual lifetime for acquisition,
 stop, archive, download and restore. The earlier empty Codex setup was stopped;
 its automatically created 783-MiB snapshot
