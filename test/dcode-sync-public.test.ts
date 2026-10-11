@@ -378,4 +378,4 @@ test('killing the public CLI at cache rename leaves only a complete candidate or
     expect(readFileSync(join(JSON.parse(readFileSync(registry, 'utf8')).plugins['demo@local'][0].installPath, 'skills/demo/SKILL.md'), 'utf8')).toBe(nextSkill);
     expect(readdirSync(join(native, 'plugins/cache/plgnz-operations')).length).toBe(0);
   } finally { rmSync(root, { recursive: true, force: true }); }
-});
+}, 30_000); // Install, interrupted apply and recovery are separate CLI processes.

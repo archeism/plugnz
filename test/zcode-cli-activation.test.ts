@@ -249,7 +249,7 @@ describe('ZCode CLI native activation', () => {
       expect(repeat.changed).toBe(false);
       zcodeCliLifecycle.verify(again.prepared.handle, await zcodeCliLifecycle.readback(again.prepared.handle));
     });
-  });
+  }, 20_000); // Multiple CLI legs exceed the default five-second budget under suite load.
 
   test('updates and rolls back without dropping retained plugin data', async () => {
     await withHome(async (home, cliRoot) => {
@@ -294,7 +294,7 @@ describe('ZCode CLI native activation', () => {
       const uninstalls = readFileSync(join(cliRoot, 'cli-invocations.log'), 'utf8').split('\n').filter((line) => line.startsWith('plugins uninstall'));
       expect(uninstalls).toEqual([]);
     });
-  });
+  }, 20_000);
 
   test('rolling back a fresh install drops that marketplace registration', async () => {
     await withHome(async (home, cliRoot) => {

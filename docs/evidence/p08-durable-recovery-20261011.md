@@ -96,3 +96,106 @@ not measured. Native dependencies were reused, not copied per attempt. The
 Addy API/debugging/incremental/documentation and Matt TDD/review skills were
 used unchanged; these product gates are not a skill A/B or improvement claim.
 This checkpoint is not publication, consumer-pin or fleet-rollout evidence.
+
+## Integration hold: composed recovery reports
+
+The combined integration checkpoint `b55ecdc` passed `bun run check` and
+unmodified `bun test` under Bun 1.4.0: 667 passes, five skips, zero failures,
+4349 assertions, 203.79 seconds. Its full log is retained as
+`plugnz-b55-integration-full.log`, SHA-256
+`8ec51066f6d03a1887c3fbdd70b200c9a2c34b0578edf1966251e2badd045505`.
+
+A subsequent real CLI probe nevertheless found an uncovered reporting defect:
+failed recovery in a two-package scope replaced the frozen plan with only the
+pending operation, omitting the independent sibling. Personal correctly rejects
+that incomplete report, which can obscure the actionable recovery diagnostic.
+This is a producer defect, not permission to weaken consumer coverage checks.
+The candidate remains off main pending corrected complete-plan reporting,
+multi-journal recovery accounting, independent review and fresh verification.
+
+The failing probe and its output are retained in the same evidence directory
+(the scratch probe imports the integration worktree's public CLI harness):
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `plugnz-b55-missing-sibling-recovery.test.ts` | `9df142f82bf7498b6eabb4a10e93f804a23c6908145304296578227c01caafb4` |
+| `plugnz-b55-missing-sibling-recovery.log` | `8f2b625286c6207c7f68d6903cba44a85a65206f8461e61ef478767e87fc8e25` |
+
+## Successful recovery accounting: confirmed remaining defect
+
+A subsequent isolated public CLI probe against frozen `9e294ac` recreates the
+exact disabled candidate of a pending disable journal, restores the ordinary
+Source Desired content and retries sync. Recovery changes native enablement from
+false to true; the fresh Desired plan is then unchanged and the CLI exits zero.
+Its report nevertheless claims `mutationStarted: false` and `changed: false`.
+The final probe fails its aggregate-change assertion (five assertions, 2.98
+seconds). This is a real reporting gap, not complete P08 acceptance. It uses a
+seeded exact candidate and fake native version/lock fixtures, not an actual
+SIGKILL or proof of every native runtime.
+
+Current report parsing rejects duplicate scope/package operations; Personal
+also requires one current Desired outcome per submitted pair. Historical
+recovery therefore cannot be truthfully accounted for by duplicating current
+outcomes, changing an unchanged action to claim a mutation, or treating an old
+settlement as current convergence. A separately validated, explicitly versioned
+recovery-receipt contract must retain original attempt/operation identity and
+contribute to aggregate mutation accounting while leaving current coverage exact.
+Changed-intent retry also needs this distinction. The read-only scope inventory
+currently exposes only the last attempt, whereas recovery scans all open
+journals; original receipts require public proof for nonlatest and journal-only
+operations too. No consumer-validation relaxation or capability exclusion is
+authorized by this finding.
+
+Retained artifacts in the same evidence directory:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `plugnz-9e-successful-recovery-accounting.test.ts` | `b6e7a131de3e8ea940c1512b64cbaf3c034acccd6bca5fc181c99304331eb6ba` |
+| `plugnz-9e-successful-recovery-accounting-04.log` | `93d50df9e1aa3c499bb119b5cd4b85109d682d49399a955d54f75e84001742d6` |
+
+## Combined gate and bounded test-budget correction
+
+Frozen integration `3f6c651` passed typecheck but its unmodified `bun test`
+terminated with 667 passes, five skips and two failures (4415 assertions,
+224.31 seconds). Both failures hit Bun's default five-second deadline in the
+existing ZCode multi-CLI activation scenarios. The exact same file passed in
+isolation without a timeout override: five tests, 35 assertions, 13.55 seconds;
+the affected cases took 2.71 and 3.48 seconds. This is not a green full gate and
+is not attributed to a native capability defect from timeout alone.
+
+Only those two multi-CLI test deadlines are now explicitly bounded at 20 seconds;
+assertions and production subprocess timeouts are unchanged. Focused recheck:
+five tests, 35 assertions, 13.52 seconds; typecheck and diff check passed. A fresh
+unmodified full suite on the corrected frozen tree remains required before main.
+
+| Retained log | SHA-256 |
+| --- | --- |
+| `plugnz-3f6-integration-full-timeout.log` | `04886a6c64d9112d4af3498ae8e0337a6e0571ee7f053c6ee8f4b2fe1b46b72c` |
+| `plugnz-3f6-zcode-isolated.log` | `88a698ad077550780e69b6f44a13cf167a9665abe58dab0cc1f8c1042de9f0a3` |
+
+The next frozen tree, `3f18c2f`, passed both ZCode cases but its full suite
+terminated with 668 passes, five skips, one failure and one subsequent error
+(4413 assertions, 214.51 seconds). The dcode cache-rename SIGKILL test hit its
+default five-second deadline; Bun killed its active CLI, and the test's
+continuation subsequently observed a null subprocess status. The exact test
+passed isolated without an override: 12 assertions, 3.81 seconds. Its explicit
+deadline is now 30 seconds, matching other multi-process recovery tests. Focused
+recheck passed all 12 assertions in 4.06 seconds; typecheck passed. Native process
+timeouts, crash injection and assertions are unchanged; another frozen full gate
+is required, not inferred from the focused success.
+
+| Retained log | SHA-256 |
+| --- | --- |
+| `plugnz-3f18-integration-full-timeout.log` | `31494c011f75cebd97f6614030321ae59f858f37dd04773197e10face7527d6d` |
+| `plugnz-3f18-dcode-kill-isolated.log` | `2ef65add1a4d4dec93a6f2210ec6002d8526948d3eda23ab7f2e9268bb86e9b4` |
+
+The final frozen integration `6d4b551239f1fc293a3772049aa60118e4e422d7`
+passed the unmodified full `bun test` under Bun 1.4.0: 669 passes, five existing
+skips, zero failures, 4416 assertions across 674 tests in 62 files (245.69
+seconds). `bun run check` also passed on that exact commit. Independent reviews
+approved the bounded failure-accounting changes and both test-only deadline
+corrections. This accepts the bounded checkpoint, not the outstanding successful
+recovery aggregate/changed-intent receipt contract or complete P08 program.
+
+Retained full log: `plugnz-6d4-integration-full.log`, SHA-256
+`eff578733a373d7b72fc84601f5ebc67737196218b9afd39021a7ee84337641c`.
