@@ -676,22 +676,31 @@ describe('add', () => {
     });
   });
 
-  test('installs Codex and Hermes together when both native adapters are selected', async () => {
+  test('installs Hermes and refuses Codex when both native adapters are selected', async () => {
     await withHostEnvAsync('codex', async (home) => {
       mkdirSync(join(home, '.hermes', 'plugins'), { recursive: true });
+      writeFileSync(join(home, '.hermes', 'config.yaml'), 'model: fixture\n');
       const sourceDir = mkdtempSync(join(tmpdir(), 'open-plugin-source-'));
       initGitRepo(sourceDir, hermesPluginsMap);
       const output: string[] = [];
       const originalLog = console.log;
       console.log = (value: string) => output.push(value);
       try {
-        expect(await main(['add', sourceDir, '--target', 'codex', '--target', 'hermes', '--legacy-json'])).toBe(0);
+        expect(await main(['add', sourceDir, '--target', 'codex', '--target', 'hermes', '--legacy-json'])).toBe(1);
       } finally { console.log = originalLog; }
-      const outcomes = JSON.parse(output.join('')) as Array<{ target: string; status: string }>;
+      const outcomes = JSON.parse(output.join('')) as Array<{ target: string; status: string; diagnostic?: string }>;
       expect(outcomes.find((outcome) => outcome.target === 'hermes')?.status).toBe('installed');
-      expect(outcomes.find((outcome) => outcome.target === 'codex')?.status).toBe('installed');
-      expect(readState()).toHaveLength(2);
-      expect(codex.listInstalled().find((plugin) => plugin.name === 'new-plugin') !== undefined).toBe(true);
+      expect(outcomes.find((outcome) => outcome.target === 'codex')).toEqual({
+        plugin: 'new-plugin',
+        target: 'codex',
+        status: 'unverified',
+        dryRun: false,
+        diagnostic: "target 'codex' has no verified native install profile for version 'unknown/unparseable' and local Sources",
+        nativeId: 'new-plugin@local',
+        action: 'install',
+      });
+      expect(readState().map((record) => record.host)).toEqual(['hermes']);
+      expect(codex.listInstalled().find((plugin) => plugin.name === 'new-plugin')).toBeUndefined();
     });
   });
 
