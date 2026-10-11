@@ -501,6 +501,21 @@ async function planRetire(
         `package '${activation.nativeId}' on ${item.entry.target.kind}/${item.entry.target.instance} is owned by scope '${installation.ownership.scopeId}'`,
       ));
     }
+    const recordedRoute = recordedRetirementRoute(activation.route);
+    if (installationAbsent(installation) && recordedRoute !== null && hasRetirementAuthority(activation) && item.host !== null && item.observation !== null) {
+      operations.push(classified(
+        operationIdentity('retirement', item.scope.id, activation.packageId, activation.nativeId, activation.sourceRevision ?? 'unrecorded'),
+        'retirement',
+        item.scope,
+        null,
+        activation.packageId,
+        activation.nativeId,
+        'retire-orphan',
+        recordedRoute,
+        null,
+      ).operation);
+      continue;
+    }
     if (!hasRetirementAuthority(activation) || !hostRevalidated(installation, item.scope.id) || item.host === null || item.observation === null) {
       operations.push(classified(
         operationIdentity('retirement', item.scope.id, activation.packageId, activation.nativeId, activation.sourceRevision ?? 'unrecorded'),
@@ -953,6 +968,24 @@ function hostRevalidated(installation: TargetInstallationData | undefined, scope
     && installation.ownership.kind === 'owned'
     && installation.ownership.scopeId === scopeId
     && (installation.ownership.proof === 'created' || installation.ownership.proof === 'adopted');
+}
+
+function installationAbsent(installation: TargetInstallationData | undefined): boolean {
+  return installation === undefined || installation.presence === 'absent';
+}
+
+function recordedRetirementRoute(route: ActivationRecord['route']): 'managed' | 'native' | null {
+  switch (route.kind) {
+    case 'managed':
+    case 'native':
+      return route.kind;
+    case 'legacy-unverified':
+      return null;
+    default: {
+      const unreachable: never = route;
+      throw new Error(`unknown activation route ${String(unreachable)}`);
+    }
+  }
 }
 
 function foreignOwnership(
