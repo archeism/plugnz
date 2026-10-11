@@ -29,6 +29,15 @@ must remain recoverable through checked recorded ownership, not marker guesses.
 dependent scan. Git routing/provenance and Codex rollback are separate acceptance
 requirements; neither may silently enable the other.
 
+Issue #35 also requires recording the declared manifest version in dcode's native
+registry. The released Managed protocol instead omits native registry version:
+0.1.83's updater reads the remote manifest's opt-in policy, and `version=None`
+is the proven per-package skip. Declared version remains in the manifest and
+ledger, and the plugnz reader displays it. This is an explicit acceptance
+discrepancy, not a fulfilled checkbox. A version-preserving immutable native
+source/opt-out mechanism needs proof, or the spec adjustment needs a human
+decision; do not silently weaken either the version or auto-update requirement.
+
 Relevant evidence: `docs/hosts/{claude-code,cursor,hermes,grok,kimi,zcode-cli}.md`,
 `docs/evidence/codex-personal-20260922.json`,
 `docs/evidence/omp-native-extension-package-20260923.json`,
