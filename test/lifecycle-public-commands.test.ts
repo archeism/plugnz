@@ -1,11 +1,48 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { bytesToText, snapshotTree, textToBytes, withLifecycleCliHarness } from './lifecycle-cli-harness';
+import { bytesToText, snapshotTree, textToBytes, withLifecycleCliHarness, type FakeNativeStep } from './lifecycle-cli-harness';
 import { createDeploymentScopeIdentity } from '../src/deployment-scope';
 import { parseLifecycleReport } from '../src/lifecycle-report';
+import { fingerprintTree } from '../src/fingerprint';
 
 describe('public lifecycle commands', () => {
+  test('a corrupted retained snapshot in the last scope blocks all batch writes', async () => {
+    await withLifecycleCliHarness((harness) => {
+      harness.writeHome({ '.cursor/.keep': '' });
+      const alpha = harness.source('frozen-alpha', { 'plugin.json': '{"name":"alpha","version":"1.0.0"}\n' });
+      const beta = harness.source('frozen-beta', { 'plugin.json': '{"name":"beta","version":"1.0.0"}\n', 'payload.txt': 'reviewed\n' });
+      const cachedPayload = join(harness.home, 'cache/source-snapshots', fingerprintTree(beta), 'payload.txt');
+      const steps: FakeNativeStep[] = versionSteps(16);
+      steps[0] = { ...steps[0]!, writes: { [cachedPayload]: 'tampered after freeze\n' } };
+      const cursor = harness.fakeNative('cursor', steps);
+      const manifest = join(harness.source('frozen-batch', {}), 'manifest.json');
+      writeFileSync(manifest, JSON.stringify({ schemaVersion: 1, entries: [alpha, beta].map((locator) => ({ operation: 'sync', source: { kind: 'local', locator }, target: { kind: 'cursor', instance: 'default' } })) }));
+      const refused = harness.run(['sync', '--manifest', manifest, '--json'], { env: { OPEN_PLUGIN_CURSOR_BIN: cursor.path } });
+      const report = parseLifecycleReport(JSON.parse(refused.stdout));
+      expect(refused.exitCode).toBe(1);
+      expect(report.summary.mutationStarted).toBe(false);
+      expect(refused.state.after).toBeUndefined();
+      expect(refused.stores.cursor.after).toEqual(refused.stores.cursor.before);
+      expect(report.outcomes.every((row) => row.reason?.diagnostic === 'retained frozen source bytes drifted before apply')).toBe(true);
+    });
+  });
+  test('sync applies the preflight frozen bytes when the original source changes during a host probe', async () => {
+    await withLifecycleCliHarness((harness) => {
+      harness.writeHome({ '.cursor/.keep': '' });
+      const source = harness.source('sync-frozen-apply', {
+        'plugin.json': '{"name":"demo","version":"1.0.0"}\n',
+        'payload.txt': 'frozen reviewed bytes\n',
+      });
+      const steps: FakeNativeStep[] = versionSteps(16);
+      steps[0] = { ...steps[0]!, writes: { [join(source, 'payload.txt')]: 'later mutable bytes\n' } };
+      const cursor = harness.fakeNative('cursor', steps);
+      const applied = harness.run(['sync', source, '--target', 'cursor', '--json'], { env: { OPEN_PLUGIN_CURSOR_BIN: cursor.path } });
+      expect(applied.exitCode).toBe(0);
+      expect(bytesToText(applied.stores.cursor.after.files['plugins/local/demo/payload.txt']!)).toBe('frozen reviewed bytes\n');
+      expect(readFileSync(join(source, 'payload.txt'), 'utf8')).toBe('later mutable bytes\n');
+    });
+  });
   test('a failed changed-byte sync keeps the prior activation, suppresses orphan pruning, and a clean retry converges', async () => {
     await withLifecycleCliHarness((harness) => {
       harness.writeHome({ '.cursor/.keep': '' });

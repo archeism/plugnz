@@ -69,6 +69,8 @@ export type LifecyclePlan =
       readonly kind: 'frozen';
       readonly requestedDryRun: boolean;
       readonly attemptId: string;
+      /** Retained immutable roots; apply never fetches or freezes a mutable Source again. */
+      readonly frozenSources: ReadonlyMap<string, FrozenSource>;
       /** Original add argument. Carries fetch credentials that must not enter the report. */
       readonly transportSource?: string;
       readonly report: LifecycleReport;
@@ -781,6 +783,7 @@ function frozenPlan(
   prepared: readonly Prepared[],
 ): LifecyclePlan {
   const snapshots: LifecycleSourceSnapshotContext[] = [];
+  const frozenSources = new Map<string, FrozenSource>();
   const seen = new Set<string>();
   for (const item of prepared) {
     if (item.kind !== 'sync') continue;
@@ -788,6 +791,7 @@ function frozenPlan(
     if (seen.has(id)) continue;
     seen.add(id);
     snapshots.push({ id, reference: item.frozen.snapshot });
+    frozenSources.set(id, item.frozen);
   }
   const outcomes = operations.map((row) => outcomeFor(row));
   const failed = outcomes.filter((outcome) => outcome.result !== 'succeeded');
@@ -813,6 +817,7 @@ function frozenPlan(
     kind: 'frozen',
     requestedDryRun: input.dryRun,
     attemptId,
+    frozenSources,
     report,
     scopes,
     operations,
