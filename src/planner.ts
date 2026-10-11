@@ -18,6 +18,7 @@ import {
   type LifecycleReport,
   type LifecycleRoute,
   type LifecycleSourceSnapshotContext,
+  type LifecycleTerminalPhase,
 } from './lifecycle-report';
 import {
   createFrozenPackageSnapshot,
@@ -104,7 +105,7 @@ export interface PlanLifecycleInput {
 
 type FrozenOperation = Extract<LifecyclePlan, { kind: 'frozen' }>['operations'][number];
 type PlannedScope = Extract<LifecyclePlan, { kind: 'frozen' }>['scopes'][number];
-type Defect = { readonly kind: 'defect'; readonly reason: LifecycleReason };
+type Defect = { readonly kind: 'defect'; readonly reason: LifecycleReason; readonly terminalPhase?: LifecycleTerminalPhase };
 type Classified = { readonly kind: 'classified'; readonly operation: FrozenOperation; readonly blocksPrune: boolean };
 type Omissions = { readonly kind: 'omissions'; readonly operations: readonly FrozenOperation[] };
 
@@ -149,7 +150,7 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
   const prepared: Prepared[] = [];
   for (const entry of input.manifest.entries) {
     const result = await prepareEntry(entry, input.hosts, loaded.state, command);
-    if (result.kind === 'defect') return zeroWrite(command, input.dryRun, result.reason);
+    if (result.kind === 'defect') return zeroWrite(command, input.dryRun, result.reason, result.terminalPhase);
     prepared.push(result);
   }
 
@@ -158,7 +159,7 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
   const operations: FrozenOperation[] = [];
   for (const item of prepared) {
     const planned = await planPrepared(item, attemptId, input.validatedAt, loaded.state, command);
-    if (planned.kind === 'defect') return zeroWrite(command, input.dryRun, planned.reason);
+    if (planned.kind === 'defect') return zeroWrite(command, input.dryRun, planned.reason, planned.terminalPhase);
     scopes.push(planned.scope);
     operations.push(...planned.operations);
   }
@@ -193,7 +194,11 @@ async function prepareSync(
   try {
     frozen = resolveSource(sourceArgument(entry.source));
   } catch (error) {
-    return defect(createLifecycleReason('usage', 'usage.invalid-argument', unknownErrorDiagnostic(error)));
+    const diagnostic = unknownErrorDiagnostic(error);
+    if (command === 'add' || command === 'update') {
+      return defect(createLifecycleReason('runtime', 'runtime.operation-failed', diagnostic), 'resolve');
+    }
+    return defect(createLifecycleReason('usage', 'usage.invalid-argument', diagnostic));
   }
   let selected: SelectedManifestPackage<PluginSource>[];
   try {
@@ -1059,7 +1064,7 @@ function duplicateHostKind(hosts: readonly PlannerHost[]): LifecycleReason | nul
   return null;
 }
 
-function zeroWrite(command: LifecycleCommandName, dryRun: boolean, reason: LifecycleReason): LifecyclePlan {
+function zeroWrite(command: LifecycleCommandName, dryRun: boolean, reason: LifecycleReason, terminalPhase?: LifecycleTerminalPhase): LifecyclePlan {
   const usage = reason.category === 'usage';
   return {
     kind: 'zero-write-failure',
@@ -1070,7 +1075,7 @@ function zeroWrite(command: LifecycleCommandName, dryRun: boolean, reason: Lifec
       outcomes: [],
       summary: {
         result: usage ? 'usage-error' : 'incomplete',
-        terminalPhase: usage ? 'parse' : 'preflight',
+        terminalPhase: usage ? 'parse' : terminalPhase ?? 'preflight',
         mutationStarted: false,
         changed: false,
         failureCategory: reason.category,
@@ -1165,6 +1170,6 @@ function digest(parts: readonly string[]): string {
   return hash.digest('hex');
 }
 
-function defect(reason: LifecycleReason): Defect {
-  return { kind: 'defect', reason };
+function defect(reason: LifecycleReason, terminalPhase?: LifecycleTerminalPhase): Defect {
+  return terminalPhase === undefined ? { kind: 'defect', reason } : { kind: 'defect', reason, terminalPhase };
 }
