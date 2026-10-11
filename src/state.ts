@@ -18,6 +18,7 @@ import {
 } from './target-identity';
 
 import { CryptoHasher } from './runtime';
+import { parseSerializedLifecycleOperation, type SerializedLifecycleOperation } from './lifecycle-operation-record';
 
 export type { PersistedTargetIdentity } from './target-identity';
 
@@ -141,6 +142,8 @@ export interface JournalEntryRecord {
   route?: LifecycleRouteRecord;
   startedAt?: string;
   updatedAt?: string;
+  sealedOperation?: SerializedLifecycleOperation;
+  settlement?: 'commit' | 'rollback';
 }
 
 export interface LifecycleAttemptRecord {
@@ -291,6 +294,7 @@ function validateLifecycleStateDocument(value: unknown, minimumStateGeneration: 
     for (const entry of attempt.journal) {
       operationIds.push(entry.operationId);
       if (!attempt.scopeIds.includes(entry.scopeId)) invalid(`attempt '${attempt.id}' journal references scope '${entry.scopeId}' outside the attempt`);
+      if (entry.sealedOperation !== undefined && entry.sealedOperation.attemptId !== attempt.id) invalid(`attempt '${attempt.id}' sealed operation references another attempt`);
     }
   }
   unique(operationIds, 'journal operation id');
@@ -690,7 +694,7 @@ function validateAttempt(value: unknown, label: string): LifecycleAttemptRecord 
 
 function validateJournal(value: unknown, label: string): JournalEntryRecord {
   const rec = asObject(value, label);
-  exactFields(rec, ['operationId', 'scopeId', 'packageId', 'nativeId', 'action', 'state', 'route', 'startedAt', 'updatedAt'], 'journal entry');
+  exactFields(rec, ['operationId', 'scopeId', 'packageId', 'nativeId', 'action', 'state', 'route', 'startedAt', 'updatedAt', 'sealedOperation', 'settlement'], 'journal entry');
   requiredString(rec['operationId'], `${label}.operationId`);
   requiredString(rec['scopeId'], `${label}.scopeId`);
   optionalString(rec['packageId'], `${label}.packageId`);
@@ -698,6 +702,11 @@ function validateJournal(value: unknown, label: string): JournalEntryRecord {
   oneOf(rec['action'], JOURNAL_ACTIONS, `${label}.action`);
   oneOf(rec['state'], ['pending', 'applying', 'applied', 'readback-verified', 'rollback', 'rolled-back', 'cleanup-pending', 'completed', 'failed', 'not-attempted'], `${label}.state`);
   if (rec['route'] !== undefined) validateRoute(rec['route'], `${label}.route`);
+  if (rec['sealedOperation'] !== undefined) {
+    const operation = parseSerializedLifecycleOperation(rec['sealedOperation']);
+    if (operation.operationId !== rec['operationId'] || operation.scopeId !== rec['scopeId'] || operation.packageName !== rec['packageId'] || operation.nativeId !== rec['nativeId'] || operation.action !== rec['action']) invalid(`${label} sealed operation does not match journal identity`);
+  }
+  if (rec['settlement'] !== undefined) oneOf(rec['settlement'], ['commit', 'rollback'], `${label}.settlement`);
   optionalTimestamp(rec['startedAt'], `${label}.startedAt`);
   optionalTimestamp(rec['updatedAt'], `${label}.updatedAt`);
   return value as JournalEntryRecord;

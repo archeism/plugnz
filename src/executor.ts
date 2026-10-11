@@ -21,6 +21,8 @@ import { CryptoHasher } from './runtime';
 import type { FrozenSource, PluginSource } from './source';
 import { readLifecycleState, type ActivationRecord, type DeploymentScopeRecord, type JournalAction, type JournalEntryRecord, type JournalState, type LifecycleAttemptRecord, type LifecycleStateV2 } from './state';
 import { writeLifecycleState } from './state-write';
+import { parseSerializedLifecycleOperation } from './lifecycle-operation-record';
+import type { DurableLifecycleOperation } from './lifecycle-host';
 
 export interface ExecuteLifecycleInput {
   readonly plan: LifecyclePlan;
@@ -193,6 +195,7 @@ async function runActivation(
     const sealed = await host.adapter.sealActivation(pinned);
     preparation = sealed;
     handle = sealed.handle;
+    ledger.captureOperation(plan, operation, handle);
     ledger.markApplying(plan, operation);
     receipt = await host.adapter.apply(sealed);
     const observation = await host.adapter.readback(receipt.handle);
@@ -416,6 +419,7 @@ async function runDisable(plan: FrozenPlan, operation: LifecyclePlanOperation, h
     if (prepared.selection.operation !== 'disable') throw new Error('disable containment selected the wrong operation');
     ledger.acceptJournal(plan, operation, 'disable-nonconforming');
     preparation = await host.adapter.prepareDisable({ operationId: operation.operationId, attemptId: plan.attemptId, selection: { ...prepared.selection, operation: 'disable' }, activation: prepared.activation });
+    ledger.captureOperation(plan, operation, preparation.handle);
     ledger.markApplying(plan, operation);
     receipt = await host.adapter.disable(preparation);
     const observation = await host.adapter.readback(receipt.handle);
@@ -483,6 +487,7 @@ async function runRetire(
       activation: prepared.activation,
     });
     preparation = sealed;
+    ledger.captureOperation(plan, operation, sealed.handle);
     ledger.markPruning(plan, operation);
     receipt = await host.adapter.retire(sealed);
     const observation = await host.adapter.readback(receipt.handle);
@@ -674,6 +679,11 @@ class Ledger {
   markApplying(plan: FrozenPlan, operation: LifecyclePlanOperation): void {
     if (operation.action === 'disable-nonconforming') this.disablePending(plan, operation, 'applying');
     this.replaceAttempt(plan, (attempt) => this.journaled(attempt, operation.operationId, 'applying', 'applying', true));
+  }
+
+  captureOperation(plan: FrozenPlan, operation: LifecyclePlanOperation, handle: DurableLifecycleOperation): void {
+    const sealedOperation = parseSerializedLifecycleOperation(JSON.parse(JSON.stringify(handle)));
+    this.replaceAttempt(plan, attempt => ({ ...attempt, journal: attempt.journal.map(row => row.operationId === operation.operationId ? { ...row, sealedOperation } : row) }));
   }
 
   /** A definitive pre-apply refusal must not authorize rollback of another writer's bytes. */
