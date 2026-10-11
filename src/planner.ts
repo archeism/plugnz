@@ -594,6 +594,7 @@ async function selectPairRoute(
       nativeId,
       sourceType: sourceTypeOf(item.entry.source),
       immutableRevision: item.frozen.snapshot.revision,
+      ...(item.scope.source.kind === 'git' ? { nativeGit: { locator: item.scope.source.locator, resolvedRevision: item.frozen.snapshot.revision } } : {}),
       snapshotRoot: item.frozen.snapshotDir,
       packageRoot: plugin.dir,
       relativePackagePath: plugin.relativeDir && plugin.relativeDir.length > 0 ? plugin.relativeDir : '.',

@@ -415,6 +415,7 @@ function sealActivationSnapshot(
     nativeId,
     sourceType: operation.scope.source.kind,
     immutableRevision: frozen.snapshot.revision,
+    ...(operation.scope.source.kind === 'git' ? { nativeGit: { locator: operation.scope.source.locator, resolvedRevision: frozen.snapshot.revision } } : {}),
     snapshotRoot: frozen.snapshotDir,
     packageRoot: plugin.dir,
     relativePackagePath,

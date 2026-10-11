@@ -470,14 +470,15 @@ function nativeUpgradeTimeout(): number {
   return parsed;
 }
 const RELOAD_EFFECTIVE = { requirement: 'reload', status: 'effective' } as const;
-const UPDATE_SEMANTICS = ['auto-update-control', 'readback', 'rollback', 'activation-reload'] as const satisfies readonly PackageSemantic[];
+const UPDATE_SEMANTICS = ['ordinary-skills', 'resources', 'auto-update-control', 'readback', 'rollback', 'activation-reload'] as const satisfies readonly PackageSemantic[];
 const MANAGED_SEMANTICS = [...UPDATE_SEMANTICS, 'retirement', 'retention-safety'] as const satisfies readonly PackageSemantic[];
 
 const codexEvidenceProfiles: readonly CapabilityEvidenceProfile[] = [
-  codexRouteProfile('native', ['update'], UPDATE_SEMANTICS, ['docs/research/native-plugin-update-capabilities-2026-10-09.md']),
+  codexRouteProfile('native', ['update'], UPDATE_SEMANTICS, ['docs/research/native-plugin-update-capabilities-2026-10-09.md', 'docs/evidence/codex-native-released-20261011.md']),
   codexRouteProfile('managed', ['install', 'update', 'retire'], MANAGED_SEMANTICS, [
     'docs/hosts/codex.md',
     'docs/adr/0004-retain-plugin-state-on-removal.md',
+    'docs/evidence/codex-native-released-20261011.md',
   ]),
 ];
 
@@ -547,6 +548,13 @@ function codexRouteProfile(
 }
 
 function revalidateCodexTarget(handle: DurableLifecycleOperation): { version: ReturnType<typeof probeCodexVersion>; targetObservationId: string } {
+  const bundle = rollbackBundle(handle.attemptId, handle.operationId);
+  if (existsSync(join(bundle, 'marketplace.json'))) {
+    const metadata = JSON.parse(readFileSync(join(bundle, 'marketplace.json'), 'utf8')) as { marketplace: string; fingerprint: string | null };
+    const checkout = marketplaceCheckout(metadata.marketplace);
+    const actual = existsSync(checkout) ? fingerprintTree(checkout) : null;
+    if (actual !== metadata.fingerprint) throw new Error('Codex marketplace checkout changed after rollback capture');
+  }
   const version = probeCodexVersion();
   const observation = createTargetInventoryObservation('codex', {
     target: handle.target,
@@ -596,6 +604,7 @@ function captureCodexActivation(projection: PinsAppliedProjection, projectedFing
     nativeId: projection.nativeId,
   });
   saveCodexRollback(projection.attemptId, projection.operationId, projection.affectedNativeIds);
+  if (projection.route === 'native') captureMarketplaceRollback(projection);
   return {
     prior,
     expected: {
@@ -794,7 +803,7 @@ function readCodexInstall(handle: DurableLifecycleOperation): LifecycleReadbackD
     scopeId: handle.scopeId,
     packageName: handle.packageName,
     nativeId: handle.nativeId,
-    route: handle.route,
+    route: cacheFingerprint(handle.nativeId) === handle.prior.installedFingerprint ? handle.prior.route : handle.route,
   });
 }
 
@@ -1003,8 +1012,58 @@ function restoreCodexRollback(handle: DurableLifecycleOperation): MutationResult
     }
     removeUnsnapshotVersions(install.slot, install.versions);
   }
+  restoreMarketplaceRollback(handle);
   const after = rollbackSurface(manifest.installs.map((install) => install.nativeId));
   return { receiptId: `rollback:${handle.attemptId}:${handle.operationId}`, changed: before !== after };
+}
+
+function marketplaceCheckout(marketplace: string): string {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(marketplace)) throw new Error('unsafe Codex marketplace identity');
+  const path = resolve(join(codexHome(), '.tmp', 'marketplaces', marketplace));
+  assertManagedPath(codexHome(), path);
+  return path;
+}
+
+function captureMarketplaceRollback(projection: PinsAppliedProjection): void {
+  const marketplace = marketplaceOf(projection.nativeId);
+  if (marketplace === null) throw new Error('native Codex mutation has no bounded marketplace');
+  const checkout = marketplaceCheckout(marketplace);
+  const bundle = rollbackBundle(projection.attemptId, projection.operationId);
+  const fingerprint = existsSync(checkout) ? fingerprintTree(checkout) : null;
+  if (fingerprint !== null) {
+    const snapshot = join(bundle, 'marketplace');
+    cpSync(checkout, snapshot, { recursive: true });
+    if (fingerprintTree(snapshot) !== fingerprint || fingerprintTree(checkout) !== fingerprint) throw new Error('Codex marketplace checkout changed during rollback capture');
+  }
+  writeFileSync(join(bundle, 'marketplace.json'), JSON.stringify({ marketplace, fingerprint }));
+}
+
+function restoreMarketplaceRollback(handle: DurableLifecycleOperation): void {
+  const bundle = rollbackBundle(handle.attemptId, handle.operationId);
+  const metadata = join(bundle, 'marketplace.json');
+  if (!existsSync(metadata)) return;
+  const capture: unknown = JSON.parse(readFileSync(metadata, 'utf8'));
+  if (typeof capture !== 'object' || capture === null || Array.isArray(capture)) throw new Error('invalid Codex marketplace rollback capture');
+  const row = capture as Record<string, unknown>;
+  const marketplace = marketplaceOf(handle.nativeId);
+  if (row['marketplace'] !== marketplace || marketplace === null
+    || (row['fingerprint'] !== null && (typeof row['fingerprint'] !== 'string' || !/^[0-9a-f]{64}$/u.test(row['fingerprint'])))) throw new Error('invalid Codex marketplace rollback identity');
+  const checkout = marketplaceCheckout(marketplace);
+  if (row['fingerprint'] === null) {
+    if (existsSync(checkout)) rmSync(checkout, { recursive: true });
+    return;
+  }
+  const snapshot = join(bundle, 'marketplace');
+  if (fingerprintTree(snapshot) !== row['fingerprint']) throw new Error('Codex retained marketplace rollback bytes drifted');
+  const parent = dirname(checkout);
+  mkdirSync(parent, { recursive: true });
+  const scratch = mkdtempSync(join(parent, '.plgnz-marketplace-restore-'));
+  try {
+    cpSync(snapshot, scratch, { recursive: true });
+    if (fingerprintTree(scratch) !== row['fingerprint']) throw new Error('Codex marketplace restore staging drifted');
+    activate(scratch, checkout, parent).commit();
+    if (fingerprintTree(checkout) !== row['fingerprint']) throw new Error('Codex marketplace rollback did not verify');
+  } finally { rmSync(scratch, { recursive: true, force: true }); }
 }
 
 function pluginSlot(nativeId: string): string | null {
@@ -1197,7 +1256,7 @@ function catalogBinding(marketplace: string): CodexCatalogBinding {
   const config = readConfigDocument();
   const entry = table(table(config?.['marketplaces'])?.[marketplace]);
   if (entry === null) return { kind: 'absent', marketplace };
-  const ref = typeof entry['ref_name'] === 'string' ? entry['ref_name'] : null;
+  const ref = entry['source_type'] === 'git' && typeof entry['ref'] === 'string' ? entry['ref'] : null;
   const source = typeof entry['source'] === 'string' ? entry['source'] : null;
   const sha = ref?.toLowerCase() ?? '';
   if (source !== null && /^[0-9a-f]{40}$/u.test(sha)) return { kind: 'sha-bound', marketplace, sha, source };
