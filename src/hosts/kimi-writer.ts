@@ -54,6 +54,10 @@ export const samePhysicalKimiNativeIdentity: NonNullable<PlannerHost['samePhysic
   if (!sameRoot(root.path, managed) || root.fingerprint !== installation.installedFingerprint
     || marker?.pluginId !== prior.nativeId || marker.scopeId !== prior.scopeId
     || fingerprintTree(managed) !== installation.installedFingerprint) return null;
+  const source = kimiSourceIdentity(marker);
+  if (source === null || source.immutableRevision !== prior.sourceRevision
+    || installation.source?.type !== source.type || installation.source.immutableRevision !== source.immutableRevision
+    || installation.source.locator !== source.locator) return null;
   return { priorNativeId: prior.nativeId, plannedNativeId: kimiWriter.plannedNativeId(plugin),
     observedRoot: root.path, physicalRoot: realpathSync(managed), currentFingerprint: installation.installedFingerprint };
 };

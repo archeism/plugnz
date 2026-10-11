@@ -4,8 +4,9 @@ import { join } from 'node:path';
 import { parseLifecycleReport } from '../src/lifecycle-report';
 import { projectedState, withLifecycleCliHarness } from './lifecycle-cli-harness';
 import { kimiNativeEnv } from './kimi-fixture';
+import { writeFiles } from './util';
 
-for (const layout of ['same-root', 'foreign-root', 'ambiguous-registry'] as const) {
+for (const layout of ['same-root', 'foreign-root', 'ambiguous-registry', 'foreign-source', 'foreign-source-bad-last'] as const) {
   test(`Kimi identity repair requires its exact single physical native root: ${layout}`, async () => {
     await withLifecycleCliHarness(h => {
       h.writeHome({ '.kimi-code/.keep': '' });
@@ -22,6 +23,17 @@ for (const layout of ['same-root', 'foreign-root', 'ambiguous-registry'] as cons
       const root = join(h.home, '.kimi-code/plugins/managed/demo');
       const markerFile = join(root, '.plgnz-install.json');
       const marker = { ...JSON.parse(readFileSync(markerFile, 'utf8')), pluginId: 'demo' };
+      if (layout === 'foreign-source' || layout === 'foreign-source-bad-last') Object.assign(marker, {
+        source: `local:${'f'.repeat(64)}`, fingerprint: 'f'.repeat(64),
+        sourceType: 'local', sourceRevision: 'f'.repeat(64), sourceLocator: null,
+      });
+      if (layout === 'foreign-source-bad-last') writeFiles(source, {
+        '.claude-plugin/marketplace.json': JSON.stringify({ name: 'catalog', plugins: [
+          { name: 'aaa', source: './plugins/aaa' }, { name: 'demo', source: './plugins/demo' },
+        ] }),
+        'plugins/aaa/plugin.json': '{"name":"aaa","version":"1.0.0"}',
+        'plugins/aaa/skills/aaa/SKILL.md': '---\nname: aaa\ndescription: Earlier valid package\n---\nBody.\n',
+      });
       writeFileSync(markerFile, JSON.stringify(marker));
       h.writeHome({ 'state.json': JSON.stringify({ version: 1, installs: projectedState(initial.state.after!, h.home).installs.map(row => ({ ...row, id: 'demo' })) }) });
       const registryFile = join(h.home, '.kimi-code/plugins/installed.json');

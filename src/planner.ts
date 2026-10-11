@@ -218,6 +218,8 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
               && proof.physicalRoot.length > 0 && observed?.presence === 'present'
               && observed.packageName === selected.plugin.name && observed.ownership.kind === 'owned'
               && observed.ownership.scopeId === item.scope.id && observed.installedFingerprint === proof.currentFingerprint
+              && observed.source?.type === item.scope.source.kind && observed.source.immutableRevision === row.sourceRevision
+              && (item.scope.source.kind !== 'git' || observed.source.locator === item.scope.source.locator)
               && observed.contentRoots.some(root => root.path === proof.observedRoot && root.fingerprint === proof.currentFingerprint)) samePhysicalIds.add(row.nativeId);
           }
         }
