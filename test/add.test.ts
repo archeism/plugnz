@@ -167,42 +167,37 @@ describe('add', () => {
     }
   });
 
-  test('claude-code > writes registry and copies files', async () => {
-    await withHostEnvAsync('claude-code', async (home) => {
+  test('claude-code > refuses a local add when the CLI version is not detected', async () => {
+    await withHostEnvAsync('claude-code', async () => {
       const sourceDir = mkdtempSync(join(tmpdir(), 'open-plugin-source-'));
       initGitRepo(sourceDir, pluginsMap);
-      
-      const code = await main(['add', sourceDir, '--target', 'claude-code']);
-      expect(code).toBe(0);
-
-      const installed = claudeCode.listInstalled();
-      expect(installed.length).toBeGreaterThan(0);
-      const plugin = installed.find(p => p.name === 'new-plugin');
-      expect(plugin !== undefined).toBe(true);
-      expect(plugin?.path && existsSync(plugin.path)).toBe(true);
-      expect(plugin?.path && existsSync(join(plugin.path, '.claude-plugin', 'plugin.json'))).toBe(true);
-
-      const state = readState();
-      expect(state.find(r => r.id === 'new-plugin@local') !== undefined).toBe(true);
+      const before = claudeCode.listInstalled().map((plugin) => plugin.id);
+      const output: string[] = [];
+      const originalLog = console.log;
+      console.log = (value: string) => output.push(value);
+      try {
+        expect(await main(['add', sourceDir, '--target', 'claude-code'])).toBe(1);
+      } finally { console.log = originalLog; }
+      expect(output.join('\n')).toContain("target 'claude-code' has no verified native install profile for version 'unknown/unparseable' and local Sources");
+      expect(claudeCode.listInstalled().map((plugin) => plugin.id)).toEqual(before);
+      expect(readState().some((record) => record.host === 'claude-code')).toBe(false);
     });
   });
 
-  test('codex > writes config and copies files', async () => {
-    await withHostEnvAsync('codex', async (home) => {
+  test('codex > refuses a local add when the CLI version is not detected', async () => {
+    await withHostEnvAsync('codex', async () => {
       const sourceDir = mkdtempSync(join(tmpdir(), 'open-plugin-source-'));
       initGitRepo(sourceDir, pluginsMap);
-      
-      const code = await main(['add', sourceDir, '--target', 'codex']);
-      expect(code).toBe(0);
-
-      const installed = codex.listInstalled();
-      expect(installed.find(p => p.name === 'new-plugin') !== undefined).toBe(true);
-
-      const state = readState();
-      const record = state.find(r => r.id === 'new-plugin@local' && r.host === 'codex');
-      expect(record !== undefined).toBe(true);
-      expect(record?.sourceDir).toContain('open-plugin-source-');
-      expect(record?.installedFingerprint?.length).toBe(64);
+      const before = codex.listInstalled().map((plugin) => plugin.id);
+      const output: string[] = [];
+      const originalLog = console.log;
+      console.log = (value: string) => output.push(value);
+      try {
+        expect(await main(['add', sourceDir, '--target', 'codex'])).toBe(1);
+      } finally { console.log = originalLog; }
+      expect(output.join('\n')).toContain("target 'codex' has no verified native install profile for version 'unknown/unparseable' and local Sources");
+      expect(codex.listInstalled().map((plugin) => plugin.id)).toEqual(before);
+      expect(readState().some((record) => record.host === 'codex')).toBe(false);
     });
   });
 
@@ -255,19 +250,20 @@ describe('add', () => {
     }
   });
 
-  test('cursor > writes directory directly', async () => {
-    await withHostEnvAsync('cursor', async (home) => {
+  test('cursor > refuses a directory add when the plugin uses unverified mcp', async () => {
+    await withHostEnvAsync('cursor', async () => {
       const sourceDir = mkdtempSync(join(tmpdir(), 'open-plugin-source-'));
       initGitRepo(sourceDir, pluginsMap);
-      
-      const code = await main(['add', sourceDir, '--target', 'cursor']);
-      expect(code).toBe(0);
-
-      const installed = cursor.listInstalled();
-      expect(installed.find(p => p.name === 'new-plugin') !== undefined).toBe(true);
-
-      const state = readState();
-      expect(state.find(r => r.id === 'new-plugin' && r.host === 'cursor') !== undefined).toBe(true);
+      const before = cursor.listInstalled().map((plugin) => plugin.id);
+      const output: string[] = [];
+      const originalLog = console.log;
+      console.log = (value: string) => output.push(value);
+      try {
+        expect(await main(['add', sourceDir, '--target', 'cursor'])).toBe(1);
+      } finally { console.log = originalLog; }
+      expect(output.join('\n')).toContain("target 'cursor' has no verified native install profile for version 'directory' and local Sources");
+      expect(cursor.listInstalled().map((plugin) => plugin.id)).toEqual(before);
+      expect(readState().some((record) => record.host === 'cursor' && record.id === 'new-plugin')).toBe(false);
     });
   });
 
