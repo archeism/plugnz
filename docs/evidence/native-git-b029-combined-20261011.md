@@ -53,3 +53,19 @@ Root logs:
 The full-suite result above precedes the two shell-only corrections; it is not
 misrepresented as a full run of a later tree. No real-home diagnostics, fleet
 deployment, backup deletion, external submission or skill revision occurred.
+
+## Final tree gate after smoke corrections
+
+Frozen checkpoint `6289a7db7086ebe6c41462e2e7ed1c624285368f` also passed the
+complete suite: 834 passed, 6 existing skips, zero failed, 5811 assertions,
+840 tests across 74 files, 507.82 seconds. Root handle `52367` settled exit 0;
+the following typecheck also exited 0. Artifact bytes remain the same `c72c6e`
+SHA256 above. This receipt update follows verification without production or
+test-script changes.
+
+Final log SHA256:
+`8a703f45e7da8257600519e199a3eb89e44a2ba856961ccbbd71cea393533f51`.
+The five root verification logs are additionally retained outside temporary
+storage at
+`/home/charlesfengyc/.local/state/plugnz-evidence/20261011/native-git-6289/`.
+Actual released-native acceptance and main integration are still pending.
