@@ -1017,7 +1017,17 @@ async function runRecordedLifecycleRemove(
   const perHost = new Map<string, number>();
   for (const match of matches) {
     const count = (perHost.get(match.scope.target.kind) ?? 0) + 1;
-    if (count > 1) return null;
+    if (count > 1) {
+      return reportFor('remove', flags.dryRun, [], [], {
+        terminalPhase: 'preflight',
+        mutationStarted: false,
+        reason: reason(
+          'internal',
+          'internal.ambiguous-ownership',
+          `multiple ${match.scope.target.kind}/${match.scope.target.instance} deployment scopes own native package '${target}'`,
+        ),
+      });
+    }
     perHost.set(match.scope.target.kind, count);
   }
   let manifest;
@@ -1113,6 +1123,27 @@ async function runRecordedLifecycleUpdate(flags: VerbFlags, state: LifecycleStat
       });
     }
     return reportFor('update', flags.dryRun, [], [], { mutationStarted: false });
+  }
+  const owned = new Map<string, { kind: string; instance: string; packageId: string }>();
+  for (const match of plannerMatches) {
+    const key = `${match.scope.target.kind}/${match.scope.target.instance}/${match.packageId}`;
+    const previous = owned.get(key);
+    if (previous !== undefined) {
+      return reportFor('update', flags.dryRun, [], [], {
+        terminalPhase: 'preflight',
+        mutationStarted: false,
+        reason: reason(
+          'internal',
+          'internal.ambiguous-ownership',
+          `multiple ${previous.kind}/${previous.instance} deployment scopes own native package '${previous.packageId}'`,
+        ),
+      });
+    }
+    owned.set(key, {
+      kind: match.scope.target.kind,
+      instance: match.scope.target.instance,
+      packageId: match.packageId,
+    });
   }
   const byScope = new Map<string, { scope: LifecycleStateV2['scopes'][number]; packages: string[] }>();
   for (const match of plannerMatches) {
