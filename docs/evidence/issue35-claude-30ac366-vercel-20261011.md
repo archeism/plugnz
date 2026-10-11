@@ -138,3 +138,26 @@ schemas and hooks are not proven by this receipt; hooks remain explicit
 planned unadmitted work, not native absence or silent exclusion. Combined
 full-tree gates and integration remain required before main. Skills are
 unchanged; no skill A/B claim is made.
+
+## Preserved initial full-branch gate: incorrect dev runtime
+
+The first owned-branch full gate used ambient
+`/home/charlesfengyc/.local/bin/bun`, version **1.3.14**, including fixture
+shebang resolution. This was not the frozen Bun 1.4.0 dev-contract runtime.
+Session `98807` finished exit 1: 698 passes, 6 skips, 3 failures, 4,574
+assertions across 707 tests / 63 files, 293.25 s wall, peak RSS 369,664 KiB.
+The failures were the YAML 1.4 dev-version contract and two ZCode cases
+reaching their implicit 5-second deadlines: projected-command/user-only-skill
+fresh installation, and rollback to previous activation after failed update.
+No assertion or production code was changed in response. Typecheck session
+`15307` finished exit 0.
+
+Raw log:
+`/home/charlesfengyc/.local/state/plugnz-evidence/20261011/issue35-host-profile-30ac366-full.log`,
+SHA256 `c11fa8efd043d3346b5c5b2caf738515ea94dde85052ee721fef18e112e13e8d`.
+This attempt is retained, not called a passing full gate or a product defect.
+The reviewed `53e40bb` budgets different test cases; it was inspected but not
+cherry-picked as a fix for these failures. A correct frozen-runtime full gate
+must pin `/tmp/plugnz-pr62-deps.0msIJO/node_modules/.bin` first in PATH for
+both the runner and children. The native 2.1.275/2.1.295 proof above used its
+separately pinned native binaries and artifact and is unaffected.
