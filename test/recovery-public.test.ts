@@ -7,6 +7,58 @@ import { fakeDcodeLockInterpreter } from './dcode-fake-lock';
 import { parseLifecycleReport } from '../src/lifecycle-report';
 import { repoRoot } from './util';
 
+test('a later recovery failure reports earlier verified rollback receipts and aggregate native changes', async () => {
+  await withLifecycleCliHarness(harness => {
+    harness.writeHome({ '.deepagents/.keep': '' });
+    const sources = ['demo', 'sibling'].map(name => harness.source(`multi-${name}`, { 'plugin.json': JSON.stringify({ name, version: '1.0.0' }) }));
+    const steps = () => Array.from({ length: 64 }, () => ({ args: ['--version'], stdout: 'deepagents-code 0.1.83\n' }));
+    const native = harness.fakeNative('normal', steps());
+    const env = { OPEN_PLUGIN_DCODE_BIN: native.path, OPEN_PLUGIN_DCODE_PYTHON_BIN: fakeDcodeLockInterpreter(harness.root) };
+    for (const source of sources) expect(harness.run(['sync', source, '--target', 'dcode', '--json'], { env }).exitCode).toBe(0);
+    const stateFile = join(harness.home, 'state.json');
+    const state: import('../src/state').LifecycleStateV2 = JSON.parse(readFileSync(stateFile, 'utf8'));
+    for (const activation of state.activations) activation.activationState = 'nonconforming';
+    writeFileSync(stateFile, JSON.stringify(state));
+    const fault = join(harness.home, '.deepagents/.state/.plgnz-dcode-readback-fault');
+    const originalOperations: string[] = [];
+    for (const [index, source] of sources.entries()) {
+      mkdirSync(join(source, 'commands'));
+      writeFileSync(join(source, 'commands/unsupported.md'), '---\ndescription: unsupported\n---\nunsupported\n');
+      const failing = harness.fakeNative(`failing-${index}`, steps().map((step, call) => call === 2 ? { ...step, writes: { [fault]: 'fault\n' } } : step));
+      const failed = harness.run(['sync', source, '--target', 'dcode', '--json'], { env: { ...env, OPEN_PLUGIN_DCODE_BIN: failing.path } });
+      const pending = parseLifecycleReport(JSON.parse(failed.stdout)).outcomes.find(row => row.result === 'pending')!;
+      expect(pending.package).toBe(index === 0 ? 'demo' : 'sibling');
+      originalOperations.push(pending.operationId);
+      rmSync(fault);
+    }
+    const registry: { plugins: Record<string, Array<{ installPath: string }>> } = JSON.parse(readFileSync(join(harness.home, '.deepagents/.state/installed_plugins.json'), 'utf8'));
+    writeFileSync(join(registry.plugins['sibling@local']![0]!.installPath, 'plugin.json'), '{"name":"sibling","version":"foreign"}');
+    const manifest = join(harness.root, 'multi-resume.json');
+    writeFileSync(manifest, JSON.stringify({ schemaVersion: 1, entries: sources.map(source => ({ operation: 'sync', source: { kind: 'local', locator: source }, target: { kind: 'dcode', instance: 'default' } })) }));
+    const resumed = harness.run(['sync', '--manifest', manifest, '--json'], { env });
+    const report = parseLifecycleReport(JSON.parse(resumed.stdout));
+    expect(resumed.exitCode).toBe(1);
+    expect(report.outcomes).toHaveLength(2);
+    const restored = report.outcomes.find(row => row.package === 'demo')!;
+    expect(restored.operationId).toBe(originalOperations[0]);
+    expect(restored.result).toBe('failed');
+    expect(restored.changed).toBe(true);
+    expect(restored.activationState).toBe('retained-prior');
+    expect(restored.reason!.diagnostic).toContain('verified rollback');
+    const unresolved = report.outcomes.find(row => row.package === 'sibling')!;
+    expect(unresolved.operationId).toBe(originalOperations[1]);
+    expect(unresolved.result).toBe('pending');
+    expect(unresolved.changed).toBe(false);
+    expect(report.summary.changed).toBe(true);
+    expect(report.summary.recoveryId).toBe(originalOperations[1]);
+    expect(report.summary.readbackId).toBe(originalOperations[0]);
+    const after: import('../src/state').LifecycleStateV2 = JSON.parse(bytesToText(resumed.state.after!));
+    expect(after.attempts.flatMap(attempt => attempt.journal).find(row => row.operationId === originalOperations[0])!.state).toBe('rolled-back');
+    expect(after.attempts.flatMap(attempt => attempt.journal).find(row => row.operationId === originalOperations[1])!.state).toBe('rollback');
+    expect(readFileSync(join(registry.plugins['sibling@local']![0]!.installPath, 'plugin.json'), 'utf8')).toContain('foreign');
+  });
+}, 30_000);
+
 test('failed recovery retains every requested Desired pair and exact pending operation identity', async () => {
   await withLifecycleCliHarness(harness => {
     harness.writeHome({ '.deepagents/.keep': '' });
