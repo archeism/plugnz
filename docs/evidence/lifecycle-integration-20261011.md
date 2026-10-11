@@ -76,6 +76,19 @@ unchanged, no false pending intent. Focused recovery/precondition/disable checks
 passed nine tests and 83 assertions in 18.27 seconds; typechecking passed.
 The reviewer approved the corrected checkpoint. No skills were modified.
 
+The previous candidate's bounded raw logs are retained outside Git under
+`~/.local/state/plugnz-evidence/20261011/`:
+
+- `plugnz-9631eaa-local-full-gate.log`: SHA-256
+  `df2fdbbca026afd78f1aabc32bfc3cd5ded4c8e27a9de71b02e61ec39eb85570`.
+- `plugnz-9631eaa-packed-native-dcode-gate.log`: SHA-256
+  `bca61cb5787ae2bd6fc7dc8d235192a3bac82ff520ac18503dbcb25dada26fba`.
+
+The corrected lock refusal regressions also passed in the packed Node CLI:
+two tests, 16 assertions, 2.90 seconds. These use a controlled fake interpreter
+to place the concurrent native mutation precisely at lock acquisition; the
+separate real-native interpreter gate above proves ordinary lock compatibility.
+
 ## Combined candidate verification
 
 Candidate `fda9912` includes dcode lifecycle, selective package retirement,
