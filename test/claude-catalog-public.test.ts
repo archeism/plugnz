@@ -198,3 +198,69 @@ test('public Claude last-member retirement retains foreign container files and m
     expect(JSON.parse(readFileSync(join(harness.home, '.claude/plugins/known_marketplaces.json'), 'utf8')).local.installLocation).toBe(catalog);
   });
 });
+
+test('public Claude selected catalog entry conflicts are repaired and reported without altering foreign entry metadata', async () => {
+  await withLifecycleCliHarness(harness => {
+    harness.fakeNative('claude', Array.from({ length: 70 }, () => ({ args: ['--version'], stdout: '2.1.295 (Claude Code)\n' })));
+    const source = harness.source('catalog-entry-policy', plugin('demo'));
+    expect(harness.run(['add', source, '--target', 'claude-code', '--json']).exitCode).toBe(0);
+    const catalog = join(harness.home, '.claude/plugins/marketplaces/.plgnz-local');
+    const file = join(catalog, '.claude-plugin/marketplace.json');
+    const document = JSON.parse(readFileSync(file, 'utf8'));
+    const foreign = { name: 'foreign', source: './plugins/foreign', strict: false, skills: ['./foreign-skills'], metadata: { untouched: true } };
+    mkdirSync(join(catalog, 'plugins/foreign')); writeFileSync(join(catalog, 'plugins/foreign/keep.txt'), 'foreign\n');
+    document.plugins.push(foreign);
+    document.plugins[0].strict = false;
+    document.plugins[0].skills = ['./skills/'];
+    writeFileSync(file, JSON.stringify(document));
+    const result = harness.run(['sync', source, '--target', 'claude-code', '--json']);
+    expect(result.exitCode).toBe(0);
+    const report = parseLifecycleReport(JSON.parse(result.stdout));
+    expect(report.outcomes[0]?.action).toBe('update');
+    expect(report.outcomes[0]?.changed).toBe(true);
+    expect(report.summary.changed).toBe(true);
+    expect(JSON.parse(readFileSync(file, 'utf8')).plugins).toEqual([foreign, { name: 'demo', source: './plugins/demo' }]);
+  });
+});
+
+test('public Claude catalog-only byte and registration repairs report changed with identical native cache bytes', async () => {
+  await withLifecycleCliHarness(harness => {
+    harness.fakeNative('claude', Array.from({ length: 60 }, () => ({ args: ['--version'], stdout: '2.1.295 (Claude Code)\n' })));
+    const source = harness.source('catalog-only-change', plugin('demo'));
+    expect(harness.run(['add', source, '--target', 'claude-code', '--json']).exitCode).toBe(0);
+    const root = join(harness.home, '.claude/plugins');
+    const cache = snapshotTree(join(root, 'cache/local/demo/1.0.0'));
+    writeFileSync(join(root, 'marketplaces/.plgnz-local/plugins/demo/skills/ordinary/SKILL.md'), 'stale native catalog\n');
+    for (const step of ['bytes', 'registration']) {
+      if (step === 'registration') rmSync(join(root, 'known_marketplaces.json'));
+      const result = harness.run(['sync', source, '--target', 'claude-code', '--json']);
+      expect(result.exitCode).toBe(0);
+      const report = parseLifecycleReport(JSON.parse(result.stdout));
+      expect(report.outcomes[0]?.action).toBe('update');
+      expect(report.outcomes[0]?.changed).toBe(true);
+      expect(report.summary.changed).toBe(true);
+      expect(snapshotTree(join(root, 'cache/local/demo/1.0.0'))).toEqual(cache);
+    }
+  });
+});
+
+for (const divergence of ['missing-commands', 'entry-conflict'] as const) {
+  test(`public Claude refuses an actual foreign catalog ${divergence} without synthesizing native delivery proof`, async () => {
+    await withLifecycleCliHarness(harness => {
+      harness.fakeNative('claude', Array.from({ length: 30 }, () => ({ args: ['--version'], stdout: '2.1.295 (Claude Code)\n' })));
+      const source = harness.source(`foreign-${divergence}`, {
+        '.claude-plugin/marketplace.json': JSON.stringify({ name: 'native', owner: { name: 'foreign' }, plugins: [{ name: 'demo', source: './plugins/demo', ...(divergence === 'entry-conflict' ? { strict: false, skills: ['./skills/'] } : {}) }] }),
+        ...Object.fromEntries(Object.entries(plugin('demo')).map(([path, bytes]) => [`plugins/demo/${path}`, bytes])),
+        'plugins/demo/.claude-plugin/plugin.json': JSON.stringify({ name: 'demo', version: '1.0.0', skills: './skills/', ...(divergence === 'missing-commands' ? {} : { commands: ['./.claude/commands/check.md'] }) }),
+      });
+      harness.writeHome({ '.claude/plugins/known_marketplaces.json': JSON.stringify({ native: { source: { source: 'directory', path: source }, installLocation: source } }) });
+      const before = snapshotTree(source);
+      const result = harness.run(['add', source, '--target', 'claude-code', '--json']);
+      expect(result.exitCode).toBe(1);
+      expect(parseLifecycleReport(JSON.parse(result.stdout)).summary.mutationStarted).toBe(false);
+      expect(result.stores['claude-code'].after).toEqual(result.stores['claude-code'].before);
+      expect(result.state.after).toEqual(result.state.before);
+      expect(snapshotTree(source)).toEqual(before);
+    });
+  });
+}
