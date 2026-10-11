@@ -90,3 +90,39 @@ directory). Archive: 1319 bytes, SHA256
 `7bb10aa499256f1bbd071e9b254ff3b1e8c6e9ea744908203964210e0e44a6e0`.
 This probe does not prove whole supplier reconstruction, large-install throughput,
 the 512 MiB transport worst-case, or official Native behavior.
+
+## Namespace correction after cbe2d2b review
+
+Independent review found global tar basename transforms collided between two
+different supplier roots named `same`; glob exclusions could also delete an
+unknown sibling of a literal wildcard filename. Author reproduced the exact
+old production tar block with isolated local paths: 0 pass, 3 fail, 7 assertions.
+RED log and prechange reproduction are retained at
+`/tmp/plugnz-preservation-namespace-red.log` and
+`/tmp/plugnz-preservation-namespace-red.test.mjs`. That earlier tiny supplier
+probe remains valid only for its original simple layout, not general admission.
+
+Replacement staging uses explicit private namespaces and literal inventory
+exclusions. Focused controls include identical supplier basenames, trial/control
+basename collisions, literal wildcard names, hardlink inode/mode identity,
+stale-byte/overlapping-root rejection and cross-device copy refusal. No fallback
+full content copy raises the declared scratch budget.
+
+Actual owned tiny Sandbox `plugnz-preservation-namespace-20261011` tested trial
+basename `control` and four supplier basenames `same`, `same`, `trial`, `control`.
+Two distinct 1 MiB unknown bodies and all supplier sentinels were restored in
+their own namespaces; literal `literal*.txt` was omitted only after its prebound
+digest matched, while `literalX.txt` survived. Parent exited42, so controller exit1
+means supplier failure, not preservation failure. Archive: 4276 bytes, SHA256
+`9fbabc1e2e6bfaafebe373ac75a269f86b0b6b8cf305401531031b0abc2e1925`.
+Receipt records 14 hardlinked files, same-filesystem strategy, and measured
+whole-FS staging allocation growth zero. Exact configs/helper snapshots/streams,
+inventory and real restore are retained in
+`/tmp/plugnz-preservation-namespace-actual-01` and the durable evidence directory.
+This is not a genuine supplier acquisition or a 512 MiB throughput claim.
+
+The parent's old **empty** Codex setup Sandbox was stopped without running any
+supplier or Native arm. Stop unexpectedly created snapshot
+`snap_ZY5e6SZeHRCEToGffC6PaDrEYATS`, 783 MiB, 30-day retention. It was not deleted
+or used. This retained snapshot must be counted, not described as nonexistent;
+future sessions must verify their persistence setting/actual snapshot outcome.

@@ -4,6 +4,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chownSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readlinkSync, readSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
+import { stageBundle } from './sandbox-preservation-stage.mjs';
 
 const [action, configPath] = process.argv.slice(2);
 const config = JSON.parse(readFileSync(configPath, 'utf8'));
@@ -181,17 +182,19 @@ if (action === 'run') {
   assert.ok(!existsSync(archive), 'Archive cannot be overwritten');
   // Two explicit namespaces prevent trial-controlled files replacing privileged
   // metadata, without following or deleting any trial-created link.
-  const supplierArgs = suppliers.flatMap((supplier, index) => {
-    if (!existsSync(supplier.root)) return [];
-    const name = basename(supplier.root);
-    return ['--transform', `s,^${name},suppliers/${index},`, ...supplier.omittedPaths.flatMap(path => ['--exclude', `${name}/${path}`]),
-      '-C', resolve(supplier.root, '..'), name];
-  });
+  const bundle = join(controlParent, 'bundle');
+  const stagingBefore = used();
+  const staged = stageBundle(bundle, [{ namespace: 'trial', root, inventory, omittedPaths: [] },
+    { namespace: 'control', root: control, inventory: inventoryFor(control), omittedPaths: [] },
+    ...suppliers.flatMap((supplier, index) => existsSync(supplier.root)
+      ? [{ namespace: `suppliers/${index}`, root: supplier.root, inventory: supplier.inventory, omittedPaths: supplier.omittedPaths }]
+      : [])]);
+  const stagingAllocatedGrowthBytes = used() - stagingBefore;
+  assert.ok(stagingAllocatedGrowthBytes <= 128 * 1024 ** 2, 'Hardlink metadata exceeded declared scratch margin');
   const tar = spawnSync('tar', ['-czf', archive,
-    '--transform', `s,^${basename(root)},trial,`, '-C', '/vercel/sandbox/proof', basename(root),
-    '-C', controlParent, 'control', ...supplierArgs], { encoding: 'utf8', timeout: config.operation === 'acquisition' ? 180_000 : 40_000 });
+    '-C', bundle, '.'], { encoding: 'utf8', timeout: config.operation === 'acquisition' ? 180_000 : 40_000 });
   assert.equal(tar.status, 0, tar.stderr);
   assert.ok(lstatSync(archive).size <= config.archiveBytes);
   console.log(JSON.stringify({ archive, bytes: lstatSync(archive).size,
-    sha256: fileHash(archive), files: inventory.length }));
+    sha256: fileHash(archive), files: inventory.length, staging: { ...staged, allocatedGrowthBytes: stagingAllocatedGrowthBytes } }));
 }

@@ -121,12 +121,14 @@ const preserve = () => preservePromise ??= (async () => {
   writeFileSync(join(output, 'receipt.json'), JSON.stringify({ reason, ...metadata, restoredFiles: inventory.length, at: new Date().toISOString() }, null, 2), { flag: 'wx' });
 })();
 const helperPath = fileURLToPath(new URL('./sandbox-preservation-remote.mjs', import.meta.url));
-for (const [name, path] of [['controller', fileURLToPath(import.meta.url)], ['remote', helperPath]]) {
+const stagePath = fileURLToPath(new URL('./sandbox-preservation-stage.mjs', import.meta.url));
+for (const [name, path] of [['controller', fileURLToPath(import.meta.url)], ['remote', helperPath], ['stage', stagePath]]) {
   const bytes = readFileSync(path);
   writeFileSync(join(output, `${name}.mjs`), bytes, { flag: 'wx' });
   writeFileSync(join(output, `${name}.sha256`), createHash('sha256').update(bytes).digest('hex'), { flag: 'wx' });
 }
-for (const args of [['copy', helperPath, `${config.sandbox}:${remoteHelper}`], ['copy', configPath, `${config.sandbox}:${remoteConfig}`]]) {
+for (const args of [['copy', helperPath, `${config.sandbox}:${remoteHelper}`],
+  ['copy', stagePath, `${config.sandbox}:/vercel/sandbox/proof/sandbox-preservation-stage.mjs`], ['copy', configPath, `${config.sandbox}:${remoteConfig}`]]) {
   const result = await cli(args, 20_000); assert.equal(result.code, 0, result.stderr);
 }
 assert.ok(Date.now() < config.archiveAt && config.expiresAt - Date.now() >= reserveMs, 'Setup consumed preservation reserve; refuse native launch');

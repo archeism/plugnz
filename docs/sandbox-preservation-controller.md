@@ -100,6 +100,24 @@ grant Native eligibility or deliver two-physical-ID migration.
 
 ## Failure boundary
 
+### Namespace-safe stopped staging
+
+Every source gets an explicit private bundle namespace: `trial`, `control`, or
+`suppliers/<index>`, regardless of its original basename. No tar transforms or
+glob exclusions are used. Individually verified body exclusions match literal
+inventory paths; a filename containing `*`, `?` or `[` cannot exclude siblings.
+Canonical source-root overlap is refused, not assigned ambiguous authority.
+
+Regular files are hardlinked into the private root-owned bundle on the same
+filesystem, never content-copied; cross-device staging fails loudly. Staging
+checks the original/staged inode, device, byte hash and mode before tar. It never
+chmods hardlinked files. Independently created directories and links preserve
+their captured modes/ownership/targets. The private bundle parent remains
+inaccessible to experiment UID processes. Whole-FS staging allocation is measured
+and must fit the 128 MiB metadata margin; the compressed archive remains covered
+by the existing acquisition reserve. Both controller and remote/staging helper
+source snapshots accompany every new attempt.
+
 Supplier failure, guard failure, ordinary completion, deadline and one SIGTERM
 all enter preservation automatically. Network outage, SIGKILL/controller-machine
 loss or exhausted archive budget can still make preservation incomplete; the
