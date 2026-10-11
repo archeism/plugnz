@@ -2,4 +2,4 @@
 name: probe
 description: Isolated lifecycle proof
 ---
-Proof bytes V2, unchanged declared version.
+Proof bytes V3, actual native failure boundary, unchanged declared version.
