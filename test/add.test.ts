@@ -601,6 +601,8 @@ describe('add', () => {
 
   test('claude-code accepts repeated public adoption for its already-owned native install', async () => {
     await withHostEnvAsync('claude-code', async (home) => {
+      const saved = process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'];
+      process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'] = versionShim(home, 'claude', '2.1.295 (Claude Code)');
       const sourceDir = mkdtempSync(join(tmpdir(), 'open-plugin-source-'));
       initGitRepo(sourceDir, { ...pluginsMap, 'plugin.json': JSON.stringify({ name: 'new-plugin', version: '1.0.0' }) });
       const legacy = join(home, '.claude/plugins/cache/local/new-plugin/1.0.0');
@@ -609,13 +611,17 @@ describe('add', () => {
       mkdirSync(join(legacy, '.claude-plugin'), { recursive: true });
       writeFileSync(join(legacy, '.claude-plugin/plugin.json'), JSON.stringify({ name: 'new-plugin', version: '1.0.0', skills: './skills/' }));
       writeFileSync(join(home, '.claude/plugins/installed_plugins.json'), JSON.stringify({ version: 2, plugins: { 'new-plugin@local': [{ scope: 'user', installPath: legacy, version: '1.0.0' }] } }));
-      expect(await main(['add', sourceDir, '--target', 'claude-code', '--adopt-existing'])).toBe(0);
       const output: string[] = [];
       const originalLog = console.log;
-      console.log = (value: string) => output.push(value);
       try {
+        expect(await main(['add', sourceDir, '--target', 'claude-code', '--adopt-existing'])).toBe(0);
+        console.log = (value: string) => output.push(value);
         expect(await main(['add', sourceDir, '--target', 'claude-code', '--adopt-existing', '--legacy-json'])).toBe(0);
-      } finally { console.log = originalLog; }
+      } finally {
+        console.log = originalLog;
+        if (saved === undefined) delete process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'];
+        else process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'] = saved;
+      }
       const nativeId = claudeCode.listInstalled().find((plugin) => plugin.name === 'new-plugin')?.id;
       expect(nativeId).toBe('new-plugin@local');
       expect(JSON.parse(output.join(''))).toEqual([{ plugin: 'new-plugin', target: 'claude-code', status: 'unchanged', action: 'install', dryRun: false, nativeId }]);
