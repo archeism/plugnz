@@ -114,6 +114,9 @@ export interface PlanLifecycleInput {
   /** Original add argument. Carries fetch credentials that must not enter the manifest. */
   readonly transportSource?: string;
   readonly removalSelection?: readonly { readonly scopeId: string; readonly packageId: string; readonly nativeId: string }[];
+  /** Private recovery preflight; never execute this plan before pending journals settle. */
+  readonly recoveryPreflight?: boolean;
+  readonly retainedSources?: Map<string, FrozenSource>;
 }
 
 type FrozenOperation = Extract<LifecyclePlan, { kind: 'frozen' }>['operations'][number];
@@ -162,9 +165,13 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
   if (duplicate !== null) return zeroWrite(command, input.dryRun, duplicate);
 
   const prepared: Prepared[] = [];
-  const transportCache = new Map<string, FrozenSource>();
+  const transportCache = input.retainedSources ?? new Map<string, FrozenSource>();
+  const planningState = input.recoveryPreflight ? { ...loaded.state, activations: loaded.state.activations.map(row => {
+    if (row.pending === undefined || !loaded.state.attempts.some(attempt => attempt.command !== 'legacy-recovery' && attempt.id === row.pending!.attemptId && attempt.journal.some(entry => entry.scopeId === row.scopeId && entry.packageId === row.packageId && entry.nativeId === row.nativeId && (entry.sealedOperation !== undefined || entry.state === 'pending')))) return row;
+    const { pending: _pending, ...kept } = row; return kept;
+  }) } : loaded.state;
   for (const entry of input.manifest.entries) {
-    const result = await prepareEntry(entry, input.hosts, loaded.state, command, input.transportSource, transportCache);
+    const result = await prepareEntry(entry, input.hosts, planningState, command, input.transportSource, transportCache);
     if (result.kind === 'defect') return zeroWrite(command, input.dryRun, result.reason, result.terminalPhase);
     if (input.removalSelection !== undefined) {
       if (command !== 'remove' || result.kind !== 'retire-source') {
@@ -183,13 +190,61 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
   }
 
   const attemptId = lifecycleAttemptId(loaded.state.stateGeneration, prepared.map((item) => item.identity));
+  const recovering = input.recoveryPreflight && loaded.state.attempts.some(attempt => attempt.command !== 'legacy-recovery' && attempt.journal.some(row =>
+    prepared.some(item => item.scope.id === row.scopeId) && ['pending', 'applying', 'applied', 'readback-verified', 'rollback', 'cleanup-pending'].includes(row.state)));
   const scopes: PlannedScope[] = [];
   const operations: FrozenOperation[] = [];
   for (const item of prepared) {
-    const planned = await planPrepared(item, attemptId, input.validatedAt, loaded.state, command);
+    const pendingJournals = recovering ? loaded.state.attempts.filter(attempt => attempt.command !== 'legacy-recovery').flatMap(attempt => attempt.journal.filter(row => row.scopeId === item.scope.id && ['pending', 'applying', 'applied', 'readback-verified', 'rollback', 'cleanup-pending'].includes(row.state))) : [];
+    const pendingNativeIds = new Set(pendingJournals.map(row => row.nativeId));
+    const transitional: FrozenOperation[] = [];
+    const transitionalDesired: DesiredPackageRecord[] = [];
+    const blockedReason = createLifecycleReason('runtime', 'runtime.operation-failed', 'not attempted before pending lifecycle recovery settles');
+    let classifiable = item;
+    if (item.kind === 'sync' && pendingNativeIds.size > 0) {
+      // Validate Source semantics even when only this native identity is transitional.
+      const selectedPackages: SelectedManifestPackage<PluginSource>[] = [];
+      for (const selected of item.selected) {
+        const nativeId = plannedNativeIdFor(item, selected.plugin);
+        if (nativeId instanceof Error) return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.defect', unknownErrorDiagnostic(nativeId)));
+        if (!pendingNativeIds.has(nativeId)) { selectedPackages.push(selected); continue; }
+        try {
+          const inventory = inventoryPackageSemantics(selected.plugin);
+          transitionalDesired.push({ packageId: selected.plugin.name, nativeId,
+            sourceRelativeDir: selected.plugin.relativeDir || '.',
+            requiredCapabilities: [...requiredSemanticsForOperation(inventory, 'install')].sort(),
+            adoptionRequested: selected.adoptionRequested,
+          });
+        }
+        catch (error) { return zeroWrite(command, input.dryRun, error instanceof SemanticInventoryError ? error.reason : createLifecycleReason('internal', 'internal.defect', unknownErrorDiagnostic(error))); }
+        transitional.push(classified(
+          operationIdentity('desired-pair', item.scope.id, selected.plugin.name, nativeId, `${item.frozen.snapshot.fingerprint}\0${attemptId}`),
+          'desired-pair', item.scope, sourceSnapshotId(item.frozen), selected.plugin.name, nativeId,
+          'not-attempted', 'none', blockedReason,
+        ).operation);
+      }
+      classifiable = { ...item, selected: selectedPackages };
+    }
+    const classifiableState = pendingNativeIds.size === 0 ? loaded.state : { ...loaded.state, activations: loaded.state.activations.filter(row => row.scopeId !== item.scope.id || !pendingNativeIds.has(row.nativeId)) };
+    const planned = await planPrepared(classifiable, attemptId, input.validatedAt, classifiableState, command);
     if (planned.kind === 'defect') return zeroWrite(command, input.dryRun, planned.reason, planned.terminalPhase);
-    scopes.push(planned.scope);
-    operations.push(...planned.operations);
+    for (const journal of pendingJournals) {
+      if (journal.packageId === undefined || journal.nativeId === undefined || transitional.some(row => row.operation.nativeId === journal.nativeId)) continue;
+      if (item.kind === 'retire-source' && (item.retirementPackages === undefined || item.retirementPackages.some(row => row.nativeId === journal.nativeId))
+        || item.kind === 'sync' && command === 'sync' && loaded.state.activations.some(row => row.scopeId === item.scope.id && row.nativeId === journal.nativeId)) {
+        transitional.push(classified(
+          operationIdentity('retirement', item.scope.id, journal.packageId, journal.nativeId, attemptId),
+          'retirement', item.scope, item.kind === 'sync' ? sourceSnapshotId(item.frozen) : null,
+          journal.packageId, journal.nativeId, 'not-attempted', 'none', blockedReason,
+        ).operation);
+      }
+    }
+    scopes.push(item.kind === 'sync' && transitionalDesired.length > 0 ? {
+      ...planned.scope,
+      desired: desiredGeneration(loaded.state.scopes.find(row => row.id === item.scope.id), item.frozen.snapshot.revision, item.frozen.snapshot.fingerprint,
+        item.selected.map(selected => [...planned.scope.desired!.packages, ...transitionalDesired].find(row => row.packageId === selected.plugin.name)!), input.validatedAt),
+    } : planned.scope);
+    operations.push(...planned.operations, ...transitional);
   }
   return frozenPlan(input, command, attemptId, scopes, operations, prepared, loaded.state);
 }

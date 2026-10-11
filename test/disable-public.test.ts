@@ -92,11 +92,16 @@ test('disable readback failure restores enablement and durably blocks until roll
     const pending = JSON.parse(bytesToText(failed.state.after!));
     expect(pending.activations[0].pending.operation).toBe('disable-nonconforming');
     expect(pending.activations[0].pending.phase).toBe('rollback');
+    const journal = pending.attempts.find((attempt: { id: string }) => attempt.id === pending.activations[0].pending.attemptId).journal[0];
+    expect({ schemaVersion: journal.sealedOperation.schemaVersion, adapterId: journal.sealedOperation.adapterId, scopeId: journal.sealedOperation.scopeId, operationId: journal.sealedOperation.operationId, nativeId: journal.sealedOperation.nativeId, action: journal.sealedOperation.action }).toEqual({ schemaVersion: 1, adapterId: 'dcode', scopeId: journal.scopeId, operationId: journal.operationId, nativeId: 'demo@local', action: 'disable-nonconforming' });
     expect(JSON.parse(bytesToText(failed.stores.dcode.after.files['.state/plugin_state.json']!)).enabledPlugins['demo@local']).toBe(true);
     rmSync(fault);
     const retry = harness.run(['sync', source, '--target', 'dcode', '--json'], { env });
     expect(retry.exitCode).toBe(1);
-    expect(parseLifecycleReport(JSON.parse(retry.stdout)).summary.reason!.diagnostic).toContain('requires recovery');
+    const retried = parseLifecycleReport(JSON.parse(retry.stdout));
+    expect(retried.outcomes[0]!.reason!.category).toBe('capability');
+    expect(retried.outcomes[0]!.activationState).toBe('inactive');
+    expect(JSON.parse(bytesToText(retry.state.after!)).activations[0].pending).toBeUndefined();
   });
 }, 20_000);
 
