@@ -541,12 +541,18 @@ describe('add', () => {
       const originalLog = console.log;
       console.log = (value: string) => output.push(value);
       try {
-        expect(await main(['add', sourceDir, '--target', 'codex', '--plugin', 'one', '--dry-run', '--legacy-json'])).toBe(0);
+        expect(await main(['add', sourceDir, '--target', 'codex', '--plugin', 'one', '--dry-run', '--legacy-json'])).toBe(1);
       } finally { console.log = originalLog; }
-      const outcomes = JSON.parse(output.join('')) as Array<{ plugin: string; nativeId?: string }>;
-      expect(outcomes).toHaveLength(1);
-      expect(outcomes[0]?.plugin).toBe('one');
-      expect(outcomes[0]?.nativeId).toBe('one@personal');
+      const outcomes = JSON.parse(output.join('')) as Array<{ plugin: string; target: string; status: string; dryRun: boolean; diagnostic?: string; nativeId?: string; action?: string }>;
+      expect(outcomes).toEqual([{
+        plugin: 'one',
+        target: 'codex',
+        status: 'unverified',
+        dryRun: true,
+        diagnostic: "target 'codex' has no verified native install profile for version 'unknown/unparseable' and local Sources",
+        nativeId: 'one@personal',
+        action: 'install',
+      }]);
       expect(codex.listInstalled().find((plugin) => plugin.name === 'one')).toBeUndefined();
     });
   });
