@@ -9,7 +9,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { isAbsolute, join, relative } from 'node:path';
 import { createDeploymentScopeIdentity, validateSourceBinding, type TargetIdentity } from './deployment-scope';
-import { stateFile } from './paths';
+import { cacheRoot, stateFile } from './paths';
 import type { SourceBinding } from './source-reference';
 import {
   parsePersistedTargetIdentity,
@@ -448,6 +448,14 @@ function projectV2(state: LifecycleStateV2): InstallRecord[] {
       pending: activation.pending === undefined ? undefined : pendingV1(activation.pending.operation),
     };
     if (scope.source.kind === 'local' && activation.sourceRelativeDir !== undefined) record.sourceDir = join(scope.source.locator, activation.sourceRelativeDir);
+    if (scope.source.kind === 'git') {
+      const fingerprint = scope.lastConverged?.sourceFingerprint ?? scope.desired?.sourceFingerprint;
+      if (fingerprint !== undefined) {
+        const root = join(cacheRoot(), 'source-snapshots', fingerprint);
+        const relativeDir = activation.sourceRelativeDir;
+        record.sourceDir = relativeDir === undefined || relativeDir === '.' ? root : join(root, relativeDir);
+      }
+    }
     return removeUndefined(record);
   });
 }

@@ -1251,7 +1251,7 @@ describe('isolated lifecycle CLI harness', () => {
         exitCode: 0,
         stderr: '',
         outcome: [{
-          action: 'update',
+          action: 'unchanged',
           result: 'succeeded',
           route: 'managed',
           resourceState: 'present',
@@ -1262,7 +1262,7 @@ describe('isolated lifecycle CLI harness', () => {
         summary: {
           result: 'converged',
           terminalPhase: 'complete',
-          mutationStarted: true,
+          mutationStarted: false,
           changed: false,
           failureCategory: null,
           reason: null,
@@ -1339,14 +1339,17 @@ done
 exec "$real_git" "\${args[@]}"
 `);
       chmodSync(git, 0o755);
+      const cursor = join(bin, 'cursor');
+      writeFileSync(cursor, '#!/bin/sh\nprintf \'%s\\n\' \'2.4.0\'\n');
+      chmodSync(cursor, 0o755);
       harness.writeHome({ '.cursor/.keep': '' });
 
       const result = harness.run(
         ['add', 'https://user:super-secret@example.test/repo.git#main', '--target', 'cursor', '--json'],
-        { env: { OPEN_PLUGIN_GIT_BIN: git } },
+        { env: { OPEN_PLUGIN_GIT_BIN: git, OPEN_PLUGIN_CURSOR_BIN: cursor } },
       );
       const stateText = bytesToText(result.state.after!);
-      const state = projectedState(result.state.after!);
+      const state = projectedState(result.state.after!, harness.home);
 
       const report = parseLifecycleReport(JSON.parse(result.stdout));
 
@@ -1371,7 +1374,7 @@ exec "$real_git" "\${args[@]}"
         exitCode: 0,
         stderr: '',
         sourceSnapshots: [{
-          id: 'source-0',
+          id: report.command.sourceSnapshots[0]!.id,
           reference: {
             binding: { kind: 'git', locator: 'https://example.test/repo.git', ref: 'main' },
             revision,
@@ -1392,6 +1395,7 @@ exec "$real_git" "\${args[@]}"
         installedBytes: 'remote snapshot\n',
         durableOutputLeaksCredential: false,
       });
+      expect(report.command.sourceSnapshots[0]!.id).toMatch(/^snapshot-v1-[a-f0-9]{64}$/u);
     });
   });
 

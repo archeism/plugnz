@@ -58,7 +58,7 @@ export interface StateDocument {
 }
 
 /** Project a captured ledger. Version 2 has scopes and activations; the harness assertions read the v1 rows `readState` already produces. */
-export function projectedState(bytes: number[]): StateDocument {
+export function projectedState(bytes: number[], home?: string): StateDocument {
   const text = bytesToText(bytes);
   const parsed: unknown = JSON.parse(text);
   const version = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) && typeof (parsed as { version?: unknown }).version === 'number'
@@ -66,6 +66,8 @@ export function projectedState(bytes: number[]): StateDocument {
     : 0;
   const dir = mkdtempSync(join(tmpdir(), 'plugnz-projected-state-'));
   const file = join(dir, 'state.json');
+  const previousHome = process.env['OPEN_PLUGIN_HOME'];
+  if (home !== undefined) process.env['OPEN_PLUGIN_HOME'] = home;
   try {
     writeFileSync(file, text);
     const installs = readState(file).map((record) => {
@@ -81,6 +83,10 @@ export function projectedState(bytes: number[]): StateDocument {
     });
     return { version, installs };
   } finally {
+    if (home !== undefined) {
+      if (previousHome === undefined) delete process.env['OPEN_PLUGIN_HOME'];
+      else process.env['OPEN_PLUGIN_HOME'] = previousHome;
+    }
     rmSync(dir, { recursive: true, force: true });
   }
 }
