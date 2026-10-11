@@ -19,20 +19,22 @@ function plugin(name: string, body = 'first'): Record<string, string> {
 test('public Claude rejects malformed foreign marketplace timestamps before any batch mutation', async () => {
   await withLifecycleCliHarness(harness => {
     harness.fakeNative('claude', Array.from({ length: 80 }, () => ({ args: ['--version'], stdout: '2.1.295 (Claude Code)\n' })));
+    const cursor = harness.fakeNative('cursor', Array.from({ length: 40 }, () => ({ args: ['--version'], stdout: '2.4.0\n' })));
     const foreign = harness.source('timestamp-foreign', { '.claude-plugin/marketplace.json': '{"name":"foreign","owner":{"name":"foreign"},"plugins":[]}' });
-    const alpha = harness.source('timestamp-first', plugin('alpha'));
+    const alpha = harness.source('timestamp-first', { 'plugin.json': plugin('alpha')['plugin.json']!, 'skills/ordinary/SKILL.md': plugin('alpha')['skills/ordinary/SKILL.md']! });
     const beta = harness.source('timestamp-last', plugin('beta'));
     const manifest = join(harness.source('timestamp-batch', {}), 'manifest.json');
-    writeFileSync(manifest, JSON.stringify({ schemaVersion: 1, entries: [alpha, beta].map(locator => ({ operation: 'sync', source: { kind: 'local', locator }, target: { kind: 'claude-code', instance: 'default' } })) }));
+    writeFileSync(manifest, JSON.stringify({ schemaVersion: 1, entries: [{ locator: alpha, kind: 'cursor' }, { locator: alpha, kind: 'claude-code' }, { locator: beta, kind: 'claude-code' }].map(({ locator, kind }) => ({ operation: 'sync', source: { kind: 'local', locator }, target: { kind, instance: 'default' } })) }));
     for (const lastUpdated of [undefined, 17, null]) {
       harness.writeHome({ '.claude/plugins/known_marketplaces.json': JSON.stringify({ foreign: { source: { source: 'directory', path: foreign }, installLocation: foreign, ...(lastUpdated === undefined ? {} : { lastUpdated }) } }) });
       const before = snapshotTree(foreign);
-      const result = harness.run(['sync', '--manifest', manifest, '--json']);
+      const result = harness.run(['sync', '--manifest', manifest, '--json'], { env: { OPEN_PLUGIN_CURSOR_BIN: cursor.path } });
       expect(result.exitCode).toBe(1);
       const report = parseLifecycleReport(JSON.parse(result.stdout));
       expect(report.summary.mutationStarted).toBe(false);
       expect(JSON.stringify(report)).toContain('foreign.lastUpdated');
       expect(result.stores['claude-code'].after).toEqual(result.stores['claude-code'].before);
+      expect(result.stores['cursor'].after).toEqual(result.stores['cursor'].before);
       expect(result.state.after).toEqual(result.state.before);
       expect(snapshotTree(foreign)).toEqual(before);
     }
@@ -107,7 +109,7 @@ test('public Claude refuses a foreign marketplace registration before native or 
   await withLifecycleCliHarness(harness => {
     harness.fakeNative('claude', Array.from({ length: 30 }, () => ({ args: ['--version'], stdout: '2.1.295 (Claude Code)\n' })));
     const foreign = harness.source('foreign-catalog', { '.claude-plugin/marketplace.json': '{"name":"local","owner":{"name":"foreign"},"plugins":[]}' });
-    harness.writeHome({ '.claude/plugins/known_marketplaces.json': JSON.stringify({ local: { source: { source: 'directory', path: foreign }, installLocation: foreign } }) });
+    harness.writeHome({ '.claude/plugins/known_marketplaces.json': JSON.stringify({ local: { source: { source: 'directory', path: foreign }, installLocation: foreign, lastUpdated: '' } }) });
     const source = harness.source('desired', plugin('demo'));
     const before = snapshotTree(foreign);
     const result = harness.run(['add', source, '--target', 'claude-code', '--json']);
@@ -122,7 +124,7 @@ test('last-pair Claude catalog collision blocks the entire public manifest befor
   await withLifecycleCliHarness(harness => {
     harness.fakeNative('claude', Array.from({ length: 30 }, () => ({ args: ['--version'], stdout: '2.1.295 (Claude Code)\n' })));
     const foreign = harness.source('foreign-last-catalog', { '.claude-plugin/marketplace.json': '{"name":"local","plugins":[]}' });
-    harness.writeHome({ '.claude/plugins/known_marketplaces.json': JSON.stringify({ local: { source: { source: 'directory', path: foreign }, installLocation: foreign } }) });
+    harness.writeHome({ '.claude/plugins/known_marketplaces.json': JSON.stringify({ local: { source: { source: 'directory', path: foreign }, installLocation: foreign, lastUpdated: '' } }) });
     const alpha = harness.source('first-safe', {
       '.claude-plugin/marketplace.json': '{"name":"safe","owner":{"name":"test"},"plugins":[{"name":"alpha","source":"./plugins/alpha"}]}',
       'plugins/alpha/plugin.json': plugin('alpha')['plugin.json']!,
@@ -194,7 +196,7 @@ test('public Claude preserves a byte-identical native catalog only when its dire
       ...Object.fromEntries(Object.entries(files).map(([path, bytes]) => [`plugins/demo/${path}`, bytes])),
       'plugins/demo/.claude-plugin/plugin.json': '{"name":"demo","version":"1.0.0","skills":"./skills/","commands":["./.claude/commands/check.md"]}',
     });
-    harness.writeHome({ '.claude/plugins/known_marketplaces.json': JSON.stringify({ native: { source: { source: 'directory', path: source }, installLocation: source } }) });
+    harness.writeHome({ '.claude/plugins/known_marketplaces.json': JSON.stringify({ native: { source: { source: 'directory', path: source }, installLocation: source, lastUpdated: '', metadata: { opaque: true } } }) });
     const before = snapshotTree(source);
     const installed = harness.run(['add', source, '--target', 'claude-code', '--json']);
     expect(installed.exitCode).toBe(0);
@@ -280,7 +282,7 @@ for (const divergence of ['missing-commands', 'entry-conflict'] as const) {
         ...Object.fromEntries(Object.entries(plugin('demo')).map(([path, bytes]) => [`plugins/demo/${path}`, bytes])),
         'plugins/demo/.claude-plugin/plugin.json': JSON.stringify({ name: 'demo', version: '1.0.0', skills: './skills/', ...(divergence === 'missing-commands' ? {} : { commands: ['./.claude/commands/check.md'] }) }),
       });
-      harness.writeHome({ '.claude/plugins/known_marketplaces.json': JSON.stringify({ native: { source: { source: 'directory', path: source }, installLocation: source } }) });
+      harness.writeHome({ '.claude/plugins/known_marketplaces.json': JSON.stringify({ native: { source: { source: 'directory', path: source }, installLocation: source, lastUpdated: '' } }) });
       const before = snapshotTree(source);
       const result = harness.run(['add', source, '--target', 'claude-code', '--json']);
       expect(result.exitCode).toBe(1);

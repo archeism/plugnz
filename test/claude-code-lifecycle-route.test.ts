@@ -506,7 +506,7 @@ test('Claude fresh foreign catalog entry drift blocks before any native write', 
     const document = { name: 'market', owner: { name: 'foreign' }, plugins: [{ name: 'demo', source: './packages/demo', metadata: { exact: 'first' } }] };
     writeFileSync(catalogFile, JSON.stringify(document));
     mkdirSync(join(root, 'plugins'), { recursive: true });
-    writeFileSync(join(root, 'plugins/known_marketplaces.json'), JSON.stringify({ market: { source: { source: 'directory', path: sourceRoot }, installLocation: sourceRoot, autoUpdate: false } }));
+    writeFileSync(join(root, 'plugins/known_marketplaces.json'), JSON.stringify({ market: { source: { source: 'directory', path: sourceRoot }, installLocation: sourceRoot, autoUpdate: false, lastUpdated: '' } }));
     const scope = createDeploymentScopeIdentity({ kind: 'local', locator: sourceRoot }, claudeTarget);
     const packageFingerprint = fingerprintTree(initial.packageRoot);
     const snapshot = createFrozenPackageSnapshot({ ...initial, scopeId: scope.id, sourceType: 'local', nativeGit: undefined, snapshotFingerprint: fingerprintTree(sourceRoot), packageFingerprint, inventory: { ...initial.inventory, package: { ...initial.inventory.package, fingerprint: packageFingerprint } } });
@@ -525,6 +525,28 @@ test('Claude fresh foreign catalog entry drift blocks before any native write', 
   });
 });
 
+test('Claude global registry drift blocks apply and readback but does not overwrite it during rollback', async () => {
+  await withClaude(async root => {
+    const host = createClaudeCodeLifecycleHost();
+    const installed = await activate(host, updateSnapshot(root, 'global-valid-first', '1.0.0', 'c'.repeat(40), 'install'));
+    const update = await plan(host, updateSnapshot(root, 'global-before-drift', '1.0.0', 'd'.repeat(40), 'update'), 'update');
+    const file = join(root, 'plugins/known_marketplaces.json');
+    const known = JSON.parse(readFileSync(file, 'utf8'));
+    const foreign = { source: { source: 'directory', path: root }, installLocation: root, lastUpdated: null, metadata: { retained: true } };
+    known.foreign = foreign;
+    writeFileSync(file, JSON.stringify(known));
+    const before = fingerprintTree(root);
+    let applyError: unknown, readbackError: unknown;
+    try { await host.apply(update.prepared); } catch (error) { applyError = error; }
+    try { await host.readback(installed.handle); } catch (error) { readbackError = error; }
+    expect(String(applyError)).toContain('foreign.lastUpdated');
+    expect(String(readbackError)).toContain('foreign.lastUpdated');
+    expect(fingerprintTree(root)).toBe(before);
+    await host.rollback(installed.handle);
+    expect(JSON.parse(readFileSync(file, 'utf8')).foreign).toEqual(foreign);
+  });
+});
+
 test('Claude foreign catalog binds the whole selected entry but not unrelated marketplace metadata', async () => {
   await withClaude(async root => {
     const initial = updateSnapshot(root, 'entry-readback-proof', '1.0.0', 'c'.repeat(40), 'install');
@@ -535,7 +557,7 @@ test('Claude foreign catalog binds the whole selected entry but not unrelated ma
     mkdirSync(join(sourceRoot, '.claude-plugin'), { recursive: true });
     writeFileSync(catalogFile, JSON.stringify({ name: 'market', owner: { name: 'foreign' }, plugins: [{ name: 'demo', source: './packages/demo', metadata: { exact: 'first' } }] }));
     mkdirSync(join(root, 'plugins'), { recursive: true });
-    writeFileSync(join(root, 'plugins/known_marketplaces.json'), JSON.stringify({ market: { source: { source: 'directory', path: sourceRoot }, installLocation: sourceRoot, autoUpdate: false } }));
+    writeFileSync(join(root, 'plugins/known_marketplaces.json'), JSON.stringify({ market: { source: { source: 'directory', path: sourceRoot }, installLocation: sourceRoot, autoUpdate: false, lastUpdated: '' } }));
     const scope = createDeploymentScopeIdentity({ kind: 'local', locator: sourceRoot }, claudeTarget);
     const packageFingerprint = fingerprintTree(initial.packageRoot);
     const snapshot = createFrozenPackageSnapshot({ ...initial, scopeId: scope.id, sourceType: 'local', nativeGit: undefined, snapshotFingerprint: fingerprintTree(sourceRoot), packageFingerprint, inventory: { ...initial.inventory, package: { ...initial.inventory.package, fingerprint: packageFingerprint } } });
@@ -567,7 +589,7 @@ function seedMarketplace(root: string, autoUpdate: boolean): void {
   mkdirSync(join(root, 'plugins'), { recursive: true });
   writeFileSync(join(root, 'plugins/installed_plugins.json'), `${JSON.stringify({ version: 2, plugins: {} })}\n`);
   writeFileSync(join(root, 'plugins/known_marketplaces.json'), `${JSON.stringify({
-    market: { source: { source: 'directory', path: catalog }, installLocation: catalog, autoUpdate },
+    market: { source: { source: 'directory', path: catalog }, installLocation: catalog, autoUpdate, lastUpdated: '' },
   })}\n`);
   writeFileSync(join(root, 'settings.json'), `${JSON.stringify({
     theme: 'dark',

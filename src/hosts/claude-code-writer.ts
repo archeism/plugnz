@@ -301,6 +301,23 @@ function readMarketplaces(file: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+/** Pinned Claude 2.1.295 Hg/Edt registry envelope; see issue35 native source evidence.
+ * Native strings have no date/nonempty refinement. Unknown metadata is retained.
+ * This validates the global envelope, not a guessed replacement source schema.
+ */
+function assertLifecycleMarketplaceEnvelope(): void {
+  const file = join(pluginsDir(), 'known_marketplaces.json');
+  for (const [name, entry] of Object.entries(readMarketplaces(file))) {
+    const invalid = (field: string, expectation: string): never => {
+      throw new Error(`Invalid Claude Code marketplace registry: ${file}: ${name}.${field}: expected ${expectation}; repair the native configuration before retrying (no automatic edits)`);
+    };
+    if (!isRecord(entry)) return invalid('entry', 'object');
+    if (!isRecord(entry['source'])) invalid('source', 'native source object');
+    for (const field of ['installLocation', 'lastUpdated']) if (typeof entry[field] !== 'string') invalid(field, 'string');
+    if (entry['autoUpdate'] !== undefined && typeof entry['autoUpdate'] !== 'boolean') invalid('autoUpdate', 'boolean');
+  }
+}
+
 function marketplacesWithLocalSource(marketplaces: Record<string, unknown>, name: string, sourcePath: string, sourceIdentity: string, plugin: PluginSource, forceWrapper: boolean): Record<string, unknown> {
   const manifest = join(sourcePath, '.claude-plugin', 'marketplace.json');
   const catalog = validateMarketplaceRegistration(marketplaces, name, sourcePath, sourceIdentity, plugin, forceWrapper);
@@ -961,6 +978,7 @@ function claudeSemantics(): Record<PackageSemantic, CapabilityStatus> {
 }
 
 function observeClaudeInstallations(target: LifecycleReadbackData['target']): TargetInstallationData[] {
+  assertLifecycleMarketplaceEnvelope();
   const registry = readRegistry(join(pluginsDir(), 'installed_plugins.json'));
   const settings = readSettings(join(pluginsDir(), '..', 'settings.json'));
   const enabled = settings['enabledPlugins'];
@@ -1076,6 +1094,7 @@ function claudeReadback(
   identity: Pick<LifecycleReadbackData, 'adapterId' | 'target' | 'scopeId' | 'packageName' | 'nativeId'>,
   absentRoute: SelectedLifecycleRoute | 'none',
 ): LifecycleReadbackData {
+  assertLifecycleMarketplaceEnvelope();
   const installPath = recordedInstallPath(identity.nativeId);
   const present = installPath !== undefined && existsSync(installPath);
   const retention = {
