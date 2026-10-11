@@ -110,3 +110,22 @@ Retained failure logs under `~/.local/state/plugnz-evidence/20261011/`:
 | --- | --- |
 | `plugnz-50b-host-combined-full-failure.log` | `bc753cc415664bb10158ad7db9e981eb6d2bd67201505248eecc64ccec7feea6` |
 | `plugnz-50b-zcode-update-isolated.log` | `388f53d2e5b1ff542917f171e06df35892216bc9749aa98eac9602979210e991` |
+
+## Main-based deadline integration attempt
+
+The isolated deadline-only candidate `36a546d` contains no host adapter changes.
+Its full gate failed: 667 passed, 5 skipped, 2 failed, 4416 assertions,
+245.87 seconds. Two pre-existing multi-command public CLI fixtures (scenario 5
+and independent-pair/ungated-instance handling) hit their implicit five-second
+deadlines. The scenario 5 assertion saw a null subprocess exit after the test
+watchdog killed the process; this failed attempt is retained, not reported green.
+Raw `plugnz-36a-deadline-full.log` SHA-256:
+`99b14b686601a5210bf0912ca6d32b795e9ffac0e68f750cb701716f0ed12af1`.
+
+A bounded 20-second diagnostic passed both fixtures and one matching scenario 14
+control: 3 tests, 16 assertions, 8.27 seconds. The failing fixtures took 3.434 and
+3.183 seconds in isolation. Their explicit per-test deadlines are now 20 seconds;
+no production timeout, fixture behavior, or assertion changes. The main-based
+candidate still requires independent review and a fresh full gate.
+The explicit-deadline focused run passed without a command-level override:
+3 tests, 16 assertions, 7.92 seconds; typecheck and diff checks passed.
