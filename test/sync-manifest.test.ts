@@ -8,6 +8,24 @@ import {
 } from '../src/sync-manifest';
 
 describe('sync manifest public parser', () => {
+  test('preserves an explicit versioned adoption expectation through selection without making it mandatory', () => {
+    const expectedAdoption = { schemaVersion: 1, admissionId: `sha256:${'a'.repeat(64)}` };
+    const parsed = parseSyncManifest({ schemaVersion: 1, entries: [{ operation: 'sync',
+      source: { kind: 'local', locator: '/sources/adoption' }, target: { kind: 'cursor', instance: 'default' },
+      selectors: [{ package: 'demo', adoptExisting: true, expectedAdoption }] }] });
+    const entry = parsed.entries[0]!;
+    if (entry.operation !== 'sync') throw new Error('expected sync entry');
+    expect(entry.selectors?.[0]).toEqual({ package: 'demo', adoptExisting: true, expectedAdoption });
+    expect(selectManifestPackages(entry, [{ name: 'demo' }])).toEqual([{ plugin: { name: 'demo' }, adoptionRequested: true, expectedAdoption }]);
+    for (const expectation of [{ ...expectedAdoption, schemaVersion: 2 }, { ...expectedAdoption, extra: true },
+      { ...expectedAdoption, admissionId: 'opaque' }, { ...expectedAdoption, admissionId: `sha256:${'A'.repeat(64)}` }]) {
+      expect(validationCode(() => parseSyncManifest({ ...parsed, entries: [{ ...entry, selectors: [{ package: 'demo', adoptExisting: true, expectedAdoption: expectation }] }] }))).toBe('usage.invalid-argument');
+    }
+    expect(validationCode(() => parseSyncManifest({ ...parsed, entries: [{ ...entry, selectors: [{ package: 'demo', adoptExisting: false, expectedAdoption }] }] }))).toBe('usage.invalid-argument');
+    expect(parseSyncManifest({ ...parsed, entries: [{ ...entry, selectors: [{ package: 'demo', adoptExisting: true }] }] }).entries[0]).toEqual({
+      ...entry, selectors: [{ package: 'demo', adoptExisting: true }],
+    });
+  });
   test('preserves ordered multi-Source, multi-instance work while normalizing adoption defaults', () => {
     const retiredScope = `scope-v1-${'a'.repeat(64)}`;
     const parsed = parseSyncManifest({

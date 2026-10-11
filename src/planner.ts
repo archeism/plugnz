@@ -191,6 +191,12 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
     } else prepared.push(result);
   }
 
+  for (const item of prepared) {
+    if (item.kind !== 'sync') continue;
+    const expected = item.selected.find(selected => selected.expectedAdoption !== undefined);
+    if (expected !== undefined) return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.invariant',
+      `expected adoption admission for '${expected.plugin.name}' has no independently proven matching legacy operation`));
+  }
   const attemptId = lifecycleAttemptId(loaded.state.stateGeneration, prepared.map((item) => item.identity));
   const recovering = input.recoveryPreflight && loaded.state.attempts.some(attempt => attempt.command !== 'legacy-recovery' && attempt.journal.some(row =>
     prepared.some(item => item.scope.id === row.scopeId) && ['pending', 'applying', 'applied', 'readback-verified', 'rollback', 'cleanup-pending'].includes(row.state)));

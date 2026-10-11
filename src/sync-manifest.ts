@@ -16,9 +16,15 @@ export const SYNC_MANIFEST_TARGET_KINDS = Object.freeze(targetProfiles.map(profi
 
 export type SyncManifestTargetKind = (typeof targetProfiles)[number]['kind'];
 
+export interface AdoptionExpectation {
+  schemaVersion: 1;
+  admissionId: `sha256:${string}`;
+}
+
 export interface SyncManifestPackageSelector {
   package: string;
   adoptExisting: boolean;
+  expectedAdoption?: AdoptionExpectation;
 }
 
 export type SyncManifestTarget = PersistedTargetIdentity;
@@ -49,6 +55,7 @@ export interface SyncManifest {
 export interface SelectedManifestPackage<T> {
   plugin: T;
   adoptionRequested: boolean;
+  expectedAdoption?: AdoptionExpectation;
 }
 
 type UsageReason = Extract<LifecycleReason, { category: 'usage' }>;
@@ -95,7 +102,8 @@ export function selectManifestPackages<T extends { name: string }>(
   return entry.selectors.map((selector) => {
     const plugin = byName.get(selector.package);
     if (plugin === undefined) invalidSelection(`unknown package selector '${selector.package}'`);
-    return { plugin, adoptionRequested: selector.adoptExisting };
+    return { plugin, adoptionRequested: selector.adoptExisting,
+      ...(selector.expectedAdoption === undefined ? {} : { expectedAdoption: selector.expectedAdoption }) };
   });
 }
 
@@ -211,14 +219,25 @@ function parseTarget(value: unknown, label: string): SyncManifestTarget {
 function parseSelector(value: unknown, entryIndex: number, selectorIndex: number): SyncManifestPackageSelector {
   const label = `sync manifest entry ${entryIndex} selector ${selectorIndex}`;
   const selector = object(value, label);
-  exactFields(selector, ['package', 'adoptExisting'], label);
+  exactFields(selector, ['package', 'adoptExisting', 'expectedAdoption'], label);
   if (typeof selector['package'] !== 'string' || !/^[a-z0-9][a-z0-9._-]*$/iu.test(selector['package'])) {
     invalidArgument(`${label} package must be a valid package name`);
   }
   if (selector['adoptExisting'] !== undefined && typeof selector['adoptExisting'] !== 'boolean') {
     invalidArgument(`${label} adoptExisting must be a boolean`);
   }
-  return { package: selector['package'], adoptExisting: selector['adoptExisting'] === true };
+  let expectedAdoption: AdoptionExpectation | undefined;
+  if (selector['expectedAdoption'] !== undefined) {
+    const expectation = object(selector['expectedAdoption'], `${label} expectedAdoption`);
+    exactFields(expectation, ['schemaVersion', 'admissionId'], `${label} expectedAdoption`);
+    if (selector['adoptExisting'] !== true || expectation['schemaVersion'] !== 1
+      || typeof expectation['admissionId'] !== 'string' || !/^sha256:[0-9a-f]{64}$/u.test(expectation['admissionId'])) {
+      invalidArgument(`${label} expectedAdoption requires explicit adoption, schemaVersion 1 and a canonical admissionId`);
+    }
+    expectedAdoption = { schemaVersion: 1, admissionId: expectation['admissionId'] as `sha256:${string}` };
+  }
+  return { package: selector['package'], adoptExisting: selector['adoptExisting'] === true,
+    ...(expectedAdoption === undefined ? {} : { expectedAdoption }) };
 }
 
 function validateBinding(source: SourceBinding, label: string): void {

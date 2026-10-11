@@ -24,7 +24,9 @@ export async function recoverLifecycleJournals(plan: Extract<LifecyclePlan, { ki
   const incompatible = journals.find(({ attempt }) => attempt.command !== plan.report.command.name);
   if (incompatible !== undefined) return {
     receipts,
-    reason: createLifecycleReason('internal', 'internal.invariant', `pending operation '${incompatible.row.operationId}' belongs to '${incompatible.attempt.command}' attempt '${incompatible.attempt.id}'; cross-verb recovery is unverified. Retry the original '${incompatible.attempt.command}' command for scope '${incompatible.row.scopeId}' before '${plan.report.command.name}'. Pending proof and native state were retained.`),
+    reason: createLifecycleReason('internal', 'internal.invariant', incompatible.attempt.command === 'legacy-recovery'
+      ? `pending legacy operation '${incompatible.row.operationId}' in attempt '${incompatible.attempt.id}' has no durable sealed recovery authority. Historical proof and native state were retained; no independently proven fresh adoption was admitted for scope '${incompatible.row.scopeId}'.`
+      : `pending operation '${incompatible.row.operationId}' belongs to '${incompatible.attempt.command}' attempt '${incompatible.attempt.id}'; cross-verb recovery is unverified. Retry the original '${incompatible.attempt.command}' command for scope '${incompatible.row.scopeId}' before '${plan.report.command.name}'. Pending proof and native state were retained.`),
   };
   let pending = journals[0]!.row;
   let pendingIndex = 0;

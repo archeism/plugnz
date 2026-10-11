@@ -1,6 +1,7 @@
 # Legacy pending adoption — contract proposal
 
-Status: proposed, not implemented; independent design review required before code.
+Status: exact contract approved by both independent design axes at `97b411d`;
+implementation started in bounded slices. Adoption delivery remains unfinished.
 Frozen implementation inspected: `f6b92a5`. Consumer reader corrections are now
 merged at Personal `3daf6ca`; this design does not change its production pin.
 Scope: restore evidence-backed legacy adoption delivery without weakening sealed
@@ -160,12 +161,13 @@ remain rejected. Old strict consumers will reject new adoption reports until
 deliberate producer release, artifact proof, consumer golden and pin advancement.
 No reinterpretation of `recovery.schemaVersion: 1` or relaxed consumer coverage.
 
-### Exact wire freeze — review blocks implementation
+### Exact wire freeze — approved before implementation
 
 The [wire contract](legacy-adoption-wire-contract.md) freezes the exact types,
 digest bytes, request expectation, reader projections, fresh-journal/commit
-correlation, complete accounting and targeted probe order. No runtime implementation
-is authorized until both independent design axes approve that contract. A digest
+correlation, complete accounting and targeted probe order. Both independent design
+axes approved the combined contract and immutable-snapshot correction at `97b411d`.
+A digest
 asserted only by the mutating report is explicitly insufficient authority.
 
 ## Dependent scan / implementation boundaries
