@@ -4,7 +4,7 @@ import { chmodSync, existsSync, readFileSync, mkdirSync, rmSync, writeFileSync }
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { materialize, materializeInto, withHostEnvAsync, initGitRepo, repoRoot, writeLedger } from './util';
+import { materialize, materializeInto, withHostEnvAsync, initGitRepo, repoRoot, writeLedger, isolatedHostEnv } from './util';
 import { main } from '../src/cli';
 import { readState } from '../src/state';
 import { claudeCode } from '../src/hosts/claude-code';
@@ -1045,7 +1045,7 @@ describe('add', () => {
     materializeInto(home, 'cursor');
     const sourceDir = mkdtempSync(join(tmpdir(), 'open-plugin-invalid-codex-source-'));
     writeFileSync(join(sourceDir, 'plugin.json'), JSON.stringify({ name: 'new-plugin', version: 'unsafe/version' }));
-    const result = spawnSync('bun', [join(repoRoot, 'bin', 'plgnz.mjs'), 'add', sourceDir, '--target', 'codex', '--target', 'cursor', '--json'], {
+    const result = spawnSync(process.execPath, [join(repoRoot, 'bin', 'plgnz.mjs'), 'add', sourceDir, '--target', 'codex', '--target', 'cursor', '--json'], {
       cwd: repoRoot, env: { ...process.env, ...env }, encoding: 'utf8',
     });
     expect(result.status).toBe(1);
@@ -1070,9 +1070,9 @@ describe('add', () => {
     const home = mkdtempSync(join(tmpdir(), 'open-plugin-empty-home-'));
     const sourceDir = mkdtempSync(join(tmpdir(), 'open-plugin-source-'));
     initGitRepo(sourceDir, pluginsMap);
-    const result = spawnSync('bun', [join(repoRoot, 'bin', 'plgnz.mjs'), 'add', sourceDir, '--legacy-json'], {
+    const result = spawnSync(process.execPath, [join(repoRoot, 'bin', 'plgnz.mjs'), 'add', sourceDir, '--legacy-json'], {
       cwd: repoRoot,
-      env: { ...process.env, OPEN_PLUGIN_HOME: home },
+      env: { ...process.env, ...isolatedHostEnv(home) },
       encoding: 'utf8',
     });
     expect(result.status).toBe(1);
