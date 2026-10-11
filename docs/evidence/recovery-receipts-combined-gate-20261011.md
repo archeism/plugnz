@@ -66,7 +66,9 @@ Both live under the same retained evidence directory above. The unrelated remote
 main journal commit `16e14ff` was merged preserving history; no user change was
 discarded. Personal main integration is **`3daf6ca8d358c052a1c5d92bb1e40a195af03778`**,
 verified by remote ref after successful push. CI run **38173798571** was queued at
-that checkpoint; queue status is not a green-CI claim.
+that checkpoint. Subsequent authoritative inspection confirmed **completed / success**
+on the exact `3daf6ca` head: both `check` (including lifecycle and full checks) and
+`fixed log` jobs passed. [CI evidence](https://github.com/archeism/personal/actions/runs/38173798571).
 
 Personal's production pin remains **0.0.9**. This integrates the reviewed compatible
 consumer, not the unreleased producer receipt contract or a fleet rollout. Producer
