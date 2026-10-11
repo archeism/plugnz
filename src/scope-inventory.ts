@@ -1,4 +1,5 @@
 import type { SourceBinding } from './source-reference';
+import { isOpenLifecycleJournalState, parseOpenLifecycleJournals, projectRecoveryOperationProof, type OpenLifecycleJournals } from './recovery-proof';
 import type {
   ActivationRecord,
   DeploymentScopeRecord,
@@ -27,6 +28,7 @@ export interface ScopeInventoryRow {
   readonly activations: readonly ActivationRecord[];
   readonly tombstones: readonly TombstoneRecord[];
   readonly attempt: LifecycleAttemptRecord | null;
+  readonly openJournals?: OpenLifecycleJournals;
 }
 
 export interface ScopeInventory {
@@ -53,8 +55,16 @@ export function projectScopeInventory(state: LifecycleStateV2, query: ScopeInven
       activations: state.activations.filter((activation) => activation.scopeId === scope.id),
       tombstones: state.tombstones.filter((tombstone) => tombstone.scopeId === scope.id),
       attempt: state.attempts.find((attempt) => attempt.id === scope.lastAttemptId) ?? null,
+      ...openJournalsFor(scope, state),
     })),
   };
+}
+
+function openJournalsFor(scope: DeploymentScopeRecord, state: LifecycleStateV2): { openJournals?: OpenLifecycleJournals } {
+  const operations = state.attempts.flatMap(attempt => attempt.journal
+    .filter(row => row.scopeId === scope.id && isOpenLifecycleJournalState(row.state))
+    .map(row => projectRecoveryOperationProof(scope, attempt, row)));
+  return operations.length === 0 ? {} : { openJournals: parseOpenLifecycleJournals({ schemaVersion: 1, operations }) };
 }
 
 export function renderScopeInventory(inventory: ScopeInventory): string {

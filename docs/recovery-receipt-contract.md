@@ -29,7 +29,7 @@ Each operation proof has exactly these fields:
 - `attemptId`, `command`, `operationId`, `scope` (existing public source/target
   identity), `package` and `nativeId` (nullable only for legacy missing identity).
 - `action` (the recorded JournalAction, without converting `remove` to another
-  action), `route` (`native`, `managed`, or null for legacy-unverified/missing).
+  action), `route` (`native`, `managed`, or null for unverified/missing route).
 - `journalState` (one of the existing open journal states), `sealed` (boolean).
 
 Modern command/action/route/identity combinations are validated against the
@@ -37,6 +37,9 @@ recorded scope and any sealed handle before projection. Legacy incomplete proof
 remains visible and explicitly unverified; it never authorizes recovery.
 Filesystem handles, rollback paths and native credentials are not projected.
 The projection stays reader-only and cannot import lifecycle runtime/writers.
+The recorded journal may omit route even for modern accepted intents. A sealed
+operation supplies its exact verified route; any conflicting recorded route is
+rejected. An unsealed missing route remains null, not an invented managed route.
 
 ## Report envelope
 
@@ -142,3 +145,14 @@ remains blocked; no original identity or authority is guessed.
 
 Skills: Addy API/interface design and Matt contract-first TDD guided the separated
 historical/current contract. Skill versions remain unchanged; no skill A/B claim.
+
+## Thin inventory checkpoint
+
+The public `scopes --json` regression first failed specifically because older
+open journals were absent. The reader now projects all open journal proofs,
+including accepted/unsealed and cleanup-pending/sealed rows with no Activation.
+Strict proof/envelope checks reject unknown fields/versions, duplicate identities,
+forged scope identity and incompatible command/action. Native handles remain
+private. Bun 1.4 focused inventory/proof/doctor-import checks: 9 passed, 55
+assertions; `bun run check` passed. This proves only the read-only proof slice,
+not report receipts, recovery accounting, or consumer receipt admission.
