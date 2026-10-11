@@ -79,6 +79,8 @@ test('dcode changed-byte sync rolls back divergent readback and a fresh retry co
     const failed = run(badBinary); expect(failed.status).toBe(1);
     expect(readFileSync(join(installedPath, 'skills/demo/SKILL.md'), 'utf8')).toBe(before);
     const retry = run(); expect(retry.status).toBe(0);
-    expect(readFileSync(join(installedPath, 'skills/demo/SKILL.md'), 'utf8')).toContain('two');
+    const newPath = JSON.parse(readFileSync(registry, 'utf8')).plugins['demo@local'][0].installPath;
+    expect(newPath === installedPath).toBe(false);
+    expect(readFileSync(join(newPath, 'skills/demo/SKILL.md'), 'utf8')).toContain('two');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
