@@ -304,10 +304,17 @@ function withoutRetiredActivation(
     row.scopeId === scopeId && row.nativeId === nativeId && (row.packageId === packageId || row.packageId === nativeId));
   if (activation === undefined) throw new Error(`activation '${packageId}' is not recorded for manual removal`);
   const dropped = state.activations.filter((row) => row !== activation);
+  const attempts = state.attempts.map((attempt) => attempt.id !== activation.pending?.attemptId ? attempt : {
+    ...attempt,
+    phase: 'completed' as const,
+    completedAt: retiredAt,
+    updatedAt: retiredAt,
+    journal: attempt.journal.map((entry) => ({ ...entry, state: 'completed' as const, updatedAt: retiredAt })),
+  });
   const tombstone = retirementTombstone(activation, retiredAt);
   if (tombstone === null) {
     if (activation.ownership.kind === 'legacy-claim' && activation.route.kind === 'legacy-unverified' && (activation.ownership.prior === 'plgnz' || activation.ownership.prior === 'unrecorded')) {
-      return { ...state, stateGeneration: state.stateGeneration + 1, activations: dropped };
+      return { ...state, stateGeneration: state.stateGeneration + 1, activations: dropped, attempts };
     }
     throw new Error(`activation '${packageId}' cannot retain a tombstone`);
   }
@@ -315,7 +322,46 @@ function withoutRetiredActivation(
     ...state,
     stateGeneration: state.stateGeneration + 1,
     activations: dropped,
+    attempts,
     tombstones: state.tombstones.some((row) => row.id === tombstone.id) ? state.tombstones : [...state.tombstones, tombstone],
+  };
+}
+
+/** Keep the ownership record until native retirement has passed readback. */
+function withPendingRemoval(state: LifecycleStateV2, operation: LifecyclePlanOperation, now: string): LifecycleStateV2 {
+  const activation = state.activations.find((row) => row.scopeId === operation.scope.id
+    && row.nativeId === operation.nativeId && (row.packageId === operation.package || row.packageId === operation.nativeId));
+  if (activation === undefined) throw new Error(`activation '${operation.package}' is not recorded for manual removal`);
+  if (activation.pending?.operation === 'remove') return { ...state, stateGeneration: state.stateGeneration + 1 };
+  const attemptId = `remove-attempt-${state.stateGeneration}-${operation.operationId}`;
+  return {
+    ...state,
+    stateGeneration: state.stateGeneration + 1,
+    scopes: state.scopes.map((scope) => scope.id === operation.scope.id ? { ...scope, lastAttemptId: attemptId } : scope),
+    activations: state.activations.map((row) => row !== activation ? row : {
+      ...row,
+      pending: { operation: 'remove', phase: 'applying', attemptId, startedAt: now },
+    }),
+    attempts: [...state.attempts, {
+      id: attemptId,
+      command: 'remove',
+      phase: 'pruning',
+      mutationStarted: true,
+      scopeIds: [operation.scope.id],
+      startedAt: now,
+      updatedAt: now,
+      journal: [{
+        operationId: `${operation.operationId}-${state.stateGeneration}`,
+        scopeId: operation.scope.id,
+        packageId: activation.packageId,
+        nativeId: activation.nativeId,
+        action: 'remove',
+        state: 'applying',
+        route: activation.route,
+        startedAt: now,
+        updatedAt: now,
+      }],
+    }],
   };
 }
 
@@ -1779,7 +1825,7 @@ export async function main(argv: string[]): Promise<number> {
             throw new LifecycleCommandError(reason('internal', 'internal.invariant', `state generation moved before removal of '${nativeId}'`));
           }
           try {
-            lifecycleState = withoutRetiredActivation(fresh.state, operation.scope.id, operation.package, nativeId, new Date().toISOString());
+            lifecycleState = withPendingRemoval(fresh.state, operation, new Date().toISOString());
           } catch (error) {
             throw new LifecycleCommandError(reason('internal', 'internal.invariant', unknownErrorDiagnostic(error)));
           }
@@ -1808,6 +1854,12 @@ export async function main(argv: string[]): Promise<number> {
         }
         pairTerminalPhase = 'finalize';
         if (lifecycleVersion === 2) {
+          const fresh = readLifecycleState();
+          if (fresh.sourceVersion !== 2 || fresh.state.stateGeneration !== lifecycleState.stateGeneration) {
+            throw new LifecycleCommandError(reason('internal', 'internal.invariant', `state generation moved before retirement finalization of '${nativeId}'`));
+          }
+          lifecycleState = withoutRetiredActivation(fresh.state, operation.scope.id, operation.package, nativeId, new Date().toISOString());
+          writeLifecycleState(lifecycleState, { globalPreflight: 'succeeded' });
           state = readState();
         } else {
           const finalized = state.filter((candidate) => candidate !== pending);

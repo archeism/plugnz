@@ -2165,6 +2165,41 @@ describe('public lifecycle commands', () => {
     });
   });
 
+  test('a legacy v2 removal refusal preserves ownership and records recoverable pending intent', async () => {
+    await withLifecycleCliHarness((harness) => {
+      harness.writeHome({ '.cursor/.keep': '', '.deepagents/.keep': '' });
+      const source = harness.source('legacy-remove-refusal', {
+        'plugin.json': '{"name":"demo","version":"1.0.0","description":"fixture"}\n',
+        'skills/demo/SKILL.md': '---\nname: demo\ndescription: fixture\n---\n\nDemo.\n',
+      });
+      const cursor = harness.fakeNative('cursor', versionSteps(24));
+      const dcode = harness.fakeNative('dcode', Array.from({ length: 12 }, () => ({
+        args: ['--version'], stdout: 'deepagents-code 0.1.83\n',
+      })));
+      const env = { OPEN_PLUGIN_CURSOR_BIN: cursor.path, OPEN_PLUGIN_DCODE_BIN: dcode.path };
+      expect(harness.run(['add', source, '--target', 'cursor', '--json'], { env }).exitCode).toBe(0);
+      expect(harness.run(['add', source, '--target', 'dcode', '--json'], { env }).exitCode).toBe(0);
+      const registryPath = join(harness.storePath('dcode'), '.state', 'installed_plugins.json');
+      const registry = JSON.parse(readFileSync(registryPath, 'utf8')) as { plugins: Record<string, Array<{ installPath: string }>> };
+      const installed = registry.plugins['demo@local']![0]!.installPath;
+      // The old writer refuses removal when the native ownership marker is gone.
+      rmSync(join(installed, '.plgnz-install.json'));
+      const result = harness.run(['remove', 'demo@local', '--target', 'dcode', '--json'], { env });
+      const report = parseLifecycleReport(JSON.parse(result.stdout));
+      const state = JSON.parse(bytesToText(result.state.after ?? [])) as {
+        activations: Array<{ nativeId: string; ownership: { kind: string }; pending?: { operation: string } }>;
+        attempts: Array<{ command: string; journal: Array<{ state: string }> }>;
+      };
+      const activation = state.activations.find((row) => row.nativeId === 'demo@local');
+      expect(result.exitCode === 0).toBe(false);
+      expect(report.outcomes[0]?.result).toBe('pending');
+      expect(activation?.ownership.kind).toBe('legacy-claim');
+      expect(activation?.pending?.operation).toBe('remove');
+      expect(state.attempts.some((attempt) => attempt.command === 'remove' && attempt.journal.some((row) => row.state === 'applying'))).toBe(true);
+      expect(existsSync(join(installed, 'plugin.json'))).toBe(true);
+    });
+  });
+
   test('an explicit empty or missing cursor binary refuses and does not claim the directory profile', async () => {
     await withLifecycleCliHarness((harness) => {
       harness.writeHome({ '.cursor/.keep': '' });
