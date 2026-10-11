@@ -27,11 +27,18 @@ reinterpret that failed gate or enable another capability.
 
 ## Budget before launch
 
-Bound the whole new experiment to **1.5 GiB allocated remote storage**, including
-the official native package, Source cache, both homes, rollback artifacts and
-archive scratch. Record `du`/`df` before installation and each phase; refuse more
-copies if the bound would be exceeded. Native tools are shared read-only between
-homes. Retain every failed attempt. Local compressed evidence and restore scratch
+Bound new experiment growth to **1.5 GiB** and the **entire active Sandbox physical
+filesystem to 4.25 GiB**. These are separate checks: inherited OS bytes are not
+free or silently excluded. Before native installation record whole `du`/`df` and
+freeze the measured base; check both caps before each phase and after it. This
+revision follows the separate Claude proof's measured 3.77 GiB inherited physical
+base; it does not assert that this fresh Codex base will have that same size.
+Include native tools, Source cache, both homes, rollback artifacts and archive
+scratch. Refuse further growth at either cap. Native tools are shared read-only
+between homes. Combined concurrent lineage ceiling is **11.7 GiB**: Claude's
+explicit 7.25 GiB lineage plus this 4.25 GiB active filesystem and at most 200 MiB
+local Codex archive/restore scratch. Retain every failed attempt.
+Local compressed evidence and restore scratch
 are each bounded to 100 MiB; existing archives/snapshots are not deleted.
 
 No new snapshot is required for this experiment. Verify archive inventory,

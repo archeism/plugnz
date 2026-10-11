@@ -1,6 +1,6 @@
 // Actual released-native proof. Invoke only in its disposable Sandbox.
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -19,6 +19,7 @@ const sha = value => createHash('sha256').update(value).digest('hex');
 assert.equal(sha(readFileSync(artifact)), 'd82ecd244e9d06647f7ea528ae614fa5bd0face7042f5e1ae3fa7f680e99d1dd');
 const caps = readFileSync('/proc/self/status', 'utf8').split('\n').filter(line => /^Cap(Inh|Prm|Eff|Bnd|Amb):/.test(line));
 assert.equal(caps.length, 5); assert(caps.every(line => /\s0+$/.test(line)), caps.join('\n'));
+assert.match(readFileSync('/proc/self/status', 'utf8'), /^NoNewPrivs:\s+1$/m);
 if (phase === 'bootstrap') { assert(!existsSync(root)); mkdirSync(codexHome, { recursive: true }); }
 const streamsPath = join(root, 'streams.json');
 const streams = existsSync(streamsPath) ? JSON.parse(readFileSync(streamsPath, 'utf8')) : [];
@@ -28,13 +29,87 @@ const env = {
   OPENAI_API_KEY: '', ANTHROPIC_API_KEY: '', PLGNZ_PROOF_ROOT: root,
 };
 const started = Date.now(), cpu = process.cpuUsage();
+function diskUsage(label) {
+  const result = spawnSync('df', ['-Pk', '/'], { encoding: 'utf8', timeout: 10_000, maxBuffer: 64 * 1024 });
+  assert.equal(result.status, 0, result.stderr);
+  const usedKiB = Number(result.stdout.trim().split('\n').at(-1).trim().split(/\s+/)[2]);
+  assert(Number.isSafeInteger(usedKiB) && usedKiB > 0);
+  const baseline = JSON.parse(readFileSync(join(base, 'baseline-disk.json'), 'utf8'));
+  assert(Number.isSafeInteger(baseline.usedKiB) && baseline.usedKiB > 0);
+  writeFileSync(join(root, `${phase}-${label}-disk.json`), JSON.stringify({ usedKiB, baselineKiB: baseline.usedKiB, raw: result.stdout }));
+  assert(usedKiB <= 4.25 * 1024 * 1024, `whole Sandbox filesystem exceeds 4.25 GiB: ${usedKiB} KiB`);
+  assert(usedKiB - baseline.usedKiB <= 1.5 * 1024 * 1024, 'experiment growth exceeds 1.5 GiB');
+  return usedKiB;
+}
+const diskBeforeKiB = diskUsage('before');
 function command(label, executable, args, allowed = [0]) {
   const began = Date.now();
   const result = spawnSync(executable, args, { env, cwd: root, encoding: 'utf8', timeout: 150_000, maxBuffer: 4 * 1024 * 1024 });
-  streams.push({ label, args, status: result.status, signal: result.signal, stdout: result.stdout, stderr: result.stderr, elapsedMs: Date.now() - began });
+  streams.push({ label, args, status: result.status, signal: result.signal, error: result.error?.message ?? null, stdout: result.stdout, stderr: result.stderr, elapsedMs: Date.now() - began });
   writeFileSync(streamsPath, JSON.stringify(streams, null, 2));
   assert(allowed.includes(result.status), `${label}: ${result.status}\n${result.stdout}\n${result.stderr}`);
   return result;
+}
+async function discoverSkill() {
+  const child = spawn(native, ['app-server'], { env, cwd: root, stdio: ['pipe', 'pipe', 'pipe'] });
+  let buffer = '', stderr = '', outputBytes = 0;
+  const responses = [];
+  try {
+    const result = await new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (error, value) => {
+        if (settled) return;
+        settled = true; clearTimeout(timer);
+        if (error) reject(error); else resolve(value);
+      };
+      const timer = setTimeout(() => finish(new Error('actual skills/list timed out')), 20_000);
+      const send = message => child.stdin.write(`${JSON.stringify(message)}\n`);
+      child.on('error', error => finish(error));
+      child.stdin.on('error', error => finish(error));
+      child.on('close', code => finish(new Error(`actual app-server closed before discovery: ${code}`)));
+      child.stderr.on('data', chunk => {
+        stderr += chunk;
+        if (Buffer.byteLength(stderr) > 1024 * 1024) finish(new Error('app-server stderr exceeds bound'));
+      });
+      child.stdout.on('data', chunk => {
+        outputBytes += chunk.length;
+        if (outputBytes > 4 * 1024 * 1024) { finish(new Error('app-server stdout exceeds bound')); return; }
+        buffer += chunk;
+        try {
+          let boundary;
+          while ((boundary = buffer.indexOf('\n')) >= 0) {
+            const line = buffer.slice(0, boundary); buffer = buffer.slice(boundary + 1);
+            if (!line) continue;
+            const message = JSON.parse(line); responses.push(message);
+            if (message.id === 0) {
+              assert(!message.error, line);
+              send({ method: 'initialized', params: {} });
+              send({ id: 1, method: 'skills/list', params: { cwds: [root], forceReload: true } });
+            }
+            if (message.id === 1) { assert(!message.error, line); finish(null, message.result); }
+          }
+        } catch (error) { finish(error); }
+      });
+      send({ id: 0, method: 'initialize', params: { clientInfo: { name: 'plugnz-final-native-proof', version: '1.0.0' }, capabilities: { experimentalApi: true } } });
+    });
+    assert(Array.isArray(result.data));
+    const group = result.data.find(row => row.cwd === root);
+    assert(group, 'actual skills/list missing selected cwd');
+    assert.deepEqual(group.errors, []);
+    const rows = group.skills.filter(row => row.pluginId === 'lifecycle-probe@plugnz-proof');
+    assert.equal(rows.length, 1, 'exactly one native plugin skill');
+    assert.equal(rows[0].name, 'lifecycle-probe:probe'); assert.equal(rows[0].enabled, true);
+    assert.equal(rows[0].path, join(codexHome, 'plugins/cache/plugnz-proof/lifecycle-probe/0.1.0/skills/probe/SKILL.md'));
+    assert.match(readFileSync(rows[0].path, 'utf8'), phase === 'bootstrap' ? /Proof bytes V1\./ : /Proof bytes V2, unchanged declared version\./);
+    return rows[0];
+  } finally {
+    writeFileSync(join(root, `${phase}-skills-list.json`), JSON.stringify({ responses, stderr }, null, 2));
+    child.stdin.end(); child.kill('SIGKILL');
+    if (child.exitCode === null && child.signalCode === null) await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('actual app-server did not close after SIGKILL')), 5000);
+      child.once('close', () => { clearTimeout(timer); resolve(); });
+    });
+  }
 }
 assert.equal(command('actual-version', native, ['--version']).stdout.trim(), 'codex-cli 0.162.0');
 if (phase === 'bootstrap') {
@@ -56,6 +131,7 @@ const before = captureSurfaces(codexHome);
 const result = command(`public-${phase}`, process.execPath, [artifact, 'sync', source, '--target', 'codex', '--json'], faulting ? [1] : [0]);
 const report = JSON.parse(result.stdout), after = captureSurfaces(codexHome);
 writeFileSync(join(root, `${phase}-report.json`), JSON.stringify(report, null, 2));
+let discoveredSkill = null;
 if (!faulting) {
   assert.equal(report.summary.result, 'converged');
   assert.equal(report.outcomes.length, 1);
@@ -65,6 +141,7 @@ if (!faulting) {
     assert.equal(command('actual-checkout-head', 'git', ['-C', join(codexHome, '.tmp/marketplaces/plugnz-proof'), 'rev-parse', 'HEAD']).stdout.trim(), revision);
     assert.notEqual(after.cache, before.cache);
   }
+  discoveredSkill = await discoverSkill();
 } else {
   const boundary = JSON.parse(readFileSync(join(root, 'native-boundary-result.json'), 'utf8'));
   assert.equal(boundary.status, 1, 'require the actual native nonzero exit');
@@ -83,6 +160,7 @@ if (!faulting) {
   }
 }
 assert.equal(readFileSync(join(codexHome, 'plugins/data/lifecycle-probe/keep.txt'), 'utf8'), 'valuable runtime data\n');
-const evidence = { phase, source, revision, artifactSha256: sha(readFileSync(artifact)), before, after, summary: report.summary, caps, wallMs: Date.now() - started, cpuMicroseconds: process.cpuUsage(cpu) };
+const diskAfterKiB = diskUsage('after');
+const evidence = { phase, source, revision, artifactSha256: sha(readFileSync(artifact)), before, after, summary: report.summary, discoveredSkill, diskBeforeKiB, diskAfterKiB, caps, wallMs: Date.now() - started, cpuMicroseconds: process.cpuUsage(cpu) };
 writeFileSync(join(root, `${phase}-result.json`), JSON.stringify(evidence, null, 2));
 console.log(JSON.stringify(evidence));
