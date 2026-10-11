@@ -448,25 +448,29 @@ describe('add', () => {
     });
   });
 
-  test('json dry-run reports a planned install without writing state or host content', async () => {
-    await withHostEnvAsync('codex', async (home) => {
+  test('json dry-run refuses an unprofiled Codex install without writing state or host content', async () => {
+    await withHostEnvAsync('codex', async () => {
       const sourceDir = mkdtempSync(join(tmpdir(), 'open-plugin-source-'));
       initGitRepo(sourceDir, pluginsMap);
       const output: string[] = [];
       const originalLog = console.log;
       console.log = (value: string) => output.push(value);
       try {
-        expect(await main(['add', sourceDir, '--target', 'codex', '--dry-run', '--legacy-json'])).toBe(0);
+        expect(await main(['add', sourceDir, '--target', 'codex', '--dry-run', '--legacy-json'])).toBe(1);
       } finally {
         console.log = originalLog;
       }
 
-      const outcomes = JSON.parse(output.join('')) as Array<{ plugin: string; target: string; status: string; dryRun: boolean }>;
-      expect(outcomes).toHaveLength(1);
-      expect(outcomes[0]?.plugin).toBe('new-plugin');
-      expect(outcomes[0]?.target).toBe('codex');
-      expect(outcomes[0]?.status).toBe('installed');
-      expect(outcomes[0]?.dryRun).toBe(true);
+      const outcomes = JSON.parse(output.join('')) as Array<{ plugin: string; target: string; status: string; dryRun: boolean; diagnostic?: string; nativeId?: string; action?: string }>;
+      expect(outcomes).toEqual([{
+        plugin: 'new-plugin',
+        target: 'codex',
+        status: 'unverified',
+        dryRun: true,
+        diagnostic: "target 'codex' has no verified native install profile for version 'unknown/unparseable' and local Sources",
+        nativeId: 'new-plugin@local',
+        action: 'install',
+      }]);
       expect(readState().find((record) => record.host === 'codex' && record.id === 'new-plugin@local')).toBeUndefined();
       expect(codex.listInstalled().find((plugin) => plugin.name === 'new-plugin')).toBeUndefined();
     });
