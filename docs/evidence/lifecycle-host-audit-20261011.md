@@ -136,9 +136,26 @@ Bun 1.4.0: 669 passed, 5 existing skips, 0 failed, 4416 assertions,
 approved both test-only deadline increments separately; production behavior,
 timeouts and assertions remain unchanged. This main-based integration does not
 contain the held Claude, ZCode resource/provenance, or receipt-contract changes.
-No npm publication or fleet pin/deployment accompanies it.
+The initial expectation of no npm publication was incorrect: the repository's
+every-main-push workflow automatically published 0.0.11 from integration
+`12dc294`, then pushed release commit `bd2d06f`. No fleet pin or deployment changed.
 
 | Retained log | SHA-256 |
 | --- | --- |
 | `plugnz-95c-deadline-full.log` | `ffead036f4bc482c6bbc3b306d36a5cccfa2987507f45cbdae6a309909b76fb9` |
 | `plugnz-95c-deadline-check.log` | `8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92` |
+
+The actual public 0.0.11 registry metadata reports gitHead
+`12dc294d0ddc966869741e61a682ce4b8e99a2a0`. Downloaded tarball SHA-256 is
+`95a5e34ee35caed425578639f4bd1fd79980c441ab23a2c39b8ad560af81074e`;
+its SHA-512 matches registry integrity
+`ppgUrDg0uYBpDCtqhRdVaLShw+80TkKhg2gKkf8S2nHE2LLsIfim9m5cUd/qHtC9bDac7abeqNa8PM163YDSCA==`.
+The artifact is retained as `plugnz-0.0.11.tgz` in the durable evidence directory.
+Supported Node 22 syntax/version checks passed. Main Node-compatibility CI passed.
+
+Canonical Personal `31648c9` ran its public producer golden against the exact
+downloaded artifact, with `PERSONAL_TEST_PLUGNZ_BIN` set to the extracted bundle
+and `PERSONAL_TEST_PLUGNZ_VERSION=0.0.11`: 1 test passed, 31 assertions,
+13.72 seconds. The production pin remains 0.0.9. This uses isolated fixture
+native launchers and proves baseline consumer interoperability, not the held
+receipt contract or newly fixed native catalog behavior.
