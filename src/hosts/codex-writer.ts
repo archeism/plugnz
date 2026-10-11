@@ -12,7 +12,8 @@ import { tmpdir } from 'node:os';
 import { parse as parseToml } from 'smol-toml';
 import { createCapabilityEvidenceProfile, type CapabilityEvidenceProfile, type CapabilityStatus } from '../capability-evidence';
 import { projectPluginForCodex } from '../conversion';
-import { fingerprintSourceTree, fingerprintTree } from '../fingerprint';
+import { fingerprintTree } from '../fingerprint';
+import { codexMarketplaceSourceFingerprint } from './codex-marketplace-proof';
 import { capturePriorSourceRepair, priorSourceRepairAllows, recordedPriorSource, releasePriorSourceRepair, type PriorSourceProof } from '../prior-source-proof';
 import type { AddOptions, HostWriter, InstalledPlugin, PinOptions, PinOutcome } from '../host';
 import type {
@@ -1089,7 +1090,7 @@ function captureAttemptedMarketplace(handle: DurableLifecycleOperation): void {
   };
   if (git(['rev-parse', 'HEAD']) !== handle.sourceRevision
     || git(['config', '--get', 'remote.origin.url']) !== handle.sourceLocator
-    || fingerprintSourceTree(checkout) !== capture['sourceFingerprint']) return;
+    || codexMarketplaceSourceFingerprint(checkout, { locator: handle.sourceLocator, revision: handle.sourceRevision }) !== capture['sourceFingerprint']) return;
   writeFileSync(metadata, JSON.stringify({ ...capture, attemptedFingerprint: fingerprintTree(checkout) }));
 }
 

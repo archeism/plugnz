@@ -15,11 +15,11 @@ export function fingerprintTree(root: string): string {
 }
 
 /** Source proof excludes repository metadata that is not distributed to hosts. */
-export function fingerprintSourceTree(root: string): string {
-  return fingerprint(root, true);
+export function fingerprintSourceTree(root: string, excludedRootFiles: readonly string[] = []): string {
+  return fingerprint(root, true, excludedRootFiles);
 }
 
-function fingerprint(root: string, ignoreGitMetadata: boolean): string {
+function fingerprint(root: string, ignoreGitMetadata: boolean, excludedRootFiles: readonly string[] = []): string {
   if (lstatSync(root).isSymbolicLink()) throw new Error('cannot fingerprint symlink: .');
   const hash = new CryptoHasher('sha256');
   const walk = (dir: string, prefix: string): void => {
@@ -29,6 +29,10 @@ function fingerprint(root: string, ignoreGitMetadata: boolean): string {
       const relative = prefix === '' ? entry : `${prefix}/${entry}`;
       const stat = lstatSync(path);
       if (stat.isSymbolicLink()) throw new Error(`cannot fingerprint symlink: ${relative}`);
+      if (prefix === '' && excludedRootFiles.includes(entry)) {
+        if (!stat.isFile()) throw new Error(`cannot exclude non-file resource: ${relative}`);
+        continue;
+      }
       if (stat.isDirectory()) {
         hash.update(`d\0${relative}\0`);
         walk(path, relative);
