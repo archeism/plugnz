@@ -8,7 +8,7 @@ import { createServer } from 'node:net';
 
 const base = '/vercel/sandbox/proof';
 assert.equal(resolve(process.cwd()), base, 'Oracle requires its owned Sandbox workdir');
-const [phase, expectedRevision, attempt = '01'] = process.argv.slice(2);
+const [phase, expectedRevision, attempt = '01', candidate = 'd3da'] = process.argv.slice(2);
 assert.ok(['V1', 'V2'].includes(phase));
 assert.match(expectedRevision ?? '', /^[a-f0-9]{40}$/u);
 assert.match(attempt, /^[0-9]{2}$/u);
@@ -17,9 +17,14 @@ mkdirSync(root, { recursive: true });
 const processStatus = readFileSync('/proc/self/status', 'utf8');
 for (const field of ['CapInh', 'CapPrm', 'CapEff', 'CapBnd', 'CapAmb']) assert.match(processStatus, new RegExp(`^${field}:\\s+0+$`, 'mu'));
 assert.match(processStatus, /^NoNewPrivs:\s+1$/mu);
-const artifact = join(base, 'plugnz.mjs');
+const candidates = {
+  d3da: { file: 'plugnz.mjs', sha256: 'efe017a6fb28c84a7d2f762d2ed875f0494bf962cc3c2cfe31f3eeaf2d4cebf2' },
+  '04bdef3': { file: 'plugnz-04bdef3.mjs', sha256: 'ecd9dc84124bcaa39df1199bf4862c47ce915926d455a4fdcf461d857f18a837' },
+};
+assert.ok(Object.hasOwn(candidates, candidate), 'Oracle requires a frozen candidate');
+const artifact = join(base, candidates[candidate].file);
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
-assert.equal(hash(readFileSync(artifact)), 'efe017a6fb28c84a7d2f762d2ed875f0494bf962cc3c2cfe31f3eeaf2d4cebf2');
+assert.equal(hash(readFileSync(artifact)), candidates[candidate].sha256);
 const native = '/vercel/sandbox/native/kimi/node_modules/.bin/kimi';
 const packageJson = JSON.parse(readFileSync('/vercel/sandbox/native/kimi/node_modules/@moonshot-ai/kimi-code/package.json', 'utf8'));
 assert.equal(packageJson.name, '@moonshot-ai/kimi-code');
@@ -180,6 +185,6 @@ const allocated = spawnSync('du', ['-sk', '/vercel/sandbox/native', base], { enc
 assert.equal(allocated.status, 0);
 const kilobytes = allocated.stdout.trim().split('\n').reduce((sum, line) => sum + Number(line.split(/\s/u)[0]), 0);
 assert.ok(kilobytes <= 1024 * 1024, 'Owned native/proof allocation exceeded 1GiB budget');
-const evidence = { phase, expectedRevision, artifactSha256: hash(readFileSync(artifact)), nativePackage: packageJson.name, nativeVersion: packageJson.version, nativeEntrypointSha256: hash(readFileSync(realpathSync(native))), outputs, discovery, allocatedKiB: kilobytes };
+const evidence = { phase, candidate, expectedRevision, artifactSha256: hash(readFileSync(artifact)), nativePackage: packageJson.name, nativeVersion: packageJson.version, nativeEntrypointSha256: hash(readFileSync(realpathSync(native))), outputs, discovery, allocatedKiB: kilobytes };
 writeFileSync(join(root, `${phase}.result.json`), JSON.stringify(evidence, null, 2), { flag: 'wx' });
 console.log(JSON.stringify(evidence, null, 2));
