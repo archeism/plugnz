@@ -1,5 +1,5 @@
 import { executeLifecycle } from './executor';
-import { exitCodeForLifecycleReport, parseLifecycleReport, type LifecycleReport } from './lifecycle-report';
+import { createLifecycleReason, exitCodeForLifecycleReport, parseLifecycleReport, type LifecycleReport } from './lifecycle-report';
 import type { PlannerHost } from './planner';
 import { planLifecycle } from './planner';
 import type { SyncManifest } from './sync-manifest';
@@ -37,11 +37,17 @@ export async function runFrozenLifecycle(command: FrozenLifecycleCommand): Promi
     const recovery = await recoverLifecycleJournals(plan, command.hosts, command.now);
     if (typeof recovery !== 'boolean') {
       const { reason, operation, changed } = recovery;
+      const blocked = createLifecycleReason('runtime', 'runtime.operation-failed', `not attempted while recovery remains unresolved: ${reason.diagnostic}`);
+      const operations = plan.report.plan
+        .filter(row => operation === null || row.scope.id !== operation.scope.id || row.package !== operation.package || row.nativeId !== operation.nativeId || row.coverage !== operation.coverage)
+        // Retain-prior claims verified containment, which recovery has not executed.
+        .map(row => row.action === 'retain-prior' ? { ...row, action: 'not-attempted' as const, route: 'none' as const } : row);
+      const outcomes = operations.map(row => ({ ...row, result: 'not-attempted' as const, resourceState: 'unknown' as const, activationState: 'unknown' as const, changed: false, reason: operation === null ? reason : blocked }));
       if (operation === null) {
-        const report = parseLifecycleReport({ ...plan.report, plan: [], outcomes: [], summary: { result: 'incomplete', terminalPhase: 'preflight', mutationStarted: false, changed: false, failureCategory: reason.category, reason, recoveryId: null, readbackId: null } });
+        const report = parseLifecycleReport({ ...plan.report, plan: operations, outcomes, summary: { result: 'incomplete', terminalPhase: 'preflight', mutationStarted: false, changed: false, failureCategory: reason.category, reason, recoveryId: null, readbackId: null } });
         return { report, exitCode: exitCodeForLifecycleReport(report) };
       }
-      const report = parseLifecycleReport({ ...plan.report, plan: [operation], outcomes: [{ ...operation, result: 'pending', resourceState: changed ? 'potentially-changed' : 'unknown', activationState: 'unknown', changed, reason }], summary: { result: 'incomplete', terminalPhase: 'finalize', mutationStarted: true, changed, failureCategory: 'recovery', reason, recoveryId: operation.operationId, readbackId: changed && operation.action === 'disable-nonconforming' ? operation.operationId : null } });
+      const report = parseLifecycleReport({ ...plan.report, plan: [operation, ...operations], outcomes: [{ ...operation, result: 'pending', resourceState: changed ? 'potentially-changed' : 'unknown', activationState: 'unknown', changed, reason }, ...outcomes], summary: { result: 'incomplete', terminalPhase: 'finalize', mutationStarted: true, changed, failureCategory: 'recovery', reason, recoveryId: operation.operationId, readbackId: changed && operation.action === 'disable-nonconforming' ? operation.operationId : null } });
       return { report, exitCode: exitCodeForLifecycleReport(report) };
     }
     if (recovery) plan = await planLifecycle(input);
