@@ -385,19 +385,42 @@ describe('add', () => {
     });
   });
 
-  test('omp > writes registry, lockfile and copies files', async () => {
-    await withHostEnvAsync('omp', async (home) => {
+  test('omp > refuses a local add when the CLI version is not detected', async () => {
+    await withHostEnvAsync('omp', async () => {
       const sourceDir = mkdtempSync(join(tmpdir(), 'open-plugin-source-'));
       initGitRepo(sourceDir, pluginsMap);
-      
-      const code = await main(['add', sourceDir, '--target', 'omp']);
-      expect(code).toBe(0);
+      const before = omp.listInstalled().map((plugin) => plugin.id);
+      const output: string[] = [];
+      const originalLog = console.log;
+      console.log = (value: string) => output.push(value);
+      try {
+        expect(await main(['add', sourceDir, '--target', 'omp'])).toBe(1);
+      } finally { console.log = originalLog; }
+      expect(output.join('\n')).toContain("target 'omp' has no verified native install profile for version 'unknown/unparseable' and local Sources");
+      expect(omp.listInstalled().map((plugin) => plugin.id)).toEqual(before);
+      expect(readState().some((record) => record.host === 'omp' && record.id === 'new-plugin@local')).toBe(false);
+    });
+  });
 
-      const installed = omp.listInstalled();
-      expect(installed.find(p => p.name === 'new-plugin') !== undefined).toBe(true);
-      
-      const state = readState();
-      expect(state.find(r => r.id === 'new-plugin@local' && r.host === 'omp') !== undefined).toBe(true);
+  test('omp > writes registry, lockfile and copies files', async () => {
+    await withHostEnvAsync('omp', async (home) => {
+      const saved = process.env['OPEN_PLUGIN_OMP_BIN'];
+      process.env['OPEN_PLUGIN_OMP_BIN'] = versionShim(home, 'omp', '18.1.4');
+      try {
+        const sourceDir = mkdtempSync(join(tmpdir(), 'open-plugin-source-'));
+        initGitRepo(sourceDir, pluginsMap);
+        const code = await main(['add', sourceDir, '--target', 'omp']);
+        expect(code).toBe(0);
+
+        const installed = omp.listInstalled();
+        expect(installed.find(p => p.name === 'new-plugin') !== undefined).toBe(true);
+
+        const state = readState();
+        expect(state.find(r => r.id === 'new-plugin@local' && r.host === 'omp') !== undefined).toBe(true);
+      } finally {
+        if (saved === undefined) delete process.env['OPEN_PLUGIN_OMP_BIN'];
+        else process.env['OPEN_PLUGIN_OMP_BIN'] = saved;
+      }
     });
   });
 
