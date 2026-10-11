@@ -51,3 +51,28 @@ No real home/native launcher, production pin, main or external repo was changed.
 Consumer strict admission/reader extensions remain separate required work before
 integration. Skills unchanged; public reader and canonical negatives form the
 next protected floor, subject to independent review.
+
+## Independent review correction: mandatory original activation linkage
+
+The first reader checkpoint `7242867` was **not accepted**: Spec review proved
+that removing the copied activation's pending record disabled the canonical state
+validator's conditional linkage check. A correctly recomputed digest then admitted
+either the unlinked activation or an unrelated package/native activation. Hash
+consistency is not identity proof.
+
+The corrected parser explicitly requires activation scope/package/native IDs to
+equal the original and requires its retained pending attempt/action to equal the
+original operation. Existing state validation additionally checks pending phase
+against journal state and attempt semantics. The historical snapshot always retains
+this original pending link; later live activation settlement does not erase it.
+
+Author public-fixture RED: 0 pass / 1 fail / 14 assertions, 372 ms;
+`/tmp/plugnz-legacy-pending-link-red.log`, SHA-256
+`a19eae50ed83b19f3977119ae5b69a136f218b15256fac48251ed06011cc6714`.
+Both missing-link and foreign-activation cases were accepted with recomputed valid
+digests. Added wrong pending attempt/action controls also recompute their digests.
+Corrected focused command above: 19 pass / 0 fail / 183 assertions, 957 ms;
+`/tmp/plugnz-legacy-pending-link-green.log`, SHA-256
+`ffc7a6072054e90d100293f2a9030159e35d3f67c4ee5b88dba4bb687d9cee86`.
+Typecheck and diff check exit 0. No downstream transaction/schema work was started
+while this proof boundary remained rejected. Combined review is still required.

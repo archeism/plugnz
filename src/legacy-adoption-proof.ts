@@ -99,6 +99,12 @@ export function parseLegacyRecordProof(value: unknown): LegacyRecordProof {
   const journal = object(snapshot['journal'], 'legacy journal');
   if ('sealedOperation' in journal || 'settlement' in journal) throw new Error('legacy snapshot cannot contain sealed authority or settlement');
   const activation = object(snapshot['activation'], 'legacy activation');
+  const pending = object(activation['pending'], 'legacy activation pending');
+  if (activation['scopeId'] !== original.scope.id || activation['packageId'] !== original.package
+    || activation['nativeId'] !== original.nativeId || pending['attemptId'] !== original.attemptId
+    || pending['operation'] !== original.action) {
+    throw new Error('legacy activation must retain exact original identity and pending operation');
+  }
   const attempt: Record<string, unknown> = { ...header, journal: [journal] };
   for (const key of ['startedAt', 'updatedAt', 'completedAt']) if (attempt[key] === null) delete attempt[key];
   // Reuse canonical state validators for every nested existing field. Other shared
