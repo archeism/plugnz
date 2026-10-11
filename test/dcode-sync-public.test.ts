@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
-import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn as spawnChild, spawnSync } from 'node:child_process';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, watch, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { repoRoot, writeFiles } from './util';
@@ -8,6 +8,10 @@ import { fakeDcodeLockInterpreter } from './dcode-fake-lock';
 
 const cliExecutable = process.env['OPEN_PLUGIN_TEST_PACKED_NODE'] || process.execPath;
 const cliPath = join(repoRoot, process.env['OPEN_PLUGIN_TEST_PACKED_NODE'] ? 'dist/plugnz.mjs' : 'bin/plugnz.mjs');
+
+declare module 'node:fs' {
+  export function watch(path: string, listener: (event: string, filename: string | null) => void): { close(): void };
+}
 
 test('dcode authoritative sync installs, updates and retires without losing writable data', () => {
   const root = mkdtempSync(join(tmpdir(), 'plgnz-dcode-sync-'));
@@ -130,5 +134,48 @@ test('dcode changed-byte sync rolls back divergent readback and a fresh retry co
     const newPath = JSON.parse(readFileSync(registry, 'utf8')).plugins['demo@local'][0].installPath;
     expect(newPath === installedPath).toBe(false);
     expect(readFileSync(join(newPath, 'skills/demo/SKILL.md'), 'utf8')).toContain('two');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('killing the public CLI at cache rename leaves only a complete candidate or the complete prior registration', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'plgnz-dcode-crash-rename-'));
+  const home = join(root, 'home'), source = join(root, 'source'), native = join(home, '.deepagents');
+  try {
+    mkdirSync(native, { recursive: true });
+    writeFiles(source, { 'plugin.json': '{"name":"demo","version":"1.0.0"}', 'skills/demo/SKILL.md': '---\nname: demo\ndescription: demo\n---\none\n', 'large-resource.txt': 'payload'.repeat(500_000) });
+    const binary = join(root, 'dcode');
+    writeFileSync(binary, '#!/bin/sh\nprintf "deepagents-code 0.1.83\\n"\n'); chmodSync(binary, 0o755);
+    const env = { ...process.env, HOME: home, OPEN_PLUGIN_HOME: home, OPEN_PLUGIN_DCODE_ROOT: native, OPEN_PLUGIN_DCODE_BIN: binary, OPEN_PLUGIN_DCODE_PYTHON_BIN: fakeDcodeLockInterpreter(root) };
+    const args = [cliPath, 'sync', source, '--target', 'dcode', '--json'];
+    expect(spawnSync(cliExecutable, args, { env, cwd: root, encoding: 'utf8' }).status).toBe(0);
+    const registry = join(native, '.state/installed_plugins.json');
+    const priorPath = JSON.parse(readFileSync(registry, 'utf8')).plugins['demo@local'][0].installPath;
+    const priorSkill = readFileSync(join(priorPath, 'skills/demo/SKILL.md'), 'utf8');
+    const nextSkill = '---\nname: demo\ndescription: demo\n---\ntwo\n';
+    writeFileSync(join(source, 'skills/demo/SKILL.md'), nextSkill);
+    let candidate: string | undefined, observationError: unknown, stopped = false;
+    let child: { kill(signal: string): void; on(event: 'exit', callback: () => void): void; on(event: 'error', callback: (error: Error) => void): void };
+    const watcher = watch(join(native, 'plugins/cache/plgnz'), (event, name) => {
+      if (event !== 'rename' || !name || candidate !== undefined) return;
+      const path = join(native, 'plugins/cache/plgnz', name);
+      if (path === priorPath || !existsSync(join(path, 'plugin.json'))) return;
+      candidate = path;
+      child.kill('SIGSTOP'); stopped = true;
+      try {
+        expect(readFileSync(join(path, 'skills/demo/SKILL.md'), 'utf8')).toBe(nextSkill);
+        expect(readFileSync(join(path, 'large-resource.txt'), 'utf8')).toBe('payload'.repeat(500_000));
+        const active = JSON.parse(readFileSync(registry, 'utf8')).plugins['demo@local'][0].installPath;
+        expect(active === priorPath || active === path).toBe(true);
+        expect(readFileSync(join(priorPath, 'skills/demo/SKILL.md'), 'utf8')).toBe(priorSkill);
+      } catch (error) { observationError = error; }
+      child.kill('SIGKILL');
+    });
+    try {
+      child = spawnChild(cliExecutable, args, { env, cwd: root, stdio: 'ignore' }) as unknown as typeof child;
+      await new Promise<void>((resolveExit, rejectExit) => { child.on('exit', () => resolveExit()); child.on('error', rejectExit); });
+      if (observationError !== undefined) throw observationError;
+      expect(stopped).toBe(true);
+      expect(candidate === undefined).toBe(false);
+    } finally { watcher.close(); }
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
