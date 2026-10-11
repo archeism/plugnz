@@ -1,0 +1,1 @@
+{"name":"plugnz-nativegit-proof","plugins":[{"name":"kimi-probe","source":"./test/fixtures/native-git-proof/kimi-probe"},{"name":"zcode-probe","source":"./test/fixtures/native-git-proof/zcode-probe"}]}
