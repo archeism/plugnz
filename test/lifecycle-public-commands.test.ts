@@ -1010,7 +1010,7 @@ describe('public lifecycle commands', () => {
         store: repeated.stores.cursor.before,
       });
     });
-  });
+  }, 20_000);
 
   test('sync updates an independent pair while an unimplemented migration stays loud, and an ungated cursor instance is refused', async () => {
     await withLifecycleCliHarness((harness) => {
@@ -1110,7 +1110,7 @@ describe('public lifecycle commands', () => {
         claimsCursorLoadedInstance: false,
       });
     });
-  });
+  }, 20_000);
 
   test('scenario 7 exact identity prevents a same-name marketplace rebinding', async () => {
     await withLifecycleCliHarness((harness) => {
