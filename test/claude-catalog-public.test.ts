@@ -41,6 +41,33 @@ test('public Claude rejects malformed foreign marketplace timestamps before any 
   });
 });
 
+test('public Claude rejects malformed foreign source variants and nested settings plugins before any batch mutation', async () => {
+  await withLifecycleCliHarness(harness => {
+    harness.fakeNative('claude', Array.from({ length: 40 }, () => ({ args: ['--version'], stdout: '2.1.295 (Claude Code)\n' })));
+    const cursor = harness.fakeNative('cursor', Array.from({ length: 20 }, () => ({ args: ['--version'], stdout: '2.4.0\n' })));
+    const foreign = harness.source('schema-foreign', { '.claude-plugin/marketplace.json': '{"name":"foreign","owner":{"name":"foreign"},"plugins":[]}' });
+    const source = harness.source('schema-source', plugin('demo'));
+    const manifest = join(harness.source('schema-batch', {}), 'manifest.json');
+    writeFileSync(manifest, JSON.stringify({ schemaVersion: 1, entries: ['cursor', 'claude-code'].map(kind => ({ operation: 'sync', source: { kind: 'local', locator: source }, target: { kind, instance: 'default' } })) }));
+    for (const nativeSource of [
+      { source: 'github', repo: 17 },
+      { source: 'settings', name: 'foreign', plugins: [{ name: 'remote', source: { source: 'github', repo: 'owner/repo', sha: 'not-a-commit' } }] },
+    ]) {
+      harness.writeHome({ '.claude/plugins/known_marketplaces.json': JSON.stringify({ foreign: { source: nativeSource, installLocation: foreign, lastUpdated: '', metadata: { opaque: true } } }) });
+      const before = snapshotTree(foreign);
+      const result = harness.run(['sync', '--manifest', manifest, '--json'], { env: { OPEN_PLUGIN_CURSOR_BIN: cursor.path } });
+      expect(result.exitCode).toBe(1);
+      const report = parseLifecycleReport(JSON.parse(result.stdout));
+      expect(report.summary.mutationStarted).toBe(false);
+      expect(JSON.stringify(report)).toContain('foreign.source');
+      expect(result.stores['claude-code'].after).toEqual(result.stores['claude-code'].before);
+      expect(result.stores['cursor'].after).toEqual(result.stores['cursor'].before);
+      expect(result.state.after).toEqual(result.state.before);
+      expect(snapshotTree(foreign)).toEqual(before);
+    }
+  });
+});
+
 test('public Claude Managed lifecycle registers a native-loadable owned catalog and repairs missing registration', async () => {
   await withLifecycleCliHarness(harness => {
     harness.writeHome({ '.claude/.keep': '' });
