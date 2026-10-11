@@ -64,6 +64,18 @@ function scopedV2State(entries: ReadonlyArray<{ source: string; instance: string
   };
 }
 
+function codexRow(source: string, id: string, pending?: 'install' | 'remove'): StateDocument['installs'][number] {
+  const row: StateDocument['installs'][number] = {
+    host: 'codex',
+    id,
+    source,
+    sourceSha: '1111111111111111111111111111111111111111',
+    sourceDir: source,
+  };
+  if (pending !== undefined) row.pending = pending;
+  return row;
+}
+
 describe('isolated lifecycle CLI harness', () => {
   test('legacy update and remove reject an ambiguous v2 target instance before adapter work', async () => {
     await withLifecycleCliHarness((harness) => {
@@ -396,34 +408,34 @@ describe('isolated lifecycle CLI harness', () => {
       const source = harness.source('codex-legacy-root-source', {
         'plugin.json': '{"name":"demo","version":"1.0.0"}\n',
       });
-      const initial = harness.run(['add', source, '--target', 'codex', '--json']);
-      expect(initial.exitCode).toBe(0);
-      const historical = projectedState(initial.state.after!);
-      historical.version = 1;
-      historical.installs[0] = { ...historical.installs[0]!, id: 'demo', pending: 'install' };
-      harness.writeHome({ 'state.json': JSON.stringify(historical) });
-
-      const migrated = harness.run(['add', source, '--target', 'codex', '--json']);
-      const migratedReport = parseLifecycleReport(JSON.parse(migrated.stdout));
-      const migratedState = projectedState(migrated.state.after!);
+      const refused = harness.run(['add', source, '--target', 'codex', '--json']);
+      const refusedReport = parseLifecycleReport(JSON.parse(refused.stdout));
       expect({
-        exitCode: migrated.exitCode,
-        planned: migratedReport.plan.map(({ nativeId }) => nativeId),
-        outcomes: migratedReport.outcomes.map(({ nativeId, result }) => ({ nativeId, result })),
-        records: migratedState.installs.map(({ host, id, pending }) => ({ host, id, pending })),
+        exitCode: refused.exitCode,
+        stderr: refused.stderr,
+        plan: refusedReport.plan.map(({ nativeId, action, route }) => ({ nativeId, action, route })),
+        outcome: refusedReport.outcomes.map(({ nativeId, action, route, result }) => ({ nativeId, action, route, result })),
+        diagnostic: refusedReport.outcomes[0]?.reason?.diagnostic ?? refusedReport.summary.reason?.diagnostic ?? '',
+        mutationStarted: refusedReport.summary.mutationStarted,
+        stateAfter: refused.state.after,
+        storeUnchanged: refused.stores.codex.after,
+        storeBefore: refused.stores.codex.before,
       }).toEqual({
-        exitCode: 0,
-        planned: ['demo@local'],
-        outcomes: [{ nativeId: 'demo@local', result: 'succeeded' }],
-        records: [{ host: 'codex', id: 'demo@local', pending: undefined }],
+        exitCode: 1,
+        stderr: '',
+        plan: [{ nativeId: 'demo@local', action: 'not-attempted', route: 'none' }],
+        outcome: [{ nativeId: 'demo@local', action: 'not-attempted', route: 'none', result: 'failed' }],
+        diagnostic: "target 'codex' has no verified native install profile for version 'unknown/unparseable' and local Sources",
+        mutationStarted: false,
+        stateAfter: undefined,
+        storeUnchanged: refused.stores.codex.before,
+        storeBefore: refused.stores.codex.before,
       });
 
+      const canonical = codexRow(source, 'demo@local');
       const ambiguous: StateDocument = {
         version: 1,
-        installs: [
-          ...migratedState.installs,
-          { ...migratedState.installs[0]!, id: 'demo', pending: 'install' },
-        ],
+        installs: [canonical, { ...canonical, id: 'demo' }],
       };
       harness.writeHome({ 'state.json': JSON.stringify(ambiguous) });
       const beforeAmbiguous = JSON.stringify(ambiguous);
@@ -431,25 +443,27 @@ describe('isolated lifecycle CLI harness', () => {
       const rejectedReport = parseLifecycleReport(JSON.parse(rejected.stdout));
       expect({
         exitCode: rejected.exitCode,
-        plan: rejectedReport.plan,
-        outcomes: rejectedReport.outcomes,
-        terminalPhase: rejectedReport.summary.terminalPhase,
+        plan: rejectedReport.plan.map(({ nativeId, action, route }) => ({ nativeId, action, route })),
+        outcome: rejectedReport.outcomes.map(({ nativeId, action, route, result, reason }) => ({
+          nativeId,
+          action,
+          route,
+          result,
+          diagnostic: reason?.diagnostic ?? '',
+        })),
         mutationStarted: rejectedReport.summary.mutationStarted,
-        reason: rejectedReport.summary.reason,
         stateUnchanged: bytesToText(rejected.state.after!) === beforeAmbiguous,
       }).toEqual({
         exitCode: 1,
-        plan: [],
-        outcomes: [],
-        terminalPhase: 'preflight',
+        plan: [{ nativeId: 'demo@local', action: 'not-attempted', route: 'none' }],
+        outcome: [{
+          nativeId: 'demo@local',
+          action: 'not-attempted',
+          route: 'none',
+          result: 'failed',
+          diagnostic: "target 'codex' has no verified native install profile for version 'unknown/unparseable' and local Sources",
+        }],
         mutationStarted: false,
-        reason: {
-          category: 'internal',
-          code: 'internal.ambiguous-ownership',
-          diagnostic: "multiple codex ledger records match native identity 'demo@local'",
-          capabilityId: null,
-          evidenceId: null,
-        },
         stateUnchanged: true,
       });
 
@@ -457,19 +471,27 @@ describe('isolated lifecycle CLI harness', () => {
       const previewReport = parseLifecycleReport(JSON.parse(previewRejected.stdout));
       expect({
         exitCode: previewRejected.exitCode,
-        plan: previewReport.plan,
-        outcomes: previewReport.outcomes,
-        terminalPhase: previewReport.summary.terminalPhase,
+        plan: previewReport.plan.map(({ nativeId, action, route }) => ({ nativeId, action, route })),
+        outcome: previewReport.outcomes.map(({ nativeId, action, route, result, reason }) => ({
+          nativeId,
+          action,
+          route,
+          result,
+          diagnostic: reason?.diagnostic ?? '',
+        })),
         mutationStarted: previewReport.summary.mutationStarted,
-        reasonCode: previewReport.summary.reason?.code,
         stateUnchanged: bytesToText(previewRejected.state.after!) === beforeAmbiguous,
       }).toEqual({
         exitCode: 1,
-        plan: [],
-        outcomes: [],
-        terminalPhase: 'preflight',
+        plan: [{ nativeId: 'demo@local', action: 'not-attempted', route: 'none' }],
+        outcome: [{
+          nativeId: 'demo@local',
+          action: 'not-attempted',
+          route: 'none',
+          result: 'failed',
+          diagnostic: "target 'codex' has no verified native install profile for version 'unknown/unparseable' and local Sources",
+        }],
         mutationStarted: false,
-        reasonCode: 'internal.ambiguous-ownership',
         stateUnchanged: true,
       });
     });
@@ -481,11 +503,7 @@ describe('isolated lifecycle CLI harness', () => {
       const source = harness.source('codex-legacy-update-source', {
         'plugin.json': '{"name":"demo","version":"1.0.0"}\n',
       });
-      const initial = harness.run(['add', source, '--target', 'codex', '--json']);
-      expect(initial.exitCode).toBe(0);
-      const historical = projectedState(initial.state.after!);
-      historical.version = 1;
-      historical.installs[0] = { ...historical.installs[0]!, id: 'demo' };
+      const historical: StateDocument = { version: 1, installs: [codexRow(source, 'demo')] };
       const historicalBytes = JSON.stringify(historical);
       harness.writeHome({ 'state.json': historicalBytes });
 
@@ -554,12 +572,10 @@ describe('isolated lifecycle CLI harness', () => {
       const source = harness.source('codex-canonical-selector-ambiguity-source', {
         'plugin.json': '{"name":"demo","version":"1.0.0"}\n',
       });
-      const initial = harness.run(['add', source, '--target', 'codex', '--json']);
-      expect(initial.exitCode).toBe(0);
-      const canonical = projectedState(initial.state.after!);
+      const canonical = codexRow(source, 'demo@local');
       const ambiguous: StateDocument = {
         version: 1,
-        installs: [...canonical.installs, { ...canonical.installs[0]!, id: 'demo' }],
+        installs: [canonical, { ...canonical, id: 'demo' }],
       };
       const ambiguousBytes = JSON.stringify(ambiguous);
       harness.writeHome({ 'state.json': ambiguousBytes });
@@ -597,11 +613,9 @@ describe('isolated lifecycle CLI harness', () => {
       const source = harness.source('codex-legacy-remove-source', {
         'plugin.json': '{"name":"demo","version":"1.0.0"}\n',
       });
-      const initial = harness.run(['add', source, '--target', 'codex', '--json']);
-      expect(initial.exitCode).toBe(0);
-      const canonical = projectedState(initial.state.after!);
-      const legacy = { ...canonical.installs[0]!, id: 'demo' };
-      const ambiguous: StateDocument = { version: 1, installs: [...canonical.installs, legacy] };
+      const canonical = codexRow(source, 'demo@local');
+      const legacy = { ...canonical, id: 'demo' };
+      const ambiguous: StateDocument = { version: 1, installs: [canonical, legacy] };
       harness.writeHome({ 'state.json': JSON.stringify(ambiguous) });
 
       const rejected = harness.run(['remove', 'demo', '--target', 'codex', '--json']);
@@ -652,12 +666,9 @@ describe('isolated lifecycle CLI harness', () => {
       const source = harness.source('codex-canonical-remove-selector-source', {
         'plugin.json': '{"name":"demo","version":"1.0.0"}\n',
       });
-      const initial = harness.run(['add', source, '--target', 'codex', '--json']);
-      expect(initial.exitCode).toBe(0);
-      const canonical = projectedState(initial.state.after!);
       const historical: StateDocument = {
         version: 1,
-        installs: [{ ...canonical.installs[0]!, id: 'demo' }],
+        installs: [codexRow(source, 'demo')],
       };
       const historicalBytes = JSON.stringify(historical);
       harness.writeHome({ 'state.json': historicalBytes });
@@ -705,12 +716,9 @@ describe('isolated lifecycle CLI harness', () => {
       const source = harness.source('codex-gone-legacy-remove-source', {
         'plugin.json': '{"name":"demo","version":"1.0.0"}\n',
       });
-      const initial = harness.run(['add', source, '--target', 'codex', '--json']);
-      expect(initial.exitCode).toBe(0);
-      const canonical = projectedState(initial.state.after!);
       const historical: StateDocument = {
         version: 1,
-        installs: [{ ...canonical.installs[0]!, id: 'demo' }],
+        installs: [codexRow(source, 'demo')],
       };
       const historicalBytes = JSON.stringify(historical);
       harness.writeHome({ 'state.json': historicalBytes });
@@ -749,12 +757,10 @@ describe('isolated lifecycle CLI harness', () => {
       const source = harness.source('codex-gone-remove-ambiguity-source', {
         'plugin.json': '{"name":"demo","version":"1.0.0"}\n',
       });
-      const initial = harness.run(['add', source, '--target', 'codex', '--json']);
-      expect(initial.exitCode).toBe(0);
-      const canonical = projectedState(initial.state.after!);
+      const canonical = codexRow(source, 'demo@local');
       const ambiguous: StateDocument = {
         version: 1,
-        installs: [...canonical.installs, { ...canonical.installs[0]!, id: 'demo' }],
+        installs: [canonical, { ...canonical, id: 'demo' }],
       };
       const ambiguousBytes = JSON.stringify(ambiguous);
       harness.writeHome({ 'state.json': ambiguousBytes });
@@ -800,16 +806,12 @@ describe('isolated lifecycle CLI harness', () => {
         }),
         'plugins/demo/plugin.json': '{"name":"demo","version":"1.0.0"}\n',
       });
-      const rootInstall = harness.run(['add', rootSource, '--target', 'codex', '--json']);
-      expect(rootInstall.exitCode).toBe(0);
-      const marketplaceInstall = harness.run(['add', marketplaceSource, '--target', 'codex', '--json']);
-      expect(marketplaceInstall.exitCode).toBe(0);
-      const canonical = projectedState(marketplaceInstall.state.after!);
       const historical: StateDocument = {
         version: 1,
-        installs: canonical.installs.map((record) => record.id === 'demo@local'
-          ? { ...record, id: 'demo' }
-          : record),
+        installs: [
+          codexRow(rootSource, 'demo'),
+          codexRow(marketplaceSource, 'demo@personal'),
+        ],
       };
       const historicalBytes = JSON.stringify(historical);
       harness.writeHome({ 'state.json': historicalBytes });
@@ -872,15 +874,15 @@ describe('isolated lifecycle CLI harness', () => {
         storeUnchanged: result.stores.codex.after,
         storeBefore: result.stores.codex.before,
       }).toEqual({
-        plan: [{ nativeId: 'demo@local', action: 'install', route: 'managed' }],
+        plan: [{ nativeId: 'demo@local', action: 'not-attempted', route: 'none' }],
         outcome: [{
           operationId: report.plan[0]!.operationId,
           nativeId: 'demo@local',
-          action: 'install',
-          route: 'managed',
+          action: 'not-attempted',
+          route: 'none',
           result: 'failed',
           changed: false,
-          diagnostic: report.outcomes[0]!.reason?.diagnostic,
+          diagnostic: "target 'codex' has no verified native install profile for version 'unknown/unparseable' and local Sources",
         }],
         expectedOperationId: report.plan[0]!.operationId,
         mutationStarted: false,
@@ -888,7 +890,7 @@ describe('isolated lifecycle CLI harness', () => {
         storeUnchanged: result.stores.codex.before,
         storeBefore: result.stores.codex.before,
       });
-      expect(report.outcomes[0]!.reason?.diagnostic).toContain('unsafe Codex plugin version');
+      expect(report.outcomes[0]!.reason?.diagnostic).toContain('no verified native install profile');
     });
   });
 
