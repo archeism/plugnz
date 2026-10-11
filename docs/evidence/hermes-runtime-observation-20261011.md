@@ -66,3 +66,41 @@ the previous evidence; this correction does not erase that incident.
 The initial full-tree digest test exceeded Bun's default 5-second timeout;
 the isolated source attestation test now has an explicit 30-second test bound.
 No skill revision or causal skill-improvement claim is made.
+
+## Whole-template correction after `ca67044`
+
+Root review found that prefix/import/suffix recognition still allowed an
+arbitrary middle statement to redirect `sys.path`; the console body and
+editable finder likewise were only partially checked. Fresh public subprocess
+regressions reproduced both native-middle and console-prelude spoofs as
+successful deployments (exit 0) before correction. Both now refuse as
+`capability.unverified`, with unchanged source, native store, ownership ledger
+and ambient home. Additional precedence/finder regressions cover foreign
+venv-bin modules, site-package modules, extra `.pth` data and injected finder
+code. These are recurrence checks, not held-out skill evaluation.
+
+Templates in `src/hosts/hermes-launcher-templates.ts` are frozen from the
+official isolated dce generator, the actual uv editable entry point, and its
+setuptools 83.0.0 finder. No arbitrary executable middle is permitted; data
+slots must remain static, root-contained literals. Normalized SHA-256 values:
+
+- Native bootstrap: `223cda4c44458d0819b2007007ba9abb98787af26f4be4ff4fa448dc63e97309`
+- Editable finder algorithm: `737fcd335c87eb12e1adcb6364783c723d163414bf5888c4ef60bc6f265bb642`
+- uv console body: `cb72b238a2cc040f10a1914b6a68acc2fe439765d13afe43d647093115c28eaa`
+- Allowed uv `_virtualenv.py`: `cfb3db86aaa53bb62b5ff764970bec2d71c9228590a0ebec57f6ec926cc0bf1a`
+
+Editable import closure refuses unknown `.pth` hooks, system-site inclusion,
+ambient Python source overrides and module/customization shadows. This is
+explicitly layout evidence, not a new release exclusion. A valid but different
+installer body/finder/hook requires an independently derived whole-template
+proof before admission; it does not become supported through a matching marker.
+The real isolated native generator and uv entry point are rechecked against
+full source/venv/Git digests; neither selected launcher is executed by plugnz.
+
+Whole-template verification: focused doctor/host/Hermes routes passed 22 tests
+with 181 assertions (11.17 seconds). Packed Node plus actual isolated native
+loader/launcher proof passed 15 tests with 110 assertions (24.83 seconds).
+The final finder data refinement additionally requires each mapping/namespace
+path to be the canonical source-relative path for its module name, rather than
+an arbitrary different subtree. The actual official loader/launcher proof was
+rerun after that refinement. Typecheck and packaged build passed.

@@ -3,8 +3,84 @@ import { snapshotTree, withLifecycleCliHarness } from './lifecycle-cli-harness';
 import { chmodSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseLifecycleReport } from '../src/lifecycle-report';
-import { hermesPublicRuntime } from './hermes-runtime-fixture';
-import { initGitRepo } from './util';
+import { hermesPublicRuntime, nativeHermesFixtureLauncher } from './hermes-runtime-fixture';
+import { initGitRepo, writeFiles } from './util';
+import { hermesEditableFinderBody } from '../src/hosts/hermes-launcher-templates';
+
+for (const form of ['native-middle', 'console-prelude'] as const) {
+  test(`lookalike Hermes ${form} cannot substitute a foreign import source`, async () => {
+    await withLifecycleCliHarness(harness => {
+      const runtime = hermesPublicRuntime(harness);
+      let executable = runtime.executable;
+      if (form === 'native-middle') {
+        writeFileSync(executable, nativeHermesFixtureLauncher(runtime.sourceRoot).replace('from hermes_cli.main import main',
+          `sys.path[:] = ["/foreign/hermes/source"]\nfrom hermes_cli.main import main`));
+      } else {
+        const venv = join(runtime.sourceRoot, '.venv');
+        executable = join(venv, 'bin', 'hermes');
+        writeFiles(venv, {
+          'pyvenv.cfg': 'include-system-site-packages = false\n',
+          'bin/python': '#!/bin/sh\nexit 97\n',
+          'bin/hermes': `#!${join(venv, 'bin', 'python')}\nimport sys\nsys.path[:] = ["/foreign/hermes/source"]\nfrom hermes_cli.main import main\nsys.exit(main())\n`,
+          'lib/python3.13/site-packages/hermes_agent-0.21.4.dist-info/direct_url.json': JSON.stringify({ url: `file://${runtime.sourceRoot}`, dir_info: { editable: true } }),
+          'lib/python3.13/site-packages/hermes_agent-0.21.4.dist-info/entry_points.txt': '[console_scripts]\nhermes = hermes_cli.main:main\n',
+          'lib/python3.13/site-packages/__editable__.hermes_agent-0.21.4.pth': 'import finder; finder.install()\n',
+          'lib/python3.13/site-packages/finder.py': `MAPPING: dict[str, str] = {'hermes_cli': '${runtime.sourceRoot}/hermes_cli'}\n`,
+        });
+        chmodSync(executable, 0o755);
+      }
+      harness.writeHome({ '.hermes/config.yaml': 'model: preserved\n' });
+      const source = harness.source('plugin', {
+        'plugin.json': '{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"demo","version":"1.0.0"}\n',
+        'skills/demo/SKILL.md': '---\nname: demo\ndescription: Demo\n---\nDemo.\n',
+      });
+      const before = snapshotTree(runtime.sourceRoot);
+      const result = harness.run(['add', source, '--target', 'hermes', '--json'], {
+        env: { OPEN_PLUGIN_HERMES_BIN: executable },
+      });
+      expect(result.exitCode).toBe(1);
+      expect(parseLifecycleReport(JSON.parse(result.stdout)).outcomes[0]?.reason?.code).toBe('capability.unverified');
+      expect(snapshotTree(runtime.sourceRoot)).toEqual(before);
+      expect(result.stores.hermes.after).toEqual(result.stores.hermes.before);
+      expect(result.state.after).toEqual(result.state.before);
+      expect(result.ambient.after).toEqual(result.ambient.before);
+    });
+  });
+}
+
+for (const shadow of ['bin-module', 'site-module', 'extra-pth', 'finder-code'] as const) {
+  test(`editable Hermes refuses ${shadow} import precedence without any writes`, async () => {
+    await withLifecycleCliHarness(harness => {
+      const runtime = hermesPublicRuntime(harness);
+      const packages = '.venv/lib/python3.13/site-packages';
+      const foreign = harness.source('foreign-runtime', { 'hermes_cli/main.py': 'raise RuntimeError("foreign source")\n' });
+      if (shadow === 'bin-module') writeFiles(runtime.sourceRoot, { '.venv/bin/hermes_cli.py': 'foreign = True\n' });
+      else if (shadow === 'site-module') writeFiles(runtime.sourceRoot, { [`${packages}/hermes_cli/__init__.py`]: 'foreign = True\n' });
+      else if (shadow === 'extra-pth') writeFiles(runtime.sourceRoot, { [`${packages}/00-foreign.pth`]: `${foreign}\n` });
+      else {
+        const finder = '__editable___hermes_agent_0_21_4_finder';
+        const code = hermesEditableFinderBody.replace('__MAPPING__', `MAPPING: dict[str, str] = {'hermes_cli': '${runtime.sourceRoot}/hermes_cli'}`)
+          .replace('__NAMESPACES__', 'NAMESPACES: dict[str, list[str]] = {}')
+          .replace('__EDITABLE_NAME__', '__editable__.hermes_agent-0.21.4.finder')
+          .replace('import sys\n', `import sys\nsys.path[:] = ['${foreign}']\n`);
+        writeFiles(runtime.sourceRoot, {
+          [`${packages}/__editable__.hermes_agent-0.21.4.pth`]: `import ${finder}; ${finder}.install()\n`,
+          [`${packages}/${finder}.py`]: code,
+        });
+      }
+      harness.writeHome({ '.hermes/config.yaml': 'model: preserved\n' });
+      const source = harness.source('plugin', { 'plugin.json': '{"name":"demo","version":"1.0.0"}\n' });
+      const before = snapshotTree(runtime.sourceRoot);
+      const result = harness.run(['add', source, '--target', 'hermes', '--json']);
+      expect(result.exitCode).toBe(1);
+      expect(parseLifecycleReport(JSON.parse(result.stdout)).outcomes[0]?.reason?.code).toBe('capability.unverified');
+      expect(snapshotTree(runtime.sourceRoot)).toEqual(before);
+      expect(result.stores.hermes.after).toEqual(result.stores.hermes.before);
+      expect(result.state.after).toEqual(result.state.before);
+      expect(result.ambient.after).toEqual(result.ambient.before);
+    });
+  });
+}
 
 test('an interrupted Hermes checkout is observed without startup recovery or Python bytecode writes', async () => {
   await withLifecycleCliHarness(harness => {
