@@ -128,9 +128,19 @@ if (faulting) {
   chmodSync(wrapper, 0o755); env.OPEN_PLUGIN_CODEX_BIN = wrapper;
 }
 const before = captureSurfaces(codexHome);
+const statePath = join(home, 'state.json');
+const priorAttemptIds = existsSync(statePath) ? JSON.parse(readFileSync(statePath, 'utf8')).attempts.map(row => row.id) : [];
 const result = command(`public-${phase}`, process.execPath, [artifact, 'sync', source, '--target', 'codex', '--json'], faulting ? [1] : [0]);
 const report = JSON.parse(result.stdout), after = captureSurfaces(codexHome);
+const state = JSON.parse(readFileSync(statePath, 'utf8'));
+writeFileSync(join(root, `${phase}-state.json`), JSON.stringify(state, null, 2));
 writeFileSync(join(root, `${phase}-report.json`), JSON.stringify(report, null, 2));
+assert.equal(report.outcomes.length, 1);
+const outcome = report.outcomes[0];
+assert.equal(outcome.package, 'lifecycle-probe');
+assert.equal(outcome.nativeId, 'lifecycle-probe@plugnz-proof');
+assert.equal(report.command.sourceSnapshots.length, 1);
+assert.equal(report.command.sourceSnapshots[0].reference.revision, revision);
 let discoveredSkill = null;
 if (!faulting) {
   assert.equal(report.summary.result, 'converged');
@@ -142,20 +152,46 @@ if (!faulting) {
     assert.notEqual(after.cache, before.cache);
   }
   discoveredSkill = await discoverSkill();
+  assert.equal(readFileSync(join(codexHome, 'plugins/cache/plugnz-proof/lifecycle-probe/0.1.0/resources/probe.txt'), 'utf8'), phase === 'bootstrap' ? 'Proof resource V1.\n' : 'Proof resource V2, unchanged declared version.\n');
 } else {
   const boundary = JSON.parse(readFileSync(join(root, 'native-boundary-result.json'), 'utf8'));
   assert.equal(boundary.status, 1, 'require the actual native nonzero exit');
   assert.match(boundary.stderr, /permission denied|Permission denied|os error 13/);
+  assert.equal(boundary.postNativeHead.status, 0, boundary.postNativeHead.stderr);
+  assert.equal(boundary.postNativeHead.stdout.trim(), revision, 'actual native must reach exact V3 before foreign injection');
+  assert.equal(outcome.route, 'native'); assert.equal(outcome.action, 'update');
+  const matches = state.attempts.flatMap(attempt => attempt.journal.filter(row => row.operationId === outcome.operationId).map(journal => ({ attempt, journal })));
+  assert.equal(matches.length, 1, 'exactly one retained failed-operation journal');
+  const { attempt, journal } = matches[0];
+  assert(!priorAttemptIds.includes(attempt.id), 'failed trial must create a fresh attempt');
+  assert.equal(attempt.command, 'sync'); assert.equal(attempt.mutationStarted, true);
+  assert.equal(journal.scopeId, outcome.scope.id); assert.equal(journal.packageId, outcome.package);
+  assert.equal(journal.nativeId, outcome.nativeId); assert.equal(journal.action, 'update');
+  const sealed = journal.sealedOperation;
+  assert(sealed, 'retain exact sealed operation');
+  assert.equal(sealed.attemptId, attempt.id); assert.equal(sealed.operationId, outcome.operationId);
+  assert.equal(sealed.scopeId, outcome.scope.id); assert.equal(sealed.nativeId, outcome.nativeId);
+  assert.equal(sealed.route, 'native'); assert.equal(sealed.sourceRevision, revision);
+  const rollbackPath = join(codexHome, '.plgnz-rollback', attempt.id, outcome.operationId);
+  const stagePath = join(codexHome, '.plgnz-lifecycle', `${attempt.id}:${outcome.operationId}`);
   assert.equal(report.summary.mutationStarted, true);
   assert.equal(report.summary.result, 'incomplete');
   if (phase === 'native-exit') {
     assert.deepEqual(after, before, 'public adapter must restore all bounded prior surfaces');
     assert.equal(report.summary.failureCategory, 'runtime');
     assert.equal(report.summary.recoveryId, null, 'native failure rollback must settle');
-    assert.notEqual(boundary.postCallSurfaces.checkout, before.checkout, 'native failure must actually advance checkout');
+    assert.equal(attempt.phase, 'failed'); assert.equal(journal.state, 'rolled-back');
+    assert.equal(journal.settlement, 'rollback');
+    assert(state.activations.every(row => row.pending === undefined), 'no remaining pending activation');
+    assert(state.attempts.every(row => row.journal.every(item => ['completed', 'rolled-back', 'not-attempted'].includes(item.state))), 'no remaining unresolved journal');
+    assert(!existsSync(rollbackPath), 'settled rollback bundle must be cleaned');
+    assert(!existsSync(stagePath), 'settled stage must be cleaned');
   } else {
     assert.deepEqual(after, boundary.postCallSurfaces, 'foreign state must survive without any rollback restore write');
-    assert.notEqual(report.summary.recoveryId, null, 'foreign rollback refusal remains pending');
+    assert.equal(report.summary.recoveryId, outcome.operationId, 'foreign rollback refusal correlates to exact pending operation');
+    assert.equal(attempt.phase, 'recovery-required'); assert.equal(journal.state, 'rollback');
+    assert.equal(journal.settlement, undefined);
+    assert(existsSync(rollbackPath), 'foreign refusal retains prior rollback bytes');
     assert.equal(readFileSync(join(codexHome, '.tmp/marketplaces/plugnz-proof/foreign-proof.txt'), 'utf8'), 'foreign writer after the actual native exit\n');
   }
 }

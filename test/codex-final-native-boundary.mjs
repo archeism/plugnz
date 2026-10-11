@@ -27,12 +27,16 @@ try {
   if (mode !== null) chmodSync(parent, mode);
 }
 if (fault !== null) {
+  const head = spawnSync('git', ['-C', join(root, 'home/.codex/.tmp/marketplaces/plugnz-proof'), 'rev-parse', 'HEAD'], { encoding: 'utf8', timeout: 10_000, maxBuffer: 64 * 1024 });
+  const preInjectionSurfaces = captureSurfaces(join(root, 'home/.codex'));
   if (fault.mode === 'foreign-checkout') {
     writeFileSync(join(root, 'home/.codex/.tmp/marketplaces/plugnz-proof/foreign-proof.txt'), 'foreign writer after the actual native exit\n');
   }
   writeFileSync(join(root, 'native-boundary-result.json'), JSON.stringify({
     args, status: result.status, signal: result.signal,
     stdout: result.stdout, stderr: result.stderr,
+    postNativeHead: { status: head.status, stdout: head.stdout, stderr: head.stderr },
+    preInjectionSurfaces,
     postCallSurfaces: captureSurfaces(join(root, 'home/.codex')),
   }, null, 2));
 }
