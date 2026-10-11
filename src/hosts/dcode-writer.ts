@@ -94,7 +94,7 @@ function lifecycleDirectory(attemptId: string, operationId: string): string {
   return dir;
 }
 
-function lifecycleSlot(nativeId: string): string { return managedSlot(nativeId, 'lifecycle-v1'); }
+function lifecycleSlot(nativeId: string, fingerprint: string): string { return managedSlot(nativeId, fingerprint); }
 
 function observeDcodeTarget(target: LifecycleTargetIdentity): TargetInstallationData[] {
   if (target.kind !== 'dcode' || target.instance !== 'default') throw new Error('unsupported dcode target identity');
@@ -211,7 +211,7 @@ const dcodeDefinition: LifecycleHostDefinition = {
   },
   captureActivationPreparation: async (projection, fingerprint) => {
     const prior = dcodeLifecycleReadback(projection);
-    const target = lifecycleSlot(projection.nativeId); assertCachePath(target);
+    const target = lifecycleSlot(projection.nativeId, fingerprint); assertCachePath(target);
     const installed = observeDcodeTarget(projection.target).find(item => item.nativeId === projection.nativeId);
     if (installed?.ownership.kind === 'owned' && installed.ownership.scopeId !== projection.scopeId) throw new Error('dcode scope ownership conflict');
     // Explicit adoption is authorized by the planner. Still require a complete
@@ -223,26 +223,26 @@ const dcodeDefinition: LifecycleHostDefinition = {
       if (manifest.version !== projection.packageVersion) throw new Error('dcode legacy version differs; refusing adoption');
     }
     if (existsSync(target) && ownership(target)?.pluginId !== projection.nativeId) throw new Error('dcode lifecycle target is not owned');
-    return { prior, expected: { ...prior, route: 'managed', presence: 'present', enablement: 'enabled', activation: 'active', transition: { requirement: 'restart', status: 'effective' }, installedFingerprint: fingerprint, contentRoots: [{ label: 'managed', path: target, fingerprint }] }, rollbackReference: captureDcodeRollback(projection, projection.attemptId, projection.operationId), rollbackCoverageOperationIds: projection.affectedOperationIds };
+    const rollbackReference = captureDcodeRollback(projection, projection.attemptId, projection.operationId);
+    writeFileSync(join(rollbackReference, 'next-path.json'), JSON.stringify({ target }));
+    return { prior, expected: { ...prior, route: 'managed', presence: 'present', enablement: 'enabled', activation: 'active', transition: { requirement: 'restart', status: 'effective' }, installedFingerprint: fingerprint, contentRoots: [{ label: 'managed', path: target, fingerprint }] }, rollbackReference, rollbackCoverageOperationIds: projection.affectedOperationIds };
   },
   captureDisablePreparation: async request => ({ prior: dcodeLifecycleReadback({ adapterId: 'dcode', ...request.activation }), rollbackReference: captureDcodeRollback({ adapterId: 'dcode', ...request.activation }, request.attemptId, request.operationId), rollbackCoverageOperationIds: request.selection.affectedOperationIds, transition: { requirement: 'restart', status: 'effective' } }),
   captureRetirementPreparation: async request => ({ prior: dcodeLifecycleReadback({ adapterId: 'dcode', ...request.activation }), rollbackReference: captureDcodeRollback({ adapterId: 'dcode', ...request.activation }, request.attemptId, request.operationId), rollbackCoverageOperationIds: request.selection.affectedOperationIds, transition: { requirement: 'none', status: 'effective' } }),
   apply: async prepared => {
     await acquireNativeLock(prepared.handle.attemptId, prepared.handle.operationId);
-    const target = lifecycleSlot(prepared.handle.nativeId); assertCachePath(target);
-    const existing = rowsFor(object(readRegistry(dcodeRegistryFile()).plugins, 'registry plugins')[prepared.handle.nativeId]);
+    const target = lifecycleSlot(prepared.handle.nativeId, prepared.handle.projectedFingerprint!); assertCachePath(target);
     mkdirSync(dirname(target), { recursive: true });
     if (existsSync(target)) {
       const marker = ownership(target);
       if (marker?.pluginId !== prepared.handle.nativeId) throw new Error('dcode lifecycle activation would overwrite foreign content');
-      rmSync(target, { recursive: true });
+      if (fingerprintTree(target) !== prepared.handle.projectedFingerprint) throw new Error('dcode immutable projection slot has diverged');
+    } else {
+      // Stage and target live under the same native cache filesystem. Publish
+      // only a complete sealed directory; never mutate a registered live root.
+      renameSync(prepared.stagingRoot, target);
     }
-    cpSync(prepared.stagingRoot, target, { recursive: true });
     setDcodeRow(prepared.handle.nativeId, [{ installPath: target }], true);
-    for (const row of existing) {
-      const path = rowInstall(row, prepared.handle.nativeId);
-      if (resolve(path) !== resolve(target)) { assertCachePath(path); rmSync(path, { recursive: true, force: true }); }
-    }
     return { receiptId: `dcode-apply:${prepared.handle.operationId}`, changed: true };
   },
   disable: async prepared => {
@@ -269,8 +269,9 @@ const dcodeDefinition: LifecycleHostDefinition = {
   },
   rollback: async handle => {
     await acquireNativeLock(handle.attemptId, handle.operationId);
-    const target = lifecycleSlot(handle.nativeId); assertCachePath(target);
-    if (existsSync(target)) {
+    const target = handle.projectedFingerprint === null ? undefined : lifecycleSlot(handle.nativeId, handle.projectedFingerprint);
+    if (target !== undefined) assertCachePath(target);
+    if (target !== undefined && existsSync(target) && !handle.prior.contentRoots.some(root => resolve(root.path) === resolve(target))) {
       if (ownership(target)?.pluginId !== handle.nativeId) throw new Error('dcode rollback target is not owned');
       rmSync(target, { recursive: true });
     }
@@ -285,7 +286,21 @@ const dcodeDefinition: LifecycleHostDefinition = {
     if (state.enablementExisted === false && Object.keys(boolObject(readEnablement(dcodeEnablementFile()).enabledPlugins, 'enabledPlugins')).length === 0) rmSync(dcodeEnablementFile());
     return { receiptId: `dcode-rollback:${handle.operationId}`, changed: true };
   },
-  cleanup: async reference => { try { const dir = lifecycleDirectory(reference.attemptId, reference.operationId); rmSync(dir, { recursive: true, force: true }); } finally { await releaseNativeLock(reference.attemptId, reference.operationId); } return { cleanupId: `dcode-cleanup:${reference.operationId}`, completed: true }; },
+  cleanup: async (reference, disposition) => {
+    try {
+      const dir = lifecycleDirectory(reference.attemptId, reference.operationId);
+      const next = readDoc(join(dir, 'rollback', 'next-path.json'), {}, 'cleanup target');
+      if (disposition === 'verified-commit' && typeof next.target === 'string') {
+        const prior = readDoc(join(dir, 'rollback', 'state.json'), {}, 'rollback state');
+        for (const row of rowsFor(prior.row)) {
+          const path = rowInstall(row, reference.operationId); assertCachePath(path);
+          if (resolve(path) !== resolve(next.target)) rmSync(path, { recursive: true, force: true });
+        }
+      }
+      rmSync(dir, { recursive: true, force: true });
+    } finally { await releaseNativeLock(reference.attemptId, reference.operationId); }
+    return { cleanupId: `dcode-cleanup:${reference.operationId}`, completed: true };
+  },
 };
 
 export const dcodeLifecycle = createLifecycleHostAdapter(dcodeDefinition);
