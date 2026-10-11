@@ -198,6 +198,12 @@ async function runActivation(
     verified = host.adapter.verify(receipt.handle, observation);
   } catch (error) {
     const reason = thrownReason(error);
+    if (receipt === undefined && ledger.journalState(plan.attemptId, operation.operationId) === 'applying'
+      && error instanceof LifecycleHostPhaseError && !error.mutationStarted) {
+      ledger.markNotApplied(plan, operation);
+      if (preparation !== undefined) await abortPreparation(host, preparation);
+      return stop(operation, reason);
+    }
     if (handle !== undefined && ledger.journalState(plan.attemptId, operation.operationId) === 'applying') {
       return recoverApplied(plan, operation, host, ledger, handle, reason);
     }
@@ -426,6 +432,7 @@ async function runRetire(
   } catch (error) {
     return stop(operation, thrownReason(error));
   }
+  let preparation: Awaited<ReturnType<PlannerHost['adapter']['prepareRetirement']>> | undefined;
   let receipt: Awaited<ReturnType<PlannerHost['adapter']['retire']>> | undefined;
   let verified: ReturnType<PlannerHost['adapter']['verify']> | undefined;
   try {
@@ -436,12 +443,19 @@ async function runRetire(
       selection: prepared.selection,
       activation: prepared.activation,
     });
+    preparation = sealed;
     ledger.markPruning(plan, operation);
     receipt = await host.adapter.retire(sealed);
     const observation = await host.adapter.readback(receipt.handle);
     verified = host.adapter.verify(receipt.handle, observation);
   } catch (error) {
     const reason = thrownReason(error);
+    if (receipt === undefined && ledger.journalState(plan.attemptId, operation.operationId) === 'applying'
+      && error instanceof LifecycleHostPhaseError && !error.mutationStarted) {
+      ledger.markNotApplied(plan, operation);
+      if (preparation !== undefined) await abortPreparation(host, preparation);
+      return stop(operation, reason);
+    }
     if (receipt !== undefined) return recoverApplied(plan, operation, host, ledger, receipt.handle, reason);
     return stop(operation, reason);
   }
@@ -614,6 +628,14 @@ class Ledger {
 
   markApplying(plan: FrozenPlan, operation: LifecyclePlanOperation): void {
     this.replaceAttempt(plan, (attempt) => this.journaled(attempt, operation.operationId, 'applying', 'applying', true));
+  }
+
+  /** A definitive pre-apply refusal must not authorize rollback of another writer's bytes. */
+  markNotApplied(plan: FrozenPlan, operation: LifecyclePlanOperation): void {
+    this.replaceAttempt(plan, (attempt) => {
+      const next = this.journaled(attempt, operation.operationId, 'not-attempted', 'failed', false);
+      return { ...next, mutationStarted: next.journal.some((row) => mutationBegan(row.state)) };
+    });
   }
 
   markPruning(plan: FrozenPlan, operation: LifecyclePlanOperation): void {
