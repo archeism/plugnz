@@ -8,6 +8,7 @@ import { createLifecyclePlannerHosts, lifecyclePlannerHostKinds } from './lifecy
 import { isScopeId, projectScopeInventory, renderScopeInventory, sameSourceBinding } from './scope-inventory';
 import { parseSyncManifest, SyncManifestValidationError } from './sync-manifest';
 import { readLifecycleState, readState, type LifecycleStateV2 } from './state';
+import { pendingLifecycleOperations } from './pending-lifecycle';
 import { retirementTombstone } from './owned-activation';
 import { withLegacyWriterRecord, writeLifecycleState, writeState } from './state-write';
 import type { InstallRecord } from './state';
@@ -1575,18 +1576,21 @@ export async function main(argv: string[]): Promise<number> {
       return 2;
     }
     const state = readState();
+    const recoveries = pendingLifecycleOperations();
     const all: any[] = [];
     for (const h of selection.selected) {
       const installed = h.listInstalled();
       const pending = state.filter((record) => record.host === h.id && record.pending !== undefined)
         .map((record) => ({ id: record.id, action: record.pending }));
       if (json) {
-        all.push({ host: h.id, plugins: installed, ...(pending.length > 0 ? { pending } : {}) });
+        const recovery = recoveries.filter(row => row.host === h.id);
+        all.push({ host: h.id, plugins: installed, ...(pending.length > 0 ? { pending } : {}), ...(recovery.length > 0 ? { recovery } : {}) });
       } else {
         for (const p of installed) {
           console.log(`${h.id}\t${p.id}\t${p.version || p.sha || 'unknown'}`);
         }
         for (const record of pending) console.log(`${h.id}\t${record.id}\tpending:${record.action}`);
+        for (const row of recoveries.filter(row => row.host === h.id)) console.log(`${h.id}\t${row.id}\trecovery:${row.phase}\toperation:${row.operationId}\tretry:${row.command}\tscope:${row.scopeId}`);
       }
     }
     if (json) console.log(JSON.stringify(all, null, 2));

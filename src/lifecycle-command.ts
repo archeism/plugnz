@@ -3,6 +3,8 @@ import { exitCodeForLifecycleReport, parseLifecycleReport, type LifecycleReport 
 import type { PlannerHost } from './planner';
 import { planLifecycle } from './planner';
 import type { SyncManifest } from './sync-manifest';
+import { recoverLifecycleJournals } from './lifecycle-recovery';
+import type { FrozenSource } from './source';
 
 export interface FrozenLifecycleCommand {
   readonly manifest: SyncManifest;
@@ -19,7 +21,8 @@ export async function runFrozenLifecycle(command: FrozenLifecycleCommand): Promi
   readonly report: LifecycleReport;
   readonly exitCode: number;
 }> {
-  const plan = await planLifecycle({
+  const retainedSources = new Map<string, FrozenSource>();
+  const input = {
     manifest: command.manifest,
     dryRun: command.dryRun,
     validatedAt: command.now,
@@ -27,7 +30,22 @@ export async function runFrozenLifecycle(command: FrozenLifecycleCommand): Promi
     ...(command.command === undefined ? {} : { command: command.command }),
     ...(command.transportSource === undefined ? {} : { transportSource: command.transportSource }),
     ...(command.removalSelection === undefined ? {} : { removalSelection: command.removalSelection }),
-  });
+    retainedSources,
+  };
+  let plan = await planLifecycle({ ...input, recoveryPreflight: !command.dryRun });
+  if (!command.dryRun && plan.kind === 'frozen') {
+    const recovery = await recoverLifecycleJournals(plan, command.hosts, command.now);
+    if (typeof recovery !== 'boolean') {
+      const { reason, operation, changed } = recovery;
+      if (operation === null) {
+        const report = parseLifecycleReport({ ...plan.report, plan: [], outcomes: [], summary: { result: 'incomplete', terminalPhase: 'preflight', mutationStarted: false, changed: false, failureCategory: reason.category, reason, recoveryId: null, readbackId: null } });
+        return { report, exitCode: exitCodeForLifecycleReport(report) };
+      }
+      const report = parseLifecycleReport({ ...plan.report, plan: [operation], outcomes: [{ ...operation, result: 'pending', resourceState: changed ? 'potentially-changed' : 'unknown', activationState: 'unknown', changed, reason }], summary: { result: 'incomplete', terminalPhase: 'finalize', mutationStarted: true, changed, failureCategory: 'recovery', reason, recoveryId: operation.operationId, readbackId: changed && operation.action === 'disable-nonconforming' ? operation.operationId : null } });
+      return { report, exitCode: exitCodeForLifecycleReport(report) };
+    }
+    if (recovery) plan = await planLifecycle(input);
+  }
   const executed = await executeLifecycle({
     plan,
     hosts: command.hosts,

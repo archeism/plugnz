@@ -35,6 +35,7 @@
 import type { HostReader, McpServerEntry } from './host';
 import { hosts as allHosts } from './hosts';
 import { findRecord, readState, type InstallRecord } from './state';
+import { pendingLifecycleOperations } from './pending-lifecycle';
 import { expandRootPlaceholders, gitHead, gitRemoteHead, isExecutableFile, isGitUrl, resolveCommandPath, which } from './exec';
 import { fingerprintInstallation, fingerprintSourceTree } from './fingerprint';
 
@@ -255,6 +256,9 @@ function checkStaleness(host: HostReader, state: InstallRecord[], out: DoctorFin
 export function runDoctor(hostList: HostReader[] = allHosts, state: InstallRecord[] = readState()): DoctorResult {
   const findings: DoctorFinding[] = [];
   const selected = new Set(hostList.map((host) => host.id));
+  for (const pending of pendingLifecycleOperations()) {
+    if (selected.has(pending.host)) findings.push({ host: pending.host, mark: '✗', message: `operation '${pending.operationId}' has pending ${pending.action}/${pending.phase} in attempt '${pending.attemptId}' — retry '${pending.command}' for scope '${pending.scopeId}'` });
+  }
   for (const record of state) {
     if (record.pending !== undefined && selected.has(record.host)) {
       findings.push({ host: record.host, mark: '!', message: `install '${record.id}' has pending ${record.pending} intent — retry the ${record.pending === 'remove' ? 'remove' : 'add/update'} operation` });

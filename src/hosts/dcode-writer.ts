@@ -13,7 +13,7 @@ import { capabilityEvidenceProfiles, createCapabilityEvidenceProfile } from '../
 import { fingerprintTree } from '../fingerprint';
 import { recordedPriorSource } from '../prior-source-proof';
 import { createLifecycleHostAdapter, createTargetInventoryObservation } from '../lifecycle-runtime';
-import type { LifecycleHostDefinition, LifecycleReadbackData, LifecycleTargetIdentity, NativeProjectionRequest, TargetInstallationData } from '../lifecycle-host';
+import type { DurableLifecycleOperation, LifecycleHostDefinition, LifecycleReadbackData, LifecycleTargetIdentity, NativeProjectionRequest, TargetInstallationData } from '../lifecycle-host';
 declare const TextDecoder: { new(): { decode(input: Uint8Array): string } };
 
 const MARKER = '.plgnz-install.json';
@@ -33,6 +33,7 @@ type LockChild = {
   kill(signal?: string): void;
 };
 const nativeLocks = new Map<string, { child: LockChild; exited: Promise<number | null>; isAlive(): boolean }>();
+const recoveringNativeLocks = new Map<string, DurableLifecycleOperation>();
 
 function nativePython(): string {
   const override = process.env['OPEN_PLUGIN_DCODE_PYTHON_BIN'];
@@ -79,6 +80,7 @@ async function acquireNativeLock(attemptId: string, operationId: string): Promis
 
 async function releaseNativeLock(attemptId: string, operationId: string): Promise<void> {
   const key = `${attemptId}:${operationId}`, held = nativeLocks.get(key);
+  recoveringNativeLocks.delete(key);
   if (held === undefined) return;
   nativeLocks.delete(key); held.child.stdin.end();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -155,10 +157,29 @@ function captureDcodeRollback(binding: DcodeBinding, attemptId: string, operatio
   return dir;
 }
 
+function assertRecoveryRollbackMetadata(handle: DurableLifecycleOperation, state: Doc): void {
+  const rows = rowsFor(state.row);
+  if (rows.length !== handle.prior.contentRoots.length || rows.some((row, index) => resolve(rowInstall(row, handle.nativeId)) !== resolve(handle.prior.contentRoots[index]!.path))
+    || handle.prior.presence === 'present' && (state.enabled === true) !== (handle.prior.enablement === 'enabled')) throw new Error('dcode rollback registry snapshot differs from the sealed prior; recovery refused');
+}
+
 async function lockPreparation(binding: DcodeBinding, attemptId: string, operationId: string, expectedObservationId: string): Promise<void> {
   await acquireNativeLock(attemptId, operationId);
   const observed = createTargetInventoryObservation('dcode', { target: binding.target, installations: observeDcodeTarget(binding.target) });
   if (observed.observationId !== expectedObservationId) throw new Error('dcode native inventory changed before locked preparation; refusing stale rollback authority');
+}
+
+async function captureOwnedPreparation<T>(binding: DcodeBinding, attemptId: string, operationId: string, expectedObservationId: string, capture: () => T): Promise<T> {
+  try {
+    await lockPreparation(binding, attemptId, operationId, expectedObservationId);
+    return capture();
+  } catch (error) {
+    // No handle has reached the executor yet: this boundary owns the lock
+    // even when inventory/readback/snapshot capture refuses preparation.
+    try { await releaseNativeLock(attemptId, operationId); }
+    catch (releaseError) { throw new Error(`${error instanceof Error ? error.message : String(error)}; dcode preparation lock release failed: ${releaseError instanceof Error ? releaseError.message : String(releaseError)}`); }
+    throw error;
+  }
 }
 
 function preflightAdoption(request: NativeProjectionRequest): void {
@@ -210,7 +231,8 @@ const dcodeDefinition: LifecycleHostDefinition = {
     if (existsSync(stagingRoot)) throw new Error('dcode preparation stage already exists');
     mkdirSync(stagingRoot, { recursive: true });
     const manifest = declaredManifest(request.snapshot.packageRoot, request.snapshot.packageName);
-    stagePlugin(request.snapshot.packageRoot, stagingRoot, request.snapshot.packageName, manifest.version);
+    try { stagePlugin(request.snapshot.packageRoot, stagingRoot, request.snapshot.packageName, manifest.version); }
+    catch (error) { rmSync(dir, { recursive: true, force: true }); throw error; }
     return { stagingRoot, stagingId: `${request.snapshot.attemptId}:${request.snapshot.operationId}` };
   },
   applyLifecycleDirectives: async projection => {
@@ -261,13 +283,11 @@ const dcodeDefinition: LifecycleHostDefinition = {
   },
   captureDisablePreparation: async request => {
     const binding = { adapterId: 'dcode', ...request.activation };
-    await lockPreparation(binding, request.attemptId, request.operationId, request.selection.targetObservationId);
-    return { prior: dcodeLifecycleReadback(binding), rollbackReference: captureDcodeRollback(binding, request.attemptId, request.operationId), rollbackCoverageOperationIds: request.selection.affectedOperationIds, transition: { requirement: 'restart', status: 'effective' } };
+    return captureOwnedPreparation(binding, request.attemptId, request.operationId, request.selection.targetObservationId, () => ({ prior: dcodeLifecycleReadback(binding), rollbackReference: captureDcodeRollback(binding, request.attemptId, request.operationId), rollbackCoverageOperationIds: request.selection.affectedOperationIds, transition: { requirement: 'restart' as const, status: 'effective' as const } }));
   },
   captureRetirementPreparation: async request => {
     const binding = { adapterId: 'dcode', ...request.activation };
-    await lockPreparation(binding, request.attemptId, request.operationId, request.selection.targetObservationId);
-    return { prior: dcodeLifecycleReadback(binding), rollbackReference: captureDcodeRollback(binding, request.attemptId, request.operationId), rollbackCoverageOperationIds: request.selection.affectedOperationIds, transition: { requirement: 'none', status: 'effective' } };
+    return captureOwnedPreparation(binding, request.attemptId, request.operationId, request.selection.targetObservationId, () => ({ prior: dcodeLifecycleReadback(binding), rollbackReference: captureDcodeRollback(binding, request.attemptId, request.operationId), rollbackCoverageOperationIds: request.selection.affectedOperationIds, transition: { requirement: 'none' as const, status: 'effective' as const } }));
   },
   apply: async prepared => {
     await acquireNativeLock(prepared.handle.attemptId, prepared.handle.operationId);
@@ -309,13 +329,20 @@ const dcodeDefinition: LifecycleHostDefinition = {
   },
   rollback: async handle => {
     await acquireNativeLock(handle.attemptId, handle.operationId);
+    if (!existsSync(join(handle.rollbackReference, 'state.json'))) throw new Error('dcode rollback snapshot is missing; recovery refused');
+    const state = readDoc(join(handle.rollbackReference, 'state.json'), {}, 'rollback state');
+    if (recoveringNativeLocks.has(`${handle.attemptId}:${handle.operationId}`)) assertRecoveryRollbackMetadata(handle, state);
+    for (const [index, root] of handle.prior.contentRoots.entries()) {
+      const backup = join(handle.rollbackReference, `content-${index}`);
+      if (!existsSync(backup) || fingerprintTree(backup) !== root.fingerprint) throw new Error('dcode rollback snapshot bytes do not match the sealed prior');
+      if (recoveringNativeLocks.has(`${handle.attemptId}:${handle.operationId}`) && existsSync(root.path) && fingerprintTree(root.path) !== root.fingerprint) throw new Error('dcode prior root changed outside the sealed operation; refusing stale overwrite');
+    }
     const target = handle.projectedFingerprint === null ? undefined : lifecycleSlot(handle.nativeId, handle.projectedFingerprint);
     if (target !== undefined) assertCachePath(target);
     if (target !== undefined && existsSync(target) && !handle.prior.contentRoots.some(root => resolve(root.path) === resolve(target))) {
-      if (ownership(target)?.pluginId !== handle.nativeId) throw new Error('dcode rollback target is not owned');
+      if (ownership(target)?.pluginId !== handle.nativeId || recoveringNativeLocks.has(`${handle.attemptId}:${handle.operationId}`) && fingerprintTree(target) !== handle.projectedFingerprint) throw new Error('dcode rollback candidate differs from the sealed operation; refusing stale overwrite');
       rmSync(target, { recursive: true });
     }
-    const state = readDoc(join(handle.rollbackReference, 'state.json'), {}, 'rollback state');
     for (const [index, row] of rowsFor(state.row).entries()) {
       const path = rowInstall(row, handle.nativeId); assertCachePath(path);
       const backup = join(handle.rollbackReference, `content-${index}`);
@@ -326,13 +353,33 @@ const dcodeDefinition: LifecycleHostDefinition = {
     if (state.enablementExisted === false && Object.keys(boolObject(readEnablement(dcodeEnablementFile()).enabledPlugins, 'enabledPlugins')).length === 0) rmSync(dcodeEnablementFile());
     return { receiptId: `dcode-rollback:${handle.operationId}`, changed: true };
   },
+  beginRecovery: async handle => {
+    const reference = join(lifecycleDirectory(handle.attemptId, handle.operationId), 'rollback');
+    if (resolve(handle.rollbackReference) !== resolve(reference)) throw new Error('dcode recovery reference escapes the operation-owned artifact directory');
+    assertManagedPath(reference);
+    for (const root of [...handle.prior.contentRoots, ...handle.expected.contentRoots]) assertCachePath(root.path);
+    await acquireNativeLock(handle.attemptId, handle.operationId);
+    recoveringNativeLocks.set(`${handle.attemptId}:${handle.operationId}`, handle);
+  },
   releaseRecovery: async handle => { await releaseNativeLock(handle.attemptId, handle.operationId); },
   cleanup: async (reference, disposition) => {
     try {
       const dir = lifecycleDirectory(reference.attemptId, reference.operationId);
-      const next = readDoc(join(dir, 'rollback', 'next-path.json'), {}, 'cleanup target');
-      if (disposition === 'verified-commit' && typeof next.target === 'string') {
-        const prior = readDoc(join(dir, 'rollback', 'state.json'), {}, 'rollback state');
+      const recovering = recoveringNativeLocks.get(`${reference.attemptId}:${reference.operationId}`);
+      const nextFile = join(dir, 'rollback', 'next-path.json');
+      const priorFile = join(dir, 'rollback', 'state.json');
+      const next = readDoc(nextFile, {}, 'cleanup target');
+      if (disposition === 'verified-commit' && recovering !== undefined) {
+        const retiredRoots = recovering.prior.contentRoots.filter(root => !recovering.expected.contentRoots.some(next => resolve(next.path) === resolve(root.path)));
+        if (existsSync(priorFile)) assertRecoveryRollbackMetadata(recovering, readDoc(priorFile, {}, 'rollback state'));
+        else if (retiredRoots.some(root => existsSync(root.path))) throw new Error('dcode cleanup prior metadata is missing; recovery refused');
+        if (existsSync(nextFile) && (typeof next.target !== 'string' || !recovering.expected.contentRoots.some(root => resolve(root.path) === resolve(next.target as string)))) throw new Error('dcode cleanup target differs from the sealed expected root; recovery refused');
+        for (const root of retiredRoots) {
+          if (existsSync(root.path) && fingerprintTree(root.path) !== root.fingerprint) throw new Error('dcode cleanup prior root changed; refusing stale deletion');
+        }
+        for (const root of retiredRoots) rmSync(root.path, { recursive: true, force: true });
+      } else if (disposition === 'verified-commit' && typeof next.target === 'string') {
+        const prior = readDoc(priorFile, {}, 'rollback state');
         for (const row of rowsFor(prior.row)) {
           const path = rowInstall(row, reference.operationId); assertCachePath(path);
           if (resolve(path) !== resolve(next.target)) rmSync(path, { recursive: true, force: true });
@@ -357,6 +404,7 @@ type Prior =
 type ManifestIdentity = { version: string };
 
 export const dcodeWriter: HostWriter = {
+  lifecyclePinAdapter: dcodeLifecycle,
   ...dcode,
   supportsAdoption: true,
   plannedNativeId: (plugin) => `${plugin.name}@${plugin.marketplace || 'local'}`,
@@ -472,6 +520,7 @@ export const dcodeWriter: HostWriter = {
     if (plugin.path === undefined || !existsSync(plugin.path)) return { changes: [], refusals: [] };
     assertCachePath(plugin.path);
     if (ownership(plugin.path)?.pluginId !== plugin.id) return { changes: [], refusals: [] };
+    if (opts?.dryRun !== true) throw new Error('dcode pin requires the durable lifecycle pin workflow; direct in-place pinning is refused');
     return pinPluginMcpFiles(plugin.path, dcodeMcpCandidates(), opts);
   },
   async remove(id: string): Promise<void> {

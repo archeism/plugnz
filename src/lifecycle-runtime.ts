@@ -597,6 +597,23 @@ export function createLifecycleHostAdapter(definition: LifecycleHostDefinition):
       return mutationReceipt(prepared.handle, result);
     },
 
+    async beginRecovery(handle) {
+      assertHandle(definition.id, handle);
+      if (definition.beginRecovery === undefined) throw phaseError('rollback', 'recovery.failed', new Error(`adapter '${definition.id}' cross-process native CAS fence is unverified; recovery remains pending`));
+      try {
+        await definition.beginRecovery(handle);
+        const version = await definition.probeVersion(handle.target);
+        if (version.kind !== 'detected' || version.version !== handle.detectedVersion || version.probeId !== handle.versionProbeId) throw new Error('recovery native version/probe differs from the sealed operation');
+        const observation = deepFreeze({ ...normalizeReadback(await definition.readback(handle)), phase: 'observed' }) as LifecycleReadbackObservation;
+        try { assertReadbackMatch(handle.prior, observation, 'recovery prior'); return { kind: 'prior' as const, observation }; }
+        catch { assertReadbackMatch(handle.expected, observation, 'recovery candidate'); return { kind: 'expected' as const, observation }; }
+      } catch (error) {
+        try { await definition.releaseRecovery?.(handle); }
+        catch (releaseError) { throw phaseError('rollback', 'recovery.failed', new Error(`${unknownErrorDiagnostic(error)}; releasing recovery fence failed: ${unknownErrorDiagnostic(releaseError)}`)); }
+        throw phaseError('rollback', 'recovery.failed', error);
+      }
+    },
+
     async readback(handle) {
       assertHandle(definition.id, handle);
       const data = await invokePhase('readback', () => definition.readback(handle));
