@@ -32,5 +32,12 @@ and no real native installation writes.
 
 The historical provenance fixtures now use admitted Claude 2.1.295 and the
 canonical Hermes runtime fixture; the four stale positive cases pass without
-bypassing capability checks. Independent re-review and the frozen combined
-full-suite gate remain required before main integration. Skills are unchanged.
+bypassing capability checks.
+
+Independent review by `native_git_standards` (gpt-5.6-sol, Codex harness) returned
+LGTM on this four-file correction only. Its pinned-Bun reruns passed the five
+identity cases (62 assertions) and all 38 historical provenance cases
+(268 assertions), with scoped diff checking clean. It found no API, ownership,
+doctor-boundary or real-home regression. Evolving Codex changes were explicitly
+excluded from that verdict. The frozen combined full-suite gate and complete
+native acceptance remain required before main integration. Skills are unchanged.
