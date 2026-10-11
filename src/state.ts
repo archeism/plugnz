@@ -380,7 +380,7 @@ function importV1(records: InstallRecord[]): LifecycleStateV2 {
       ...(relativeDir === undefined ? {} : { sourceRelativeDir: relativeDir }),
       sourceRevision: record.sourceSha,
       route: { kind: 'legacy-unverified' },
-      ownership: { kind: 'legacy-claim' },
+      ownership: legacyClaimOwnership(record.ownership),
       fingerprints: {
         ...(record.fingerprint === undefined ? {} : { source: record.fingerprint }),
         ...(record.installedFingerprint === undefined ? {} : { installed: record.installedFingerprint }),
@@ -423,6 +423,11 @@ function importV1(records: InstallRecord[]): LifecycleStateV2 {
   }
   state.scopes = [...scopes.values()];
   return validateLifecycleStateDocument(state, 0);
+}
+
+function legacyClaimOwnership(ownership: string | undefined): OwnershipProofRecord {
+  const prior = ownership === undefined ? 'unrecorded' : ownership === 'plgnz' ? 'plgnz' : 'unproven';
+  return { kind: 'legacy-claim', prior };
 }
 
 function projectV2(state: LifecycleStateV2): InstallRecord[] {

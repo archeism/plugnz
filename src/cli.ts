@@ -1631,7 +1631,19 @@ export async function main(argv: string[]): Promise<number> {
         if (current === undefined) throw new Error(`install record '${pair.record.id}' disappeared before apply`);
         const removeOptions = { source: pair.record.source, legacyNativeIds: pair.legacyNativeIds };
         let pending = current;
-        if (lifecycleVersion !== 2) {
+        if (lifecycleVersion === 2) {
+          const fresh = readLifecycleState();
+          if (fresh.sourceVersion !== 2 || fresh.state.stateGeneration !== lifecycleState.stateGeneration) {
+            throw new LifecycleCommandError(reason('internal', 'internal.invariant', `state generation moved before removal of '${nativeId}'`));
+          }
+          try {
+            lifecycleState = withoutRetiredActivation(fresh.state, operation.scope.id, operation.package, nativeId, new Date().toISOString());
+          } catch (error) {
+            throw new LifecycleCommandError(reason('internal', 'internal.invariant', unknownErrorDiagnostic(error)));
+          }
+          writeLifecycleState(lifecycleState, { globalPreflight: 'succeeded' });
+          state = readState();
+        } else {
           pending = { ...current, id: nativeId, pending: 'remove' as const };
           const pendingState = state.map((candidate) => candidate === current ? pending : candidate);
           writeState(pendingState);
@@ -1654,8 +1666,6 @@ export async function main(argv: string[]): Promise<number> {
         }
         pairTerminalPhase = 'finalize';
         if (lifecycleVersion === 2) {
-          lifecycleState = withoutRetiredActivation(lifecycleState, operation.scope.id, operation.package, nativeId, new Date().toISOString());
-          writeLifecycleState(lifecycleState, { globalPreflight: 'succeeded' });
           state = readState();
         } else {
           const finalized = state.filter((candidate) => candidate !== pending);
