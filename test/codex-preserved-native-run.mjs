@@ -1,7 +1,7 @@
 // One complete scenario per controller-owned immutable root; no home relocation.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 
@@ -19,7 +19,8 @@ assert.equal(createHash('sha256').update(readFileSync(join(root, 'plugnz-candida
 assert(Number.isSafeInteger(Number(baseline)) && Number(baseline) > 0);
 writeFileSync(join(root, 'baseline-disk.json'), JSON.stringify({ usedKiB: Number(baseline) / 1024 }), { flag: 'wx' });
 writeFileSync(join(root, 'frozen-inputs.json'), JSON.stringify({ arm, source, v1, v2, v3, baseline: Number(baseline), artifactSha256: 'c72c6e9674c454bc6a54e68c0b89f8670a2017fd54c9d76131234d619fafd606' }, null, 2), { flag: 'wx' });
-const env = { ...process.env, PLGNZ_PROOF_BASE: root, PLGNZ_PROOF_SOURCE: source };
+mkdirSync(join(root, 'tmp'));
+const env = { ...process.env, TMPDIR: join(root, 'tmp'), TMP: join(root, 'tmp'), TEMP: join(root, 'tmp'), PLGNZ_PROOF_BASE: root, PLGNZ_PROOF_SOURCE: source };
 function run(label, script, args) {
   const result = spawnSync(process.execPath, [join(root, script), ...args], { env, cwd: root, encoding: 'utf8', timeout: 180_000, maxBuffer: 4 * 1024 ** 2 });
   writeFileSync(join(root, `${label}-streams.json`), JSON.stringify({ status: result.status, signal: result.signal, error: result.error?.message, stdout: result.stdout, stderr: result.stderr }, null, 2), { flag: 'wx' });

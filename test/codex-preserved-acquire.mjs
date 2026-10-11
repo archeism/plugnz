@@ -2,19 +2,22 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = process.cwd();
 assert.match(root, /^\/vercel\/sandbox\/proof\/codex-acquire-[a-z0-9-]+$/);
 writeFileSync(join(root, 'acquisition-script.mjs'), readFileSync(new URL(import.meta.url)), { flag: 'wx' });
 const supplier = '/vercel/sandbox/native/codex-0162';
+assert(!existsSync(supplier), 'supplier installation must be fresh');
+mkdirSync(supplier, { recursive: false });
+mkdirSync(join(supplier, 'tmp'));
 const caps = readFileSync('/proc/self/status', 'utf8');
 assert.match(caps, /^NoNewPrivs:\s+1$/m);
 for (const field of ['Inh', 'Prm', 'Eff', 'Bnd', 'Amb']) assert.match(caps, new RegExp(`^Cap${field}:\\s+0+$`, 'm'));
 mkdirSync(join(root, 'home'), { recursive: true });
 const result = spawnSync('npm', ['install', '--prefix', supplier, '--ignore-scripts', '--no-audit', '--no-fund', '--registry=https://registry.npmjs.org', '@openai/codex@0.162.0'], {
-  env: { ...process.env, NPM_CONFIG_CACHE: join(supplier, 'npm-cache') },
+  env: { ...process.env, TMPDIR: join(supplier, 'tmp'), TMP: join(supplier, 'tmp'), TEMP: join(supplier, 'tmp'), NPM_CONFIG_CACHE: join(supplier, 'npm-cache') },
   encoding: 'utf8', timeout: 120_000, maxBuffer: 4 * 1024 ** 2,
 });
 writeFileSync(join(root, 'install-streams.json'), JSON.stringify({ status: result.status, signal: result.signal, error: result.error?.message, stdout: result.stdout, stderr: result.stderr }, null, 2), { flag: 'wx' });
