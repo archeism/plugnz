@@ -9,7 +9,7 @@ import { captureSurfaces } from './codex-preserved-native-surfaces.mjs';
 const [phase, name, revision] = process.argv.slice(2);
 const resumeDiscovery = phase === 'bootstrap' && process.argv[5] === 'resume-discovery';
 assert(['bootstrap', 'refresh', 'native-exit', 'foreign-checkout', 'foreign-cache'].includes(phase));
-assert(['rollback', 'foreign', 'cache'].includes(name));
+assert(['rollback', 'foreign', 'cache', 'inactive', 'sparse', 'malformed'].includes(name));
 assert(/^[a-f0-9]{40}$/.test(revision));
 const base = '/vercel/sandbox/proof/codex-native-b029c54-01';
 const root = join(base, name), home = join(root, 'home'), codexHome = join(home, '.codex');
