@@ -515,7 +515,9 @@ test('Claude fresh foreign catalog entry drift blocks before any native write', 
     document.plugins[0]!.metadata.exact = 'changed';
     writeFileSync(catalogFile, JSON.stringify(document));
     const before = fingerprintTree(root);
-    await expect(host.apply(planned.prepared)).rejects.toThrow('selected foreign catalog entry changed');
+    let error: unknown;
+    try { await host.apply(planned.prepared); } catch (caught) { error = caught; }
+    expect(String(error)).toContain('selected foreign catalog entry changed');
     expect(fingerprintTree(root)).toBe(before);
     expect(existsSync(join(root, 'plugins/installed_plugins.json'))).toBe(false);
     expect(existsSync(join(root, 'plugins/cache'))).toBe(false);
@@ -538,13 +540,13 @@ test('Claude foreign catalog binds the whole selected entry but not unrelated ma
     const packageFingerprint = fingerprintTree(initial.packageRoot);
     const snapshot = createFrozenPackageSnapshot({ ...initial, scopeId: scope.id, sourceType: 'local', nativeGit: undefined, snapshotFingerprint: fingerprintTree(sourceRoot), packageFingerprint, inventory: { ...initial.inventory, package: { ...initial.inventory.package, fingerprint: packageFingerprint } } });
     const host = createClaudeCodeLifecycleHost();
-    const installed = await activate(host, snapshot);
-    host.verify(installed.handle, await host.readback(installed.handle));
-
+    const planned = await plan(host, snapshot);
     const document = JSON.parse(readFileSync(catalogFile, 'utf8'));
     document.plugins.push({ name: 'foreign', source: './unrelated', metadata: { retained: true } });
     document.description = 'foreign marketplace description';
     writeFileSync(catalogFile, JSON.stringify(document));
+    const installed = await host.apply(planned.prepared);
+    expect(JSON.parse(readFileSync(catalogFile, 'utf8'))).toEqual(document);
     host.verify(installed.handle, await host.readback(installed.handle));
 
     document.plugins[0].metadata.exact = 'changed';

@@ -1474,6 +1474,19 @@ function mutateInstall(handle: DurableLifecycleOperation, stagingRoot: string): 
   if (handle.projectedFingerprint === null) throw new Error('claude-code activation is missing its sealed fingerprint');
   const nativeCatalog = matchingForeignLifecycleCatalog(handle.nativeId, handle.scopeId, handle.target, stagingRoot, slotVersion(handle.packageVersion, handle.sourceRevision));
   if (nativeCatalog === null) validateLifecycleCatalog(handle.nativeId, handle.scopeId);
+  const capturedEntry = handle.expected.contentRoots.find(root => root.label === 'selected-catalog-entry');
+  const ownedEntryPath = join(lifecycleCatalogRoot(handle.nativeId), '.claude-plugin', 'marketplace.json');
+  // Fresh installs have no installation row in the target inventory. Bind the
+  // actual foreign entry captured at seal before the first native write too.
+  // Owned entries may deliberately need repair, so their generated expectation
+  // is not a compare-and-swap precondition on the old owned catalog.
+  if (nativeCatalog !== null || (capturedEntry !== undefined && capturedEntry.path !== ownedEntryPath)) {
+    const liveEntry = lifecycleCatalogEntryObservation(handle.nativeId)[0];
+    if (nativeCatalog === null || capturedEntry === undefined || capturedEntry.path === ownedEntryPath
+      || liveEntry?.path !== capturedEntry.path || liveEntry.fingerprint !== capturedEntry.fingerprint) {
+      throw new Error('claude-code selected foreign catalog entry changed after preparation; re-plan before applying');
+    }
+  }
   const beforeCatalog = lifecycleSelectedMutationState(handle.nativeId);
   const installPath = cacheSlot(handle.nativeId, slotVersion(handle.packageVersion, handle.sourceRevision));
   const before = existsSync(installPath) ? fingerprintTree(installPath) : null;

@@ -180,3 +180,42 @@ the shared durable evidence directory allocates 22,408 KiB. No additional
 Sandbox or real native installation was used for this correction. Independent
 re-review and fresh actual native-loader acceptance remain required before
 integration; the local gates do not replace them. Skills remain unchanged.
+
+## Fresh-install first-write compare-and-swap after `d49b23d`
+
+Standards review reproduced another race: seal a fresh compatible foreign
+catalog install, change the selected entry's opaque metadata, then apply.
+The empty target installation inventory did not bind that foreign entry;
+apply wrote the cache/registry before later readback rejected the drift.
+The exact isolated regression was committed RED at `e2ea23a`: 12 passed,
+1 failed, 58 assertions. Retained `issue35-claude-fresh-entry-cas-red.log`
+SHA-256 is `2a275d192341c31dfd24ff32b0504e8448143c39c835924c9311a69a879686d2`.
+
+Managed apply now compares the live foreign selected entry's path and complete
+digest against the sealed capture before the first native write, even with no
+installed row. A newly appeared foreign registration cannot replace an owned
+projection's captured authority. Generated owned entries remain repairable;
+their expected replacement is not confused with a foreign-entry precondition.
+The drift regression verifies the entire isolated root stays byte-identical,
+with no registry, cache, or settings created. The positive case changes a
+sibling entry and top-level marketplace metadata between seal and apply,
+then verifies successful activation retains that exact foreign document.
+
+Same five-file gates: native Bun **53 passed, 292 assertions**, 18.44 seconds
+wall time, 130,132 KiB maximum RSS; packed Node **53 passed, 292 assertions**,
+20.15 seconds wall time, 127,384 KiB maximum RSS. Typecheck, build, whitespace,
+and the doctor reader-import gate passed. The final route-only rerun passed
+13 tests and 63 assertions after replacing an unsupported test-only
+`expect.rejects` typing with an explicit captured-error assertion; no runtime
+schema or test assertions were weakened. Raw logs remain outside Git:
+
+- `issue35-claude-fresh-entry-cas-bun.log`, SHA-256
+  `6f501602c6fd279afb3cb9d5e7749353f1ae8e7e29f50fb0e07a67454b2d37bb`.
+- `issue35-claude-fresh-entry-cas-packed.log`, SHA-256
+  `e737b97a278f3a2d299817df915046244484195873071d3874d4e7f8a72f6e46`.
+- Built artifact SHA-256
+  `e2e2fc6a5f1ccea6b8e2e1208e822b1146b247e6673ca1767adc6ebd1e097223`.
+
+No Sandbox was started and no real native installation was called. Fresh
+independent two-axis review and actual native-loader proof remain open;
+these isolated CAS gates are not native acceptance. Skills are unchanged.
