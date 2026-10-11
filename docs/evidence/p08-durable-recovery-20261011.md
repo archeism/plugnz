@@ -112,3 +112,11 @@ that incomplete report, which can obscure the actionable recovery diagnostic.
 This is a producer defect, not permission to weaken consumer coverage checks.
 The candidate remains off main pending corrected complete-plan reporting,
 multi-journal recovery accounting, independent review and fresh verification.
+
+The failing probe and its output are retained in the same evidence directory
+(the scratch probe imports the integration worktree's public CLI harness):
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `plugnz-b55-missing-sibling-recovery.test.ts` | `9df142f82bf7498b6eabb4a10e93f804a23c6908145304296578227c01caafb4` |
+| `plugnz-b55-missing-sibling-recovery.log` | `8f2b625286c6207c7f68d6903cba44a85a65206f8461e61ef478767e87fc8e25` |
