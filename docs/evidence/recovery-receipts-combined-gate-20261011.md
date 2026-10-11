@@ -120,3 +120,14 @@ fixture uses isolated native boundaries, not a released-harness runtime proof.
 
 No producer main integration, new publication, Personal pin advancement or real
 fleet deployment follows from these private checkpoints. Skills remain unchanged.
+
+### Supplier release recheck
+
+An authenticated installation is not needed for a read-only supplier release
+check. On 2026-10-11, fresh [official PyPI metadata](https://pypi.org/pypi/deepagents-code/json)
+still reports latest `deepagents-code` **0.1.83**, uploaded 2026-10-07. Wheel SHA256:
+`e6fafb872b706260f2076c96fa8d66649cf9cc42ea87b41769676167988f1893`.
+Thus the retained 0.1.83 native tests are not merely behind a newer published
+release. This checks the release frontier only, not current unreleased upstream
+component behavior, and does not upgrade the real 0.1.56 installation or settle
+the human-owned external feature dependency.
