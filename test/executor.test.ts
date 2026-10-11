@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { createCapabilityEvidenceProfile, type CapabilityStatus } from '../src/capability-evidence';
 import { createDeploymentScopeIdentity } from '../src/deployment-scope';
 import { executeLifecycle } from '../src/executor';
-import { exitCodeForLifecycleReport } from '../src/lifecycle-report';
+import { createLifecycleReason, exitCodeForLifecycleReport } from '../src/lifecycle-report';
+import { LifecycleHostPhaseError } from '../src/lifecycle-runtime';
 import { stateFile } from '../src/paths';
 import { planLifecycle, type LifecyclePlan, type PlannerHost } from '../src/planner';
 import { PACKAGE_SEMANTICS, type CapabilityOperation, type PackageSemantic } from '../src/semantic-inventory';
@@ -23,6 +24,28 @@ afterAll(() => {
 });
 
 describe('lifecycle executor', () => {
+  test('retirement which mutates then throws before its receipt rolls back through the sealed handle', async () => {
+    const root = temp('partial-retirement');
+    const home = join(root, 'home');
+    mkdirSync(home);
+    const source = writePlugin(join(root, 'sources'), 'alpha');
+    const codex = boundHost('codex', join(root, 'codex'), ['install', 'update', 'retire']);
+    await withHome(home, async () => {
+      const installed = expectFrozen(await planLifecycle({ manifest: manifest([syncEntry(source, 'codex')]), dryRun: false, validatedAt: now, hosts: [codex.planner] }));
+      expect((await executeLifecycle({ plan: installed, hosts: [codex.planner], now })).exitCode).toBe(0);
+      const prior = codex.fake.installedFingerprint('alpha');
+      const scopeId = readLifecycleState().state.scopes[0]!.id;
+      const failing: PlannerHost = { ...codex.planner, adapter: { ...codex.planner.adapter, retire: async (prepared) => {
+        await codex.planner.adapter.retire(prepared);
+        throw new LifecycleHostPhaseError('retire', createLifecycleReason('runtime', 'runtime.operation-failed', 'receipt lost after actual retirement'), new Error('receipt lost'), true);
+      } } };
+      const plan = expectFrozen(await planLifecycle({ manifest: manifest([{ operation: 'retire-source', scopeId, target: { kind: 'codex', instance: 'default' } }]), dryRun: false, validatedAt: now, hosts: [failing] }));
+      expect((await executeLifecycle({ plan, hosts: [failing], now })).exitCode).toBe(1);
+      expect(codex.fake.installedFingerprint('alpha')).toBe(prior);
+      expect(readLifecycleState().state.tombstones).toEqual([]);
+      expect(readLifecycleState().state.attempts.at(-1)!.journal[0]!.state).toBe('rolled-back');
+    });
+  });
   test('a frozen plan persists the recovery journal before any host mutation, and a failure stops later mutations', async () => {
     const root = temp('journal-stop');
     const home = join(root, 'home');
@@ -642,7 +665,12 @@ describe('lifecycle executor', () => {
       expect(loaded.state.tombstones).toEqual([]);
       expect(codex.fake.installedFingerprint('alpha')).toBe(alphaBefore);
       expect(codex.fake.installedFingerprint('beta') === null).toBe(false);
-      expect(codex.fake.hostMutationState()).toBe(hostBefore);
+      const afterFailure = JSON.parse(codex.fake.hostMutationState());
+      const beforeFailure = JSON.parse(hostBefore);
+      expect(afterFailure.active).toEqual(beforeFailure.active);
+      expect(afterFailure.registry).toBe(beforeFailure.registry);
+      expect(afterFailure.state).toBe(beforeFailure.state);
+      expect(afterFailure.native).toBe(`${beforeFailure.native}rollback:beta\n`);
     });
   });
 

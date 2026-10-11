@@ -109,6 +109,8 @@ export interface RemoveOptions {
 import type { PluginSource, ResolvedSource } from './source';
 
 export interface HostWriter extends HostReader {
+  /** Offline immutable pin publication for verified lifecycle-owned installs. */
+  readonly lifecyclePinAdapter?: import('./lifecycle-host').LifecycleHostAdapter;
   /** Whether this writer implements explicit legacy adoption. */
   readonly supportsAdoption?: boolean;
   /** Exact public native identity this adapter will expose through readback after apply. */

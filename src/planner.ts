@@ -58,7 +58,7 @@ import {
   type SyncManifestRetireSourceEntry,
   type SyncManifestSyncEntry,
 } from './sync-manifest';
-import type { PersistedTargetIdentity } from './target-identity';
+import { canonicalTargetContext, type PersistedTargetIdentity } from './target-identity';
 
 export type LifecyclePlan =
   | {
@@ -76,9 +76,13 @@ export type LifecyclePlan =
       readonly report: LifecycleReport;
       readonly scopes: readonly {
         readonly scope: DeploymentScopeIdentity;
+        /** Frozen physical target binding; public scope identity intentionally omits context. */
+        readonly target?: LifecycleTargetIdentity;
         readonly selectorMode: 'all' | 'explicit' | 'retired';
         readonly desired: DesiredGenerationRecord | null;
         readonly prune: 'planned' | 'blocked';
+        /** Manual package removal leaves the recorded Source authority unchanged. */
+        readonly retirementPackages?: readonly { readonly packageId: string; readonly nativeId: string }[];
       }[];
       readonly operations: readonly {
         readonly operation: LifecyclePlanOperation;
@@ -109,6 +113,7 @@ export interface PlanLifecycleInput {
   readonly command?: 'add' | 'update' | 'remove';
   /** Original add argument. Carries fetch credentials that must not enter the manifest. */
   readonly transportSource?: string;
+  readonly removalSelection?: readonly { readonly scopeId: string; readonly packageId: string; readonly nativeId: string }[];
 }
 
 type FrozenOperation = Extract<LifecyclePlan, { kind: 'frozen' }>['operations'][number];
@@ -136,6 +141,7 @@ type PreparedRetire = {
   readonly observation: TargetInventoryObservation | null;
   readonly scope: DeploymentScopeIdentity;
   readonly identity: readonly string[];
+  readonly retirementPackages?: readonly { readonly packageId: string; readonly nativeId: string }[];
 };
 
 type Prepared = PreparedSync | PreparedRetire;
@@ -160,7 +166,20 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
   for (const entry of input.manifest.entries) {
     const result = await prepareEntry(entry, input.hosts, loaded.state, command, input.transportSource, transportCache);
     if (result.kind === 'defect') return zeroWrite(command, input.dryRun, result.reason, result.terminalPhase);
-    prepared.push(result);
+    if (input.removalSelection !== undefined) {
+      if (command !== 'remove' || result.kind !== 'retire-source') {
+        return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.invariant', 'package retirement selection is valid only for manual removal'));
+      }
+      const selected = input.removalSelection.filter((row) => row.scopeId === result.scope.id);
+      if (selected.length === 0 || selected.some((row) => !loaded.state.activations.some((activation) =>
+        activation.scopeId === row.scopeId && activation.packageId === row.packageId && activation.nativeId === row.nativeId))) {
+        return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.invariant', 'manual removal selection no longer matches recorded ownership'));
+      }
+      const retirementPackages = selected.map(({ packageId, nativeId }) => ({ packageId, nativeId }))
+        .sort((left, right) => left.packageId.localeCompare(right.packageId) || left.nativeId.localeCompare(right.nativeId));
+      prepared.push({ ...result, retirementPackages,
+        identity: ['remove-packages', result.scope.id, ...retirementPackages.flatMap((row) => [row.packageId, row.nativeId])] });
+    } else prepared.push(result);
   }
 
   const attemptId = lifecycleAttemptId(loaded.state.stateGeneration, prepared.map((item) => item.identity));
@@ -221,6 +240,13 @@ async function prepareSync(
     throw error;
   }
   const scope = deploymentScopeForSyncManifestEntry(entry);
+  const recordedScope = state.scopes.find(row => row.id === scope.id);
+  if (recordedScope?.target.context !== undefined
+    && JSON.stringify(canonicalTargetContext(recordedScope.target.context))
+      !== JSON.stringify(entry.target.context === undefined ? undefined : canonicalTargetContext(entry.target.context))) {
+    return defect(createLifecycleReason('internal', 'internal.invariant',
+      `target context changed for recorded scope '${scope.id}'; use a distinct target instance or retire the recorded scope explicitly`));
+  }
   const pending = pendingDefect(state, scope.id, new Set(selected.map((item) => item.plugin.name)), command);
   if (pending !== null) return defect(pending);
   const host = hosts.find((candidate) => candidate.kinds.includes(entry.target.kind)) ?? null;
@@ -394,6 +420,7 @@ async function planSync(
     kind: 'planned',
     scope: {
       scope: item.scope,
+      target: item.observation?.target ?? item.entry.target,
       selectorMode: item.entry.selectors === undefined ? 'all' : 'explicit',
       desired: desiredGeneration(existing, item.frozen.snapshot.revision, item.frozen.snapshot.fingerprint, packages, validatedAt),
       prune: blocks || retirements.operations.some((row) => row.operation.action !== 'retire-orphan') ? 'blocked' : 'planned',
@@ -525,7 +552,9 @@ async function planRetire(
   state: LifecycleStateV2,
 ): Promise<{ readonly kind: 'planned'; readonly scope: PlannedScope; readonly operations: readonly FrozenOperation[] } | Defect> {
   const activations = state.activations
-    .filter((activation) => activation.scopeId === item.recorded.id)
+    .filter((activation) => activation.scopeId === item.recorded.id
+      && (item.retirementPackages === undefined || item.retirementPackages.some((row) =>
+        row.packageId === activation.packageId && row.nativeId === activation.nativeId)))
     .sort((left, right) => left.packageId < right.packageId ? -1 : left.packageId > right.packageId ? 1 : 0);
   const operations: FrozenOperation[] = [];
   for (const activation of activations) {
@@ -559,8 +588,10 @@ async function planRetire(
     kind: 'planned',
     scope: {
       scope: item.scope,
+      target: item.observation?.target ?? item.recorded.target,
       selectorMode: 'retired',
       desired: null,
+      ...(item.retirementPackages === undefined ? {} : { retirementPackages: item.retirementPackages }),
       prune: operations.length > 0 && operations.every((row) => row.operation.action === 'retire-orphan') ? 'planned' : 'blocked',
     },
     operations,
@@ -1210,7 +1241,9 @@ export function lifecycleAttemptIdForPlannedScopes(
   stateGeneration: number,
   scopes: readonly PlannedAttemptScope[],
 ): string {
-  return lifecycleAttemptId(stateGeneration, scopes.map((planned) => plannedAttemptIdentity(
+  return lifecycleAttemptId(stateGeneration, scopes.map((planned) => planned.retirementPackages !== undefined
+    ? ['remove-packages', planned.scope.id, ...planned.retirementPackages.flatMap((row) => [row.packageId, row.nativeId])]
+    : plannedAttemptIdentity(
     planned.scope.id,
     planned.desired?.sourceFingerprint,
     planned.desired?.packages.map((pkg) => pkg.packageId),
@@ -1222,6 +1255,7 @@ type PlannedAttemptScope = {
   readonly scope: { readonly id: string };
   readonly selectorMode: 'all' | 'explicit' | 'retired';
   readonly desired: { readonly sourceFingerprint: string; readonly packages: readonly { readonly packageId: string }[] } | null;
+  readonly retirementPackages?: readonly { readonly packageId: string; readonly nativeId: string }[];
 };
 
 function plannedAttemptIdentity(

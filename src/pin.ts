@@ -31,6 +31,7 @@ import { writers as allWriters } from './hosts/writers';
 import { findRecord, readLifecycleState, readState, type InstallRecord, type LifecycleStateV2 } from './state';
 import { writeLifecycleState, writeState } from './state-write';
 import { fingerprintTree } from './fingerprint';
+import { runOfflineLifecyclePin } from './pin-lifecycle';
 
 export interface PinFinding {
   host: string;
@@ -67,12 +68,21 @@ export async function runPin(options: PinRunOptions = {}): Promise<PinRunResult>
   const selected = selectTargets(candidates, options);
   const findings: PinFinding[] = [];
   let ledgerChanged = false;
+  const changedRecords = new Set<InstallRecord>();
 
   for (const host of selected) {
     if (!host.detect()) continue;
     for (const plugin of host.listInstalled()) {
       if (plugin.path === undefined) continue;
-      const outcome = await host.pin(plugin, { dryRun: options.dryRun });
+      let outcome;
+      try {
+        outcome = host.lifecyclePinAdapter === undefined
+          ? await host.pin(plugin, { dryRun: options.dryRun })
+          : await runOfflineLifecyclePin(host, plugin, options.dryRun === true);
+      } catch (error) {
+        findings.push({ host: host.id, mark: '✗', message: `plugin '${plugin.id}' pin failed — ${(error as Error).message}` });
+        continue;
+      }
       const prefix = options.dryRun === true ? '[dry-run] ' : '';
       for (const change of outcome.changes) {
         findings.push({
@@ -91,6 +101,7 @@ export async function runPin(options: PinRunOptions = {}): Promise<PinRunResult>
         });
       }
       if (outcome.changes.length === 0) continue;
+      if (host.lifecyclePinAdapter !== undefined) continue; // Its verified transaction already committed the ledger.
 
       const record = findRecord(state, host.id, plugin.id);
       if (record === undefined) {
@@ -104,6 +115,7 @@ export async function runPin(options: PinRunOptions = {}): Promise<PinRunResult>
         continue;
       }
       if (options.dryRun === true) continue;
+      changedRecords.add(record);
       const pins = new Set(record.pins ?? []);
       for (const change of outcome.changes) pins.add(change.server);
       const next = [...pins].sort();
@@ -120,11 +132,11 @@ export async function runPin(options: PinRunOptions = {}): Promise<PinRunResult>
     }
   }
 
-  if (ledgerChanged) persistRecordedPins(state, options.state !== undefined);
+  if (ledgerChanged) persistRecordedPins(state, options.state !== undefined, changedRecords);
   return { findings, exitCode: findings.some((f) => f.mark === '✗') ? 1 : 0 };
 }
 
-function persistRecordedPins(records: InstallRecord[], legacyLedger: boolean): void {
+function persistRecordedPins(records: InstallRecord[], legacyLedger: boolean, changedRecords: ReadonlySet<InstallRecord>): void {
   const loaded = legacyLedger ? null : readLifecycleState();
   if (loaded === null || loaded.sourceVersion !== 2) {
     writeState(records);
@@ -136,7 +148,7 @@ function persistRecordedPins(records: InstallRecord[], legacyLedger: boolean): v
     stateGeneration: loaded.state.stateGeneration + 1,
     activations: loaded.state.activations.map((activation) => {
       const scope = scopes.get(activation.scopeId);
-      const record = records.find((candidate) => candidate.host === scope?.target.kind && candidate.id === activation.nativeId);
+      const record = records.find((candidate) => changedRecords.has(candidate) && candidate.host === scope?.target.kind && candidate.id === activation.nativeId);
       if (record === undefined) return activation;
       return {
         ...activation,

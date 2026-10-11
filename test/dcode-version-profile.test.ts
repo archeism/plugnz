@@ -111,7 +111,7 @@ exit 91
       await dcodeWriter.add(ordinary.plugin, ordinary.resolved);
       const recorded = JSON.parse(readFileSync(registry(root), 'utf8')) as { plugins: { 'addy@personal': Array<{ installPath: string; version: string }> } };
       const installed = recorded.plugins['addy@personal'][0]!;
-      expect(installed.version).toBe('0.1.0');
+      expect(installed.version).toBeUndefined();
       expect(installed.installPath.startsWith(`${managedRoot(root)}/`)).toBe(true);
       expect(readFileSync(join(installed.installPath, 'skills/a/SKILL.md'), 'utf8')).toContain('ordinary skill');
     });

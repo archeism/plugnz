@@ -38,7 +38,7 @@ export function probeDcodeVersion(): DcodeVersionObservation {
   return { kind: 'detected', version, probeId: `dcode:${version}` };
 }
 
-function dcodeBinary(): string | undefined {
+export function dcodeBinary(): string | undefined {
   const override = process.env['OPEN_PLUGIN_DCODE_BIN'];
   if (override !== undefined && override.length > 0) return override;
   return which('dcode') ?? undefined;
@@ -120,8 +120,15 @@ export const dcode: HostReader = {
       if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue;
       const row = entry as Record<string, unknown>;
       const path = typeof row.installPath === 'string' ? row.installPath : typeof row.install_path === 'string' ? row.install_path : undefined;
+      let declaredVersion: string | undefined;
+      if (path && existsSync(path)) {
+        for (const relative of ['plugin.json', '.claude-plugin/plugin.json', '.codex-plugin/plugin.json']) {
+          try { const manifest = JSON.parse(readFileSync(join(path, relative), 'utf8')); if (typeof manifest.version === 'string') { declaredVersion = manifest.version; break; } } catch { /* Optional read-only manifest fallback. */ }
+        }
+      }
       const at = id.indexOf('@'); const name = at < 0 ? id : id.slice(0, at); const marketplace = at < 0 ? undefined : id.slice(at + 1);
-      const plugin: InstalledPlugin = { id, name, ...(marketplace ? { marketplace } : {}), ...(path && existsSync(path) ? { path } : {}), ...(typeof row.version === 'string' ? { version: row.version } : {}), ...(enabled.enabledPlugins[id] === true ? { enabled: true } : { enabled: false }) };
+      const version = typeof row.version === 'string' ? row.version : declaredVersion;
+      const plugin: InstalledPlugin = { id, name, ...(marketplace ? { marketplace } : {}), ...(path && existsSync(path) ? { path } : {}), ...(version === undefined ? {} : { version }), ...(enabled.enabledPlugins[id] === true ? { enabled: true } : { enabled: false }) };
       result.push(plugin);
     }
     return result;

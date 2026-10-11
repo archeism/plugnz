@@ -12,6 +12,7 @@ export interface FrozenLifecycleCommand {
   readonly command?: 'add' | 'update' | 'remove';
   /** Original add argument. Carries fetch credentials that must not enter the manifest. */
   readonly transportSource?: string;
+  readonly removalSelection?: readonly { readonly scopeId: string; readonly packageId: string; readonly nativeId: string }[];
 }
 
 export async function runFrozenLifecycle(command: FrozenLifecycleCommand): Promise<{
@@ -25,6 +26,7 @@ export async function runFrozenLifecycle(command: FrozenLifecycleCommand): Promi
     hosts: command.hosts,
     ...(command.command === undefined ? {} : { command: command.command }),
     ...(command.transportSource === undefined ? {} : { transportSource: command.transportSource }),
+    ...(command.removalSelection === undefined ? {} : { removalSelection: command.removalSelection }),
   });
   const executed = await executeLifecycle({
     plan,

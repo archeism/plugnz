@@ -99,7 +99,7 @@ describe('dcode lifecycle', () => {
       expect(marker.sourceRevision).toBe('local');
       expect(marker.fingerprint).toBe('ordinary skill\n');
       expect(marker.projectedFingerprint).toMatch(/^[0-9a-f]{64}$/);
-      expect(JSON.parse(readFileSync(registry(root), 'utf8')).plugins['addy@personal'][0].version).toBe('0.1.0');
+      expect(JSON.parse(readFileSync(registry(root), 'utf8')).plugins['addy@personal'][0].version).toBeUndefined();
       expect(existsSync(hashed(root))).toBe(false);
       expect(readFileSync(join(item.plugin.dir, 'plugin.json'), 'utf8')).toBe(sourceManifest);
       expect(readFileSync(join(installed!.path!, 'plugin.json'), 'utf8')).toContain('"autoUpdate": false');
@@ -554,7 +554,7 @@ describe('dcode lifecycle', () => {
       expect(existsSync(managedRoot(root))).toBe(false);
     });
   });
-  test('pin rewrites an owned slot and leaves a foreign cache untouched', async () => {
+  test('pin previews owned bytes but refuses direct in-place mutation and leaves foreign cache untouched', async () => {
     await isolated(async root => {
       const item = incoming();
       writeFiles(item.plugin.dir, { '.mcp.json': '{"mcpServers":{"fixture":{"command":"true"}}}\n' });
@@ -563,10 +563,10 @@ describe('dcode lifecycle', () => {
       const bare = '{"mcpServers":{"fixture":{"command":"true"}}}\n';
       writeFileSync(join(owned, '.mcp.json'), bare);
       const installed = dcode.listInstalled().find((plugin) => plugin.id === 'addy@personal');
-      const pinned = await dcodeWriter.pin(installed!);
+      const pinned = await dcodeWriter.pin(installed!, { dryRun: true });
       expect(pinned.changes.length).toBe(1);
-      expect(readFileSync(join(owned, '.mcp.json'), 'utf8')).toContain('/true');
-      writeFileSync(join(owned, '.mcp.json'), bare);
+      expect(readFileSync(join(owned, '.mcp.json'), 'utf8')).toBe(bare);
+      expect((await failed(() => dcodeWriter.pin(installed!))).message).toContain('durable lifecycle pin workflow');
       const wrongId = await dcodeWriter.pin({ id: 'other@personal', name: 'other', path: owned });
       expect(wrongId.changes).toEqual([]);
       expect(wrongId.refusals).toEqual([]);

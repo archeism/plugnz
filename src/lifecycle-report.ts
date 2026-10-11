@@ -386,7 +386,14 @@ function assertOutcome(
   }
   const containment = outcome['action'] === 'retain-prior' || outcome['action'] === 'disable-nonconforming';
   const appliedDisablement = outcome['action'] === 'disable-nonconforming' && outcome['changed'] === true;
-  if (containment && !dryRun) {
+  if (outcome['action'] === 'disable-nonconforming' && outcome['result'] === 'succeeded') {
+    throw contradiction(`disablement '${outcome['operationId']}' cannot claim Desired convergence`);
+  }
+  if (!dryRun && outcome['action'] === 'disable-nonconforming' && outcome['resourceState'] === 'retained'
+    && outcome['activationState'] === 'inactive' && outcome['changed'] !== true) {
+    throw contradiction(`disablement '${outcome['operationId']}' cannot claim inactive containment without a verified mutation`);
+  }
+  if (containment && !dryRun && (outcome['action'] === 'retain-prior' || (isObject(reason) && reason['category'] === 'capability'))) {
     const expectedResourceState = 'retained';
     const expectedActivationState = outcome['action'] === 'retain-prior'
       ? 'retained-prior'
