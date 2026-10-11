@@ -5,6 +5,37 @@ import { bytesToText, withLifecycleCliHarness } from './lifecycle-cli-harness';
 import { fakeDcodeLockInterpreter } from './dcode-fake-lock';
 import { parseLifecycleReport } from '../src/lifecycle-report';
 
+test('a broken recovery ledger releases the native lock and retains recovery artifacts with a loud diagnostic', async () => {
+  for (const readbackFault of [true, false]) {
+  await withLifecycleCliHarness((harness) => {
+    harness.writeHome({ '.deepagents/.keep': '' });
+    const source = harness.source('disable-broken-ledger', { 'plugin.json': '{"name":"demo","version":"1.0.0"}\n' });
+    const steps = () => Array.from({ length: 16 }, () => ({ args: ['--version'], stdout: 'deepagents-code 0.1.83\n' }));
+    const initial = harness.fakeNative('initial', steps());
+    const env = { OPEN_PLUGIN_DCODE_BIN: initial.path, OPEN_PLUGIN_DCODE_PYTHON_BIN: fakeDcodeLockInterpreter(harness.root) };
+    const installed = harness.run(['sync', source, '--target', 'dcode', '--json'], { env });
+    expect(installed.exitCode).toBe(0);
+    const state = JSON.parse(bytesToText(installed.state.after!));
+    state.activations[0].activationState = 'nonconforming';
+    writeFileSync(join(harness.home, 'state.json'), JSON.stringify(state));
+    mkdirSync(join(source, 'commands'));
+    writeFileSync(join(source, 'commands/unsupported.md'), '---\ndescription: command\n---\nunsupported command\n');
+    const broken = harness.fakeNative('broken-ledger', steps().map((step, index) => index === 2 ? { ...step, writes: {
+      [join(harness.home, 'state.json')]: '{broken ledger',
+      ...(readbackFault ? { [join(harness.home, '.deepagents/.state/.plgnz-dcode-readback-fault')]: 'fault\n' } : {}),
+    } } : step));
+    const failed = harness.run(['sync', source, '--target', 'dcode', '--json'], { env: { ...env, OPEN_PLUGIN_DCODE_BIN: broken.path }, timeoutMs: 5_000 });
+    expect(failed.exitCode).toBe(1);
+    expect(failed.stderr).toBe('');
+    const report = parseLifecycleReport(JSON.parse(failed.stdout));
+    expect(report.outcomes[0]!.reason!.code).toBe('recovery.required');
+    expect(report.outcomes[0]!.reason!.diagnostic).toContain('recovery ledger');
+    expect(bytesToText(failed.state.after!)).toBe('{broken ledger');
+    expect(Object.keys(failed.stores.dcode.after.files).some(path => path.includes('/rollback/state.json'))).toBe(true);
+  });
+  }
+}, 20_000);
+
 test('unsupported desired functionality disables a proven nonconforming dcode activation without delivering or deleting it', async () => {
   await withLifecycleCliHarness((harness) => {
     harness.writeHome({ '.deepagents/.keep': '' });
