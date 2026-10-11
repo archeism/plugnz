@@ -52,3 +52,43 @@ No live/loose proof roots were deleted. Published source inspected at
 `c1382380de69521303b416720a52f42d51af6248`: core-plugins Git operations set
 `GIT_OPTIONAL_LOCKS=0`; inspected store/marketplace paths do not establish a
 cross-process mutation lock. Do not infer concurrency-safe whole-store rollback.
+
+## Public adapter proof and remaining negative gate
+
+Draft artifact SHA-256
+`c466e4c4ce2c94aa735afb075079a1f0fb2b495e2ea4daac32e73eec0d033c6a`
+(production changes later checkpointed as `7d28ae6`, prior `88d89c5`). Real public
+`sync https://github.com/archeism/plugnz.git#finish/codex-native-proof --target
+codex --json` installed Managed V1
+`d42234b1adc9bac2a4d1a93d5cab26070494d751`. After the approved append-only V2
+commit `fc5460078592bfd8ae84f1c1e2eecd15edb7a416`, and native catalog ref retargeting
+to exactly that SHA, the same public Source and unchanged scope
+`scope-v1-bd9702483ad22bc39b6362f522ef11ef8687162fec807b27ed75536275c0669e`
+returned `route-migrate/native/succeeded/present/active-conforming`; native
+checkout HEAD and skill bytes matched V2 at unchanged declared version 0.1.0.
+`test/codex-public-native-probe.mjs` preserves this sequenced probe.
+
+The public rollback probe is a **negative gate, not a completed native-failure
+proof**. The permission wrapper delegates every invocation to released Codex,
+temporarily removing cache-parent write permission only around native upgrade
+and restoring permission before returning. Its first attempt was refused because
+Sandbox copying did not preserve executable mode. After chmod, already-installed
+V2 yielded a native no-op instead of the intended permission failure. Tampering
+the observed prior resource yielded a genuine public `readback.mismatch`:
+`pending/potentially-changed/unknown`, with mutationStarted=true and recovery and
+readback operation `operation-v1-d58d05ea0756ed43ba4bd89e097ec4e961c9f261e5caac8ee33b909219e3b77e`.
+The probe's exact prior cache/config/data/checkout comparison passed, then its
+required clean recovery assertion failed. The executor deliberately reports
+pending readback even after verified rollback for an original readback failure;
+this is not proof of a clean runtime-failure rollback receipt. The intended
+native-exit failure gate remains unmet. Concurrency/foreign checkout mutation
+admission also remains unverified; do not lift that guard from this evidence.
+
+Final full isolated proof archive (including public reports, stores and journal)
+is `/tmp/plugnz-codex-native-evidence/native-final-archive.tar.gz`, 12 MB,
+2,444 entries, SHA-256
+`13db1f0856ddd544da40e432de3cfd5fc4f9945277b680dd29d953f4abfa636b`.
+Restored public rollback report matches separately copied SHA-256
+`e39a8e943718fd42e244981f4bf113dc3b4178d66e5958d5a995755983a2eaa5`.
+The fixture branch is not a product integration branch. Probe source syntax
+checks passed; native proof did not use an LLM API. No skill revision was made.
