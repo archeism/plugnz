@@ -1,14 +1,12 @@
 /** Hermes portable package plus native discovery/command companion lifecycle. */
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createCapabilityEvidenceProfile } from '../capability-evidence';
 import { projectPluginForHermes } from '../conversion';
 import { fingerprintTree } from '../fingerprint';
 import type { AddOptions, HostWriter, InstalledPlugin, PinOptions, PinOutcome } from '../host';
 import {
-  HERMES_PORTABLE_SURFACE,
-  HERMES_PORTABLE_SURFACE_PROBE,
   decideHermesNativeUpdate,
   hermesCommandCompanionId,
   hermesNativeUpdateProof,
@@ -26,14 +24,16 @@ import type {
   NativeMutationScopeRequest,
   NativeProjectionRequest,
   RetentionObservation,
+  TargetVersionObservation,
 } from '../lifecycle-host';
 import { createLifecycleHostAdapter, createTargetInventoryObservation } from '../lifecycle-runtime';
 import { hermesConfigPath, hermesRoot } from '../paths';
-import { CryptoHasher } from '../runtime';
+import { CryptoHasher, spawnSync, which } from '../runtime';
 import type { PluginSource, ResolvedSource } from '../source';
 import { PACKAGE_SEMANTICS, type PackageSemantic } from '../semantic-inventory';
-import { hermes, hermesInstanceIdentity, hermesPluginsDir, listHermesInstance } from './hermes';
+import { hermes, hermesInstanceIdentity, hermesPluginsDir, hermesProvenManagedRevisions, listHermesInstance } from './hermes';
 import { pinPluginMcpFiles } from '../mcp-write';
+import { hermesNativeBootstrap, hermesEditableFinderBody, hermesUvConsoleBody } from './hermes-launcher-templates';
 
 import { yamlParse, yamlStringify } from '../yaml';
 
@@ -249,25 +249,213 @@ function nativePluginId(logicalId: string): string {
 function matches(marker: string, id: string, ownership: string): boolean { return marker === id || marker === ownership; }
 
 const EFFECTIVE = { requirement: 'none' as const, status: 'effective' as const };
+/** Parse only literal POSIX launcher arguments; never expand or execute them. */
+function launcherWords(body: string): string[] | undefined {
+  const words: string[] = [];
+  let word = '', active = false, quote = '';
+  for (let at = 0; at < body.length; at++) {
+    const ch = body[at]!;
+    if (quote === "'") {
+      if (ch === "'") quote = ''; else word += ch;
+    } else if (quote === '"') {
+      if (ch === '"') quote = '';
+      else if (ch === '\\') { if (++at >= body.length) return undefined; word += body[at]; }
+      else if (ch === '$' && !(word === '' && body.slice(at, at + 3) === '$@"')) return undefined;
+      else if (ch === '`') return undefined;
+      else word += ch;
+    } else if (ch === "'" || ch === '"') { quote = ch; active = true; }
+    else if (/\s/u.test(ch)) { if (active) { words.push(word); word = ''; active = false; } }
+    else if (ch === '\\') { if (++at >= body.length) return undefined; word += body[at]; active = true; }
+    else if (/[;$`|&<>]/u.test(ch)) return undefined;
+    else { word += ch; active = true; }
+  }
+  if (quote !== '') return undefined;
+  if (active) words.push(word);
+  return words;
+}
+
+function literalPythonPath(literal: string): string | undefined {
+  if (literal.startsWith('"')) {
+    try { const value: unknown = JSON.parse(literal); return typeof value === 'string' ? value : undefined; }
+    catch { return undefined; }
+  }
+  if (!/^'(?:[^'\\]|\\['\\])*'$/u.test(literal)) return undefined;
+  return literal.slice(1, -1).replace(/\\(['\\])/gu, '$1');
+}
+
+/** The finder may vary its literal data, not the executable import algorithm. */
+function verifiedEditableFinder(text: string, root: string, version: string): boolean {
+  const literal = String.raw`(?:'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")`;
+  const mapping = /^MAPPING: dict\[str, str\] = (.*)$/mu.exec(text);
+  const namespaces = /^NAMESPACES: dict\[str, list\[str\]\] = (.*)$/mu.exec(text);
+  if (mapping?.[1] === undefined || namespaces?.[1] === undefined) return false;
+  const entry = `${literal}:\\s*${literal}`;
+  const list = `\\[(?:${literal}(?:,\\s*${literal})*)?\\]`;
+  const namespace = `${literal}:\\s*${list}`;
+  if (!new RegExp(`^\\{(?:${entry}(?:,\\s*${entry})*)?\\}$`, 'u').test(mapping[1])
+    || !new RegExp(`^\\{(?:${namespace}(?:,\\s*${namespace})*)?\\}$`, 'u').test(namespaces[1])) return false;
+  const data = [...mapping[1].matchAll(new RegExp(`(${literal}):\\s*(${literal})`, 'gu'))];
+  if (!data.some(row => literalPythonPath(row[1]!) === 'hermes_cli' && literalPythonPath(row[2]!) === join(root, 'hermes_cli'))) return false;
+  const canonical = (keyLiteral: string, pathLiteral: string): boolean => {
+    const key = literalPythonPath(keyLiteral), path = literalPythonPath(pathLiteral);
+    return key !== undefined && /^[a-zA-Z0-9_.-]+$/u.test(key) && path === join(root, ...key.split('.'));
+  };
+  if (data.some(row => !canonical(row[1]!, row[2]!))) return false;
+  for (const row of namespaces[1].matchAll(new RegExp(`(${literal}):\\s*\\[([^\\]]*)\\]`, 'gu'))) {
+    if ([...row[2]!.matchAll(new RegExp(literal, 'gu'))].some(path => !canonical(row[1]!, path[0]))) return false;
+  }
+  return text.replace(mapping[0], '__MAPPING__').replace(namespaces[0], '__NAMESPACES__')
+    .replaceAll(`__editable__.hermes_agent-${version}.finder`, '__EDITABLE_NAME__') === hermesEditableFinderBody;
+}
+
+/** Only the proved root-level, unambiguous venv configuration is admitted. */
+function isolatedVenvConfig(text: string): boolean {
+  const values = new Map<string, string>();
+  for (const line of text.split(/\r?\n/u)) {
+    if (line.trim() === '' || line.trimStart().startsWith('#')) continue;
+    const row = /^\s*([^=]+?)\s*=\s*(.*?)\s*$/u.exec(line);
+    if (row === null) return false;
+    const key = row[1]!.trim().toLowerCase();
+    if (key === '' || values.has(key)) return false;
+    values.set(key, row[2]!.toLowerCase());
+  }
+  return values.get('include-system-site-packages') === 'false';
+}
+
+/** Python imports packages, source, sourceless bytecode and platform extensions.
+ * Conservatively refuse tagged extension suffixes without executing Python to
+ * discover the selected interpreter's dynamic import suffix list. */
+function hasImportShadow(directory: string, modules: string[], allowed: string[] = []): boolean {
+  return readdirSync(directory).some(entry => !allowed.includes(entry) && modules.some(module =>
+    entry === module || entry === `${module}_d.pyd` || (entry.startsWith(`${module}.`)
+      && /\.(?:py|pyc|so|pyd)$/u.test(entry))));
+}
+
+/** Read the selected launcher's actual import binding; mere comments/markers do not qualify. */
+function hermesExecutableSource(binary: string, depth = 0): string | undefined {
+  if (depth > 4 || !isAbsolute(binary) || !existsSync(binary)) return undefined;
+  const executable = realpathSync(binary);
+  if (!statSync(executable).isFile()) return undefined;
+  const text = readFileSync(executable, 'utf8');
+  if (text.startsWith('#!/bin/sh\nexec ')) {
+    const args = launcherWords(text.slice('#!/bin/sh\nexec '.length));
+    if (args?.length === 2 && args[1] === '$@') return hermesExecutableSource(args[0]!, depth + 1);
+    if (args?.length !== 5 || args[1] !== '-I' || args[2] !== '-c' || args[4] !== '$@'
+      || !isAbsolute(args[0]!) || !/^python(?:\d+(?:\.\d+)*)?$/u.test(basename(args[0]!))
+      || !existsSync(args[0]!)) return undefined;
+    const code = args[3]!;
+    // Native _launchers._launcher_script starts here and invokes this entry point.
+    if (!code.startsWith('import os, re, sys\n')
+      || !/\nfrom hermes_cli\.main import main\n/u.test(code)
+      || !/\nsys\.exit\(main\(\)\)\s*$/u.test(code)) return undefined;
+    const bindings = [...code.matchAll(/^sys\.path\.insert\(0, ('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")\)$/gmu)];
+    if (bindings.length !== 1) return undefined;
+    const root = literalPythonPath(bindings[0]![1]!);
+    if (root === undefined || code.replaceAll(bindings[0]![1]!, "'/__PLUGNZ_HERMES_ROOT__'") !== hermesNativeBootstrap) return undefined;
+    return root !== undefined && isAbsolute(root) && existsSync(join(root, 'hermes_cli', 'main.py'))
+      && realpathSync(join(root, 'hermes_cli', 'main.py')).startsWith(`${realpathSync(root)}/`)
+      ? realpathSync(root) : undefined;
+  }
+  // Python console entry points installed editably by pip/uv bind through local
+  // distribution metadata. Do not run Python, import a finder, or evaluate .pth.
+  const interpreter = /^#!([^\n]+)\n/u.exec(text)?.[1];
+  if (interpreter === undefined || !isAbsolute(interpreter) || !existsSync(interpreter)
+    || !/^python(?:\d+(?:\.\d+)*)?$/u.test(basename(interpreter))
+    || text.slice(text.indexOf('\n') + 1) !== hermesUvConsoleBody) return undefined;
+  const venv = dirname(dirname(executable));
+  if (dirname(interpreter) !== join(venv, 'bin') || !existsSync(join(venv, 'pyvenv.cfg'))) return undefined;
+  if (existsSync(join(venv, 'bin', 'pyvenv.cfg')) || !isolatedVenvConfig(readFileSync(join(venv, 'pyvenv.cfg'), 'utf8'))
+    || process.env['PYTHONHOME'] || process.env['PYTHONPATH']) return undefined;
+  if (hasImportShadow(join(venv, 'bin'), ['hermes_cli', 'sitecustomize', 'usercustomize', '_virtualenv'])) return undefined;
+  const lib = join(venv, 'lib');
+  if (!existsSync(lib)) return undefined;
+  const roots: string[] = [];
+  for (const python of readdirSync(lib).filter(name => /^python\d+\.\d+$/u.test(name))) {
+    const packages = join(lib, python, 'site-packages');
+    if (!existsSync(packages)) continue;
+    if (hasImportShadow(packages, ['hermes_cli', 'sitecustomize', 'usercustomize', '_virtualenv'], ['_virtualenv.py'])) return undefined;
+    for (const name of readdirSync(packages).filter(name => /^hermes_agent-[^/]+\.dist-info$/u.test(name))) {
+      const distribution = join(packages, name);
+      const metadata = join(distribution, 'direct_url.json');
+      const entry = join(distribution, 'entry_points.txt');
+      if (!existsSync(metadata) || !existsSync(entry) || !/^hermes\s*=\s*hermes_cli\.main:main$/mu.test(readFileSync(entry, 'utf8'))) continue;
+      const direct: unknown = JSON.parse(readFileSync(metadata, 'utf8'));
+      if (typeof direct !== 'object' || direct === null || !('url' in direct) || typeof direct.url !== 'string'
+        || !('dir_info' in direct) || typeof direct.dir_info !== 'object' || direct.dir_info === null
+        || !('editable' in direct.dir_info) || direct.dir_info.editable !== true || !direct.url.startsWith('file:///')) continue;
+      const root = decodeURIComponent(direct.url.slice('file://'.length));
+      if (!isAbsolute(root) || !existsSync(join(root, 'hermes_cli', 'main.py'))) continue;
+      if (hasImportShadow(root, ['hermes_cli', 'sitecustomize', 'usercustomize', '_virtualenv'], ['hermes_cli'])) return undefined;
+      const version = name.slice('hermes_agent-'.length, -'.dist-info'.length);
+      const finder = `__editable___hermes_agent_${version.replace(/[^a-zA-Z0-9]/gu, '_')}_finder`;
+      if (hasImportShadow(packages, [finder], [`${finder}.py`])
+        || hasImportShadow(join(venv, 'bin'), [finder]) || hasImportShadow(root, [finder])) return undefined;
+      let binding = false;
+      for (const pthName of readdirSync(packages).filter(name => name.endsWith('.pth'))) {
+        const pth = readFileSync(join(packages, pthName), 'utf8').trim();
+        if (pthName === `_virtualenv.pth` && pth === 'import _virtualenv') {
+          const helper = join(packages, '_virtualenv.py');
+          if (!existsSync(helper) || new CryptoHasher('sha256').update(readFileSync(helper, 'utf8')).digest('hex')
+            !== 'cfb3db86aaa53bb62b5ff764970bec2d71c9228590a0ebec57f6ec926cc0bf1a') return undefined;
+        } else if (pthName === `__editable__.hermes_agent-${version}.pth` && pth === root) binding = true;
+        else if (pthName === `__editable__.hermes_agent-${version}.pth` && pth === `import ${finder}; ${finder}.install()`
+          && existsSync(join(packages, `${finder}.py`))
+          && verifiedEditableFinder(readFileSync(join(packages, `${finder}.py`), 'utf8'), root, version)) binding = true;
+        else return undefined;
+      }
+      if (binding && realpathSync(join(root, 'hermes_cli', 'main.py')).startsWith(`${realpathSync(root)}/`)) roots.push(realpathSync(root));
+    }
+  }
+  return roots.length === 1 ? roots[0] : undefined;
+}
+
+/** Observe provenance without launching Hermes: startup may repair its checkout. */
+function observeHermesRevision(): TargetVersionObservation {
+  const binary = process.env['OPEN_PLUGIN_HERMES_BIN'] ?? which('hermes');
+  if (!binary || !existsSync(binary)) return { kind: 'unknown', diagnostic: 'Select an existing Hermes launcher with OPEN_PLUGIN_HERMES_BIN; a profile config does not identify its runtime' };
+  try {
+    const root = hermesExecutableSource(binary);
+    if (root === undefined) return { kind: 'unparseable', diagnostic: 'Hermes launcher source binding is unverified; select its actual executable with OPEN_PLUGIN_HERMES_BIN and prove its whole native/uv body and editable import closure against docs/hosts/hermes.md before admission. Hermes was not executed' };
+    const git = which('git');
+    if (git === null) return { kind: 'unknown' };
+    const env = { ...process.env, GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0',
+      GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' };
+    for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE']) delete (env as Record<string, string | undefined>)[key];
+    const output = (args: string[]): string | undefined => {
+      const result = spawnSync([git, '-C', root, ...args], { env, stdout: 'pipe', stderr: 'pipe', timeout: 10_000 });
+      return result.exitCode === 0 ? new TextDecoder().decode(result.stdout) : undefined;
+    };
+    const lines = output(['rev-parse', '--show-toplevel', 'HEAD'])?.trim().split('\n');
+    if (lines?.length !== 2 || lines[0] === undefined || lines[1] === undefined || !/^[a-f0-9]{40}$/u.test(lines[1])) return { kind: 'unknown' };
+    if (realpathSync(lines[0]) !== root) return { kind: 'unparseable' };
+    const dirty = output(['-c', 'core.fsmonitor=false', 'status', '--porcelain=v1', '--untracked-files=no']);
+    if (dirty === undefined) return { kind: 'unknown' };
+    const revision = dirty.trim() === '' ? lines[1] : `${lines[1]}+dirty`;
+    return { kind: 'detected', version: revision, probeId: `hermes-launcher-git-${revision}` };
+  } catch { return { kind: 'unknown' }; }
+}
+
 const HERMES_SUPPORTED = new Set<PackageSemantic>([
   'ordinary-skills', 'mcp', 'commands', 'model-invocation-control', 'auto-update-control', 'resources',
   'retirement', 'retention-safety', 'readback', 'rollback', 'activation-reload', 'reversible-disable',
 ]);
 
-const hermesManagedProfile = createCapabilityEvidenceProfile({
+const hermesManagedProfiles = hermesProvenManagedRevisions.map(detectedVersion => createCapabilityEvidenceProfile({
   host: 'hermes',
-  detectedVersion: HERMES_PORTABLE_SURFACE,
+  detectedVersion,
   sourceTypes: ['local', 'git'],
   operations: ['install', 'update', 'disable', 'retire'],
   route: 'managed',
   operationStatus: 'supported',
   semantics: Object.fromEntries(PACKAGE_SEMANTICS.map(semantic => [semantic, HERMES_SUPPORTED.has(semantic) ? 'supported' : 'unsupported'])) as Record<PackageSemantic, 'supported' | 'unsupported'>,
   evidence: [
-    'docs/evidence/hermes-native-loader-c0d7294-20260923.json',
+    detectedVersion === 'c0d7294769a38c17ceae51d8f7995e66e1dcae27'
+      ? 'docs/evidence/hermes-native-loader-c0d7294-20260923.json'
+      : 'docs/evidence/hermes-native-loader-dce1e9b-20261011.json',
     'docs/hosts/hermes.md',
     'docs/research/native-plugin-update-capabilities-2026-10-09.md',
   ],
-});
+}));
 
 type HermesStore = { readonly root: string; readonly configPath: string; readonly pluginsDir: string };
 type Marker = Ownership & { sourceType?: 'local' | 'git'; sourceRevision?: string; sourceLocator?: string | null; scopeId?: string };
@@ -610,7 +798,7 @@ function markerBody(input: { nativeId: string; fingerprint: string; sourceType: 
 
 const hermesLifecycleDefinition: LifecycleHostDefinition = {
   id: 'hermes',
-  evidenceProfiles: [hermesManagedProfile],
+  evidenceProfiles: hermesManagedProfiles,
   async probeVersion(target) {
     try {
       const store = storeFor(target);
@@ -622,7 +810,7 @@ const hermesLifecycleDefinition: LifecycleHostDefinition = {
         try { parsed = yamlParse(text); } catch { return { kind: 'unparseable' }; }
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { kind: 'unparseable' };
       }
-      return { kind: 'detected', version: HERMES_PORTABLE_SURFACE, probeId: HERMES_PORTABLE_SURFACE_PROBE };
+      return observeHermesRevision();
     } catch { return { kind: 'unknown' }; }
   },
   async observeTarget(target) {

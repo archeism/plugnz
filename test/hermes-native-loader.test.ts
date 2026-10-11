@@ -1,11 +1,27 @@
 import { expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { hermesWriter } from '../src/hosts/hermes-writer';
 import type { PluginSource, ResolvedSource } from '../src/source';
 import { writeFiles } from './util';
+import { withLifecycleCliHarness } from './lifecycle-cli-harness';
+import { parseLifecycleReport } from '../src/lifecycle-report';
+import { CryptoHasher } from '../src/runtime';
+
+function sourceDigest(root: string): string {
+  const hash = new CryptoHasher('sha256');
+  const walk = (path: string): void => {
+    hash.update(path);
+    const stat = lstatSync(path);
+    if (stat.isSymbolicLink()) hash.update(readlinkSync(path));
+    else if (stat.isDirectory()) for (const entry of readdirSync(path).sort()) walk(join(path, entry));
+    else if (stat.isFile()) hash.update((readFileSync as unknown as (path: string) => Uint8Array)(path));
+  };
+  walk(root);
+  return hash.digest('hex');
+}
 
 const hermesSource = process.env.HERMES_SOURCE_ROOT;
 const conditionalTest = test as typeof test & { if(condition: boolean): typeof test };
@@ -73,6 +89,8 @@ print(json.dumps({
     });
     if (result.status !== 0) throw new Error(`Hermes native probe failed: ${result.stderr}`);
     const evidence = JSON.parse(result.stdout.trim()) as { result: unknown; queued: string; manual_result: unknown; manual_queued: string; commands: string[]; skills: string[]; sections: string[] };
+    const evidencePath = process.env.HERMES_PROBE_EVIDENCE_PATH;
+    if (evidencePath !== undefined) writeFileSync(evidencePath, JSON.stringify({ stdout: result.stdout, stderr: result.stderr, status: result.status }, null, 2));
     expect(evidence.result).toBe(null);
     expect(evidence.queued).toContain('queued "alpha beta" "literal $1" first=alpha beta second=literal $1');
     expect(evidence.skills.some(name => name.endsWith(':ordinary'))).toBe(true);
@@ -88,3 +106,36 @@ print(json.dumps({
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+conditionalTest.if(hermesSource !== undefined)('public CLI admits official editable and native forwarder launchers without source or venv writes', async () => {
+  await withLifecycleCliHarness(harness => {
+    harness.writeHome({ '.hermes/config.yaml': 'model: preserved\n' });
+    const source = harness.source('hermes-real-admission', {
+      'plugin.json': '{"name":"demo","version":"1.0.0"}\n',
+      'skills/demo/SKILL.md': '---\nname: demo\ndescription: demo\n---\nDemo.\n',
+    });
+    const generated = spawnSync(join(hermesSource!, '.venv', 'bin', 'python'), ['-I', '-B', '-c',
+      `import sys\nfrom pathlib import Path\nsys.path.insert(0, ${JSON.stringify(hermesSource!)})\nfrom hermes_cli._launchers import _launcher_script\nprint(_launcher_script('hermes', Path(${JSON.stringify(hermesSource!)}), None), end='')`,
+    ], { encoding: 'utf8', env: { ...process.env, HOME: harness.home, HERMES_HOME: harness.home,
+      XDG_CONFIG_HOME: harness.home, XDG_DATA_HOME: harness.home, XDG_CACHE_HOME: harness.home,
+      XDG_STATE_HOME: harness.home, XDG_RUNTIME_DIR: harness.home, PYTHONDONTWRITEBYTECODE: '1' } });
+    if (generated.status !== 0) throw new Error(`Official isolated launcher generation failed: ${generated.stderr}`);
+    const native = join(source, 'official-native-hermes');
+    writeFileSync(native, `#!/bin/sh\nexec /usr/bin/python3 -I -c '${generated.stdout.replace(/'/gu, `'"'"'`)}' "$@"\n`);
+    chmodSync(native, 0o755);
+    const forwarder = join(source, 'hermes-forwarder');
+    writeFileSync(forwarder, `#!/bin/sh\nexec ${JSON.stringify(native)} "$@"\n`);
+    chmodSync(forwarder, 0o755);
+    for (const executable of [join(hermesSource!, '.venv', 'bin', 'hermes'), forwarder]) {
+      const before = sourceDigest(hermesSource!);
+      const result = harness.run(['add', source, '--target', 'hermes', '--dry-run', '--json'], {
+        env: { OPEN_PLUGIN_HERMES_BIN: executable },
+      });
+      const report = parseLifecycleReport(JSON.parse(result.stdout));
+      expect({ code: result.exitCode, reason: report.outcomes[0]?.reason }).toEqual({ code: 0, reason: null });
+      expect(sourceDigest(hermesSource!)).toBe(before);
+      expect(result.stores.hermes.after).toEqual(result.stores.hermes.before);
+      expect(result.state.after).toEqual(result.state.before);
+    }
+  });
+}, 30_000);

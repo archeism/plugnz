@@ -17,6 +17,7 @@ import type { HostWriter } from '../src/host';
 import { CompatibilityError } from '../src/compatibility';
 import { kimiNativeEnv, withKimiNative } from './kimi-fixture';
 import { LifecycleReportValidationError, parseLifecycleReport } from '../src/lifecycle-report';
+import { hermesRuntimeFixture } from './hermes-runtime-fixture';
 
 const plannedNativeId: HostWriter['plannedNativeId'] = (plugin) => plugin.name;
 
@@ -635,10 +636,11 @@ describe('add', () => {
       initGitRepo(sourceDir, hermesPluginsMap);
       const output: string[] = [];
       const originalLog = console.log;
+      const cleanupRuntime = hermesRuntimeFixture();
       console.log = (value: string) => output.push(value);
       try {
         expect(await main(['add', sourceDir, '--target', 'hermes', '--legacy-json'])).toBe(0);
-      } finally { console.log = originalLog; }
+      } finally { console.log = originalLog; cleanupRuntime(); }
       const outcomes = JSON.parse(output.join('')) as Array<{ plugin: string; target: string; status: string; action: string; dryRun: boolean; diagnostic?: string }>;
       expect(outcomes).toHaveLength(1);
       expect(outcomes[0]?.plugin).toBe('new-plugin');
@@ -683,10 +685,11 @@ describe('add', () => {
       initGitRepo(sourceDir, hermesPluginsMap);
       const output: string[] = [];
       const originalLog = console.log;
+      const cleanupRuntime = hermesRuntimeFixture();
       console.log = (value: string) => output.push(value);
       try {
         expect(await main(['add', sourceDir, '--target', 'codex', '--target', 'hermes', '--legacy-json'])).toBe(1);
-      } finally { console.log = originalLog; }
+      } finally { console.log = originalLog; cleanupRuntime(); }
       const outcomes = JSON.parse(output.join('')) as Array<{ target: string; status: string; diagnostic?: string }>;
       expect(outcomes.find((outcome) => outcome.target === 'hermes')?.status).toBe('installed');
       expect(outcomes.find((outcome) => outcome.target === 'codex')).toEqual({

@@ -19,6 +19,7 @@ import type { HostWriter } from '../src/host';
 import { parseLifecycleReport } from '../src/lifecycle-report';
 import { createDeploymentScopeIdentity } from '../src/deployment-scope';
 import type { LifecycleStateV2 } from '../src/state';
+import { hermesRuntimeFixture } from './hermes-runtime-fixture';
 
 const plannedNativeId: HostWriter['plannedNativeId'] = (plugin) => plugin.name;
 
@@ -417,13 +418,16 @@ describe('remove', () => {
         'plugins/demo-plugin/plugin.json': JSON.stringify({ $schema: 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json', name: 'demo-plugin', version: '1.0.0' }),
         'plugins/demo-plugin/commands/run.toml': 'description = "Run"\nprompt = "body $ARGUMENTS"\n',
       });
-      expect(await main(['add', sourceDir, '--target', 'hermes'])).toBe(0);
-      expect(hermes.listInstalled().some((plugin) => plugin.id === 'demo-plugin@personal')).toBe(true);
+      const cleanupRuntime = hermesRuntimeFixture();
+      try {
+        expect(await main(['add', sourceDir, '--target', 'hermes'])).toBe(0);
+        expect(hermes.listInstalled().some((plugin) => plugin.id === 'demo-plugin@personal')).toBe(true);
 
-      expect(await main(['remove', 'demo-plugin@personal', '--target', 'hermes'])).toBe(0);
-      expect(hermes.listInstalled().some((plugin) => plugin.name === 'demo-plugin')).toBe(false);
-      expect(existsSync(join(home, '.hermes/plugins/demo-plugin.plgnz-commands'))).toBe(false);
-      expect(readState().find((record) => record.host === 'hermes')).toBeUndefined();
+        expect(await main(['remove', 'demo-plugin@personal', '--target', 'hermes'])).toBe(0);
+        expect(hermes.listInstalled().some((plugin) => plugin.name === 'demo-plugin')).toBe(false);
+        expect(existsSync(join(home, '.hermes/plugins/demo-plugin.plgnz-commands'))).toBe(false);
+        expect(readState().find((record) => record.host === 'hermes')).toBeUndefined();
+      } finally { cleanupRuntime(); }
     });
   });
 

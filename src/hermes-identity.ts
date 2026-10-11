@@ -1,8 +1,5 @@
 import { CryptoHasher } from './runtime';
 
-export const HERMES_PORTABLE_SURFACE = 'portable-surface';
-export const HERMES_PORTABLE_SURFACE_PROBE = 'hermes-portable-surface';
-
 /** Collision-resistant sibling id for a generated Hermes command companion. */
 export function hermesCommandCompanionId(pluginId: string): string {
   return `${pluginId}.plgnz-commands`;

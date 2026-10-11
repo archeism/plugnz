@@ -22,6 +22,11 @@ import {
 
 import { yamlParse, yamlStringify } from '../yaml';
 
+/** Exact source revisions with isolated native loader and input-queue evidence. */
+export const hermesProvenManagedRevisions = [
+  'c0d7294769a38c17ceae51d8f7995e66e1dcae27',
+  'dce1e9b37581dd62e480a9064dc04a709c2940d3',
+] as const;
 
 export const hermesTargetProfile: TargetProfile<'hermes'> = {
   kind: 'hermes',
