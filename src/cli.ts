@@ -639,6 +639,11 @@ function renderLifecycleReport(report: LifecycleReport): string {
 }
 
 const plannerKinds = new Set<string>(lifecyclePlannerHostKinds);
+const registeredPlannerWriters = new Set(writers.filter((writer) => plannerKinds.has(writer.id)));
+
+function usesRegisteredPlanner(writer: HostWriter): boolean {
+  return registeredPlannerWriters.has(writer);
+}
 
 type AddTargetSplit =
   | { readonly kind: 'usage'; readonly diagnostic: string; readonly code?: Extract<LifecycleReasonCode, `usage.${string}`> }
@@ -684,8 +689,8 @@ function splitAddTargets(requested: readonly string[], dryRun: boolean): AddTarg
     if (present.selected.length === 0) return { kind: 'empty' };
     return {
       kind: 'ready',
-      planner: present.selected.filter((writer) => plannerKinds.has(writer.id)).map((writer) => writer.id),
-      writers: present.selected.filter((writer) => !plannerKinds.has(writer.id)),
+      planner: present.selected.filter((writer) => usesRegisteredPlanner(writer)).map((writer) => writer.id),
+      writers: present.selected.filter((writer) => !usesRegisteredPlanner(writer)),
     };
   }
   let detected: HostWriter[];
@@ -701,8 +706,8 @@ function splitAddTargets(requested: readonly string[], dryRun: boolean): AddTarg
   if (detected.length === 0) return { kind: 'empty' };
   return {
     kind: 'ready',
-    planner: detected.filter((writer) => plannerKinds.has(writer.id)).map((writer) => writer.id),
-    writers: detected.filter((writer) => !plannerKinds.has(writer.id)),
+    planner: detected.filter((writer) => usesRegisteredPlanner(writer)).map((writer) => writer.id),
+    writers: detected.filter((writer) => !usesRegisteredPlanner(writer)),
   };
 }
 
