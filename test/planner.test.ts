@@ -349,7 +349,8 @@ describe('lifecycle planner', () => {
       expect(journalOf(dry, 'gamma')).toEqual({ kind: 'required', action: 'unchanged', mutation: false, readback: false });
       expect(journalOf(dry, 'delta')).toEqual({ kind: 'required', action: 'retain-prior', mutation: false, readback: false });
       expect(journalOf(dry, 'beta')).toEqual({ kind: 'required', action: 'update', mutation: true, readback: true });
-      expect(dry.operations.filter((row) => row.operation.package === 'beta' || row.operation.package === 'delta').map((row) => row.reason?.code ?? null)).toEqual([null, 'capability.unsupported']);
+      expect(reasonOf(dry, 'beta')).toBe(null);
+      expect(reasonOf(dry, 'delta')?.code).toBe('capability.unsupported');
       expect(dry.report.plan).toEqual(dry.operations.map((row) => row.operation));
       expect(dry.report.command.name).toBe('sync');
       expect(dry.report.command.dryRun).toBe(true);
