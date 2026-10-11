@@ -457,8 +457,10 @@ async function classifyDesired(
   const recordedRoute = activation?.route.kind === 'managed' || activation?.route.kind === 'native' ? activation.route.kind : null;
   const matchingBytes = sameBytes(activation, installation, selected.plugin);
   const action = chosenAction(replacing, recordedRoute, decision.route, matchingBytes, reapplyMatchingUpdate);
-  const plannedOperationId = action === 'update' && matchingBytes && reapplyMatchingUpdate
-    ? operationIdentity('desired-pair', item.scope.id, selected.plugin.name, nativeId, `${item.frozen.snapshot.fingerprint}\0${state.stateGeneration}`)
+  // One intent may be replanned after a verified rollback. The state ledger retains
+  // every attempt, so a new attempt must not reuse that attempt's journal identity.
+  const plannedOperationId = action === 'update'
+    ? operationIdentity('desired-pair', item.scope.id, selected.plugin.name, nativeId, `${item.frozen.snapshot.fingerprint}\0${attemptId}`)
     : operationId;
   if (action === 'route-migrate') {
     return classified(

@@ -6,6 +6,42 @@ import { createDeploymentScopeIdentity } from '../src/deployment-scope';
 import { parseLifecycleReport } from '../src/lifecycle-report';
 
 describe('public lifecycle commands', () => {
+  test('a failed changed-byte sync keeps the prior activation, suppresses orphan pruning, and a clean retry converges', async () => {
+    await withLifecycleCliHarness((harness) => {
+      harness.writeHome({ '.cursor/.keep': '' });
+      const source = harness.source('sync-refresh-recovery', {
+        'demo/plugin.json': '{"name":"demo","version":"1.0.0"}\n',
+        'demo/payload.txt': 'old bytes\n',
+        'orphan/plugin.json': '{"name":"orphan","version":"1.0.0"}\n',
+        'orphan/payload.txt': 'retire only after convergence\n',
+      });
+      const good = harness.fakeNative('cursor-good', versionSteps(48));
+      const bad = harness.fakeNative('cursor-bad', versionSteps(24).map((step) => ({ ...step, divergeStagedReadback: 'corrupt candidate\n' })));
+      const env = { OPEN_PLUGIN_CURSOR_BIN: good.path };
+      expect(harness.run(['sync', source, '--target', 'cursor', '--json'], { env }).exitCode).toBe(0);
+      const active = join(harness.storePath('cursor'), 'plugins/local');
+      const before = snapshotTree(active);
+      writeFileSync(join(source, 'demo/payload.txt'), 'new bytes\n');
+      const args = ['sync', source, '--target', 'cursor', '--plugin', 'demo', '--json'];
+      const failed = harness.run(args, { env: { OPEN_PLUGIN_CURSOR_BIN: bad.path } });
+      const failure = parseLifecycleReport(JSON.parse(failed.stdout));
+      expect(failed.exitCode).toBe(1);
+      expect(failure.outcomes.map((row) => ({ package: row.package, action: row.action, result: row.result }))).toEqual([
+        { package: 'demo', action: 'update', result: 'pending' },
+        { package: 'orphan', action: 'retire-orphan', result: 'not-attempted' },
+      ]);
+      expect(snapshotTree(active)).toEqual(before);
+      const retried = harness.run(args, { env });
+      expect(parseLifecycleReport(JSON.parse(retried.stdout)).outcomes.map((row) => row.reason)).toEqual([null, null]);
+      expect({ exitCode: retried.exitCode, report: JSON.parse(retried.stdout).summary }).toEqual({ exitCode: 0, report: { result: 'converged', terminalPhase: 'complete', mutationStarted: true, changed: true, failureCategory: null, reason: null, recoveryId: null, readbackId: null } });
+      expect(parseLifecycleReport(JSON.parse(retried.stdout)).outcomes.map((row) => ({ package: row.package, action: row.action, result: row.result }))).toEqual([
+        { package: 'demo', action: 'update', result: 'succeeded' },
+        { package: 'orphan', action: 'retire-orphan', result: 'succeeded' },
+      ]);
+      expect(bytesToText(snapshotTree(active).files['demo/payload.txt']!)).toBe('new bytes\n');
+      expect(existsSync(join(active, 'orphan'))).toBe(false);
+    });
+  });
   test('sync refreshes same-version changed bytes and leaves an unchanged sibling byte-identical', async () => {
     await withLifecycleCliHarness((harness) => {
       harness.writeHome({ '.cursor/.keep': '' });
