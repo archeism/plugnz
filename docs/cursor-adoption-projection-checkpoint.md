@@ -99,3 +99,37 @@ Skills unchanged: Matt TDD SHA256
 Addy API SHA256 `5dafd0c44a3aabf11cae5bcb34f6fcc24dfa5c01ba6e0d3176bce997f4d68bc8`.
 The observed misses became product negative gates; no method-improvement or
 causal skill-quality claim is made.
+
+## Logical-identity correction after independent review
+
+Independent review blocked `3fbe67d`: the constructor checked the old native
+alias but not the historical logical package identity. A valid record whose
+original/journal/activation package was `foreign` could retain native `demo`
+and incorrectly receive a proof for selected package `demo`.
+
+The corrected constructor requires both `original.package` and
+`activation.packageId` to belong to the exact evidenced bare/collection-qualified
+mapping, separately from the native-ID check. All identity checks precede Source
+fingerprinting and native reads. No generic namespace stripping is introduced.
+
+The public-store test now imports both actual bare and qualified v1 record shapes.
+Their successful proofs retain the original IDs. Counterexamples are constructed
+with fully consistent original/journal/activation logical IDs and recomputed
+digests, admitted by `parseLegacyRecordProof` without shape casts. Both native
+alias variants are refused. Temporarily moving Source and native directories
+away proves the exact logical-identity diagnostic occurs before any byte reads;
+the directories are restored in finally. Existing foreign-alias diagnostics,
+all old negatives and zero-write assertions remain intact.
+
+- Exact counterexample RED: `/tmp/plugnz-cursor-logical-identity-both-red.log`,
+  SHA256 `9837e2d5e0491aa0d5872b58f28b46aceae9c9c5c885372ca1de68151c20322b`.
+- Initial corrected focused run retained a diagnostic-order regression:
+  `/tmp/plugnz-cursor-logical-identity-freeze.log`, 17 pass / 1 fail / 235
+  assertions. Moving the new check after the existing native-alias check preserves
+  the prior diagnostic; both still run before filesystem reads.
+- Final same six-file gate: 18 pass / 0 fail / 457 assertions / 10.05s;
+  `/tmp/plugnz-cursor-logical-identity-freeze-green.log`, SHA256
+  `516a755e6fafffbe838305387e6e5a5ebebf2f802dd11dd8f5f5b5d8aafad679`.
+- Final typecheck and diff check exit 0. Raw logs are copied to the same durable
+  evidence directory above. Skills and the broader delivery limitations are
+  unchanged; this is a correction checkpoint awaiting independent re-review.

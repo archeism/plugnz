@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fingerprintTree } from '../src/fingerprint';
-import { projectLegacyRecordProofs } from '../src/legacy-adoption-proof';
+import { adoptionDigest, parseLegacyRecordProof, projectLegacyRecordProofs } from '../src/legacy-adoption-proof';
 import { createFrozenPackageSnapshot } from '../src/lifecycle-runtime';
 import { inventoryPackageSemantics } from '../src/semantic-inventory';
 import { readLifecycleState, readState } from '../src/state';
@@ -37,6 +37,9 @@ test('Cursor read-only adoption proof matches public command/pin projection and 
     const row = readState(join(harness.home, 'state.json')).find(row => row.host === 'cursor')!;
     const root = join(harness.storePath('cursor'), 'plugins/local/demo');
     writeFileSync(join(root, '.plgnz-install.json'), JSON.stringify({ source, pluginId: 'demo', fingerprint: row.fingerprint }));
+    writeFileSync(join(harness.home, 'state.json'), JSON.stringify({ version: 1, installs: [{ ...row, id: 'demo', pending: 'install' }] }));
+    const bareState = readLifecycleState(join(harness.home, 'state.json')).state;
+    const bareLegacy = projectLegacyRecordProofs(bareState, bareState.scopes[0]!)[0]!;
     writeFileSync(join(harness.home, 'state.json'), JSON.stringify({ version: 1, installs: [{ ...row, id: 'demo@personal', pending: 'install' }] }));
     const before = harness.run(['scopes', '--target', 'cursor', '--json']);
     const state = readLifecycleState(join(harness.home, 'state.json')).state;
@@ -59,6 +62,7 @@ test('Cursor read-only adoption proof matches public command/pin projection and 
       }, pins: [{ server: 'server', executable: '/usr/bin/true' }], version: { kind: 'detected', version: '2.4.0', probeId: 'public-fixture-launcher' },
       evidenceId: `sha256:${'e'.repeat(64)}` };
       const proof = proveCursorLegacyAdoption(request);
+      expect(proveCursorLegacyAdoption({ ...request, legacy: bareLegacy }).oldLedgerNativeId).toBe('demo');
       expect(proof.oldLedgerNativeId).toBe('demo@personal');
       expect(proof.oldPhysicalNativeId).toBe('demo');
       expect(proof.newNativeId).toBe('demo');
@@ -75,6 +79,22 @@ test('Cursor read-only adoption proof matches public command/pin projection and 
         expect(fingerprintTree(source)).toBe(sourceBefore);
         expect(readFileSync(join(harness.home, 'state.json'), 'utf8')).toBe(stateBefore);
       };
+      for (const original of [bareLegacy, legacy]) {
+      const foreignSnapshot = { ...original.snapshot,
+        activation: { ...original.snapshot.activation, packageId: 'foreign' },
+        journal: { ...original.snapshot.journal, packageId: 'foreign' } };
+      const foreign = parseLegacyRecordProof({ ...original, original: { ...original.original, package: 'foreign' },
+        snapshot: foreignSnapshot, recordDigest: adoptionDigest('plugnz/legacy-record/v1', foreignSnapshot) });
+      expect(foreign.original.package).toBe('foreign');
+      expect(foreign.snapshot.activation.nativeId).toBe(original.snapshot.activation.nativeId);
+      noWriteRefusal({ ...request, legacy: foreign }, 'logical package identity');
+      // Keep valid branded input but remove both byte stores: identity must fail
+      // before any Source/native filesystem observation, not merely by payload.
+      renameSync(source, `${source}-aside`);
+      renameSync(root, `${root}-aside`);
+      try { expect(refusal({ ...request, legacy: foreign })).toContain('logical package identity'); }
+      finally { renameSync(`${source}-aside`, source); renameSync(`${root}-aside`, root); }
+      }
       noWriteRefusal({ ...request, source: { ...request.source, binding: { kind: 'local', locator: harness.root } } }, 'Source or target');
       noWriteRefusal({ ...request, pins: [] }, 'resolved pins');
       noWriteRefusal({ ...request, pins: [{ server: 'server', executable: '/bin/false' }] }, 'native payload');

@@ -36,13 +36,16 @@ export function proveCursorLegacyAdoption(request: CursorLegacyAdoptionProofRequ
     || snapshot.scopeId !== scope.id || canonicalAdoptionJson(scope.source) !== canonicalAdoptionJson(source.binding)
     || snapshot.sourceType !== source.binding.kind || snapshot.immutableRevision !== source.revision
     || snapshot.snapshotFingerprint !== source.fingerprint) fail('Source or target differs from the retained original');
-  if (fingerprintTree(snapshot.snapshotRoot) !== snapshot.snapshotFingerprint
-    || fingerprintTree(snapshot.packageRoot) !== snapshot.packageFingerprint) fail('frozen Source bytes changed');
   if (snapshot.nativeId !== snapshot.packageName || !safeName(snapshot.packageName)
     || snapshot.collectionName !== undefined && !safeName(snapshot.collectionName)) fail('unsupported physical alias');
   const qualified = snapshot.collectionName === undefined ? snapshot.packageName : `${snapshot.packageName}@${snapshot.collectionName}`;
+  const logicalAliases = [snapshot.packageName, qualified];
   if (![snapshot.packageName, qualified].includes(legacy.snapshot.activation.nativeId)
     || legacy.snapshot.activation.sourceRelativeDir !== undefined && legacy.snapshot.activation.sourceRelativeDir !== snapshot.relativePackagePath) fail('legacy alias or package path differs from the selected Source');
+  if (legacy.original.package === null || !logicalAliases.includes(legacy.original.package)
+    || !logicalAliases.includes(legacy.snapshot.activation.packageId)) fail('logical package identity differs from the selected Source');
+  if (fingerprintTree(snapshot.snapshotRoot) !== snapshot.snapshotFingerprint
+    || fingerprintTree(snapshot.packageRoot) !== snapshot.packageFingerprint) fail('frozen Source bytes changed');
   if (snapshot.collectionName !== undefined) {
     const path = ['.claude-plugin/marketplace.json', '.omp-plugin/marketplace.json', 'marketplace.json']
       .map(path => join(snapshot.snapshotRoot, path)).find(present);
