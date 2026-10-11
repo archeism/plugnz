@@ -80,7 +80,7 @@ export type LifecyclePlan =
         readonly desired: DesiredGenerationRecord | null;
         readonly prune: 'planned' | 'blocked';
         /** Manual package removal leaves the recorded Source authority unchanged. */
-        readonly retirementPackages?: readonly string[];
+        readonly retirementPackages?: readonly { readonly packageId: string; readonly nativeId: string }[];
       }[];
       readonly operations: readonly {
         readonly operation: LifecyclePlanOperation;
@@ -139,7 +139,7 @@ type PreparedRetire = {
   readonly observation: TargetInventoryObservation | null;
   readonly scope: DeploymentScopeIdentity;
   readonly identity: readonly string[];
-  readonly retirementPackages?: readonly string[];
+  readonly retirementPackages?: readonly { readonly packageId: string; readonly nativeId: string }[];
 };
 
 type Prepared = PreparedSync | PreparedRetire;
@@ -173,8 +173,10 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
         activation.scopeId === row.scopeId && activation.packageId === row.packageId && activation.nativeId === row.nativeId))) {
         return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.invariant', 'manual removal selection no longer matches recorded ownership'));
       }
-      const retirementPackages = selected.map((row) => row.packageId).sort();
-      prepared.push({ ...result, retirementPackages, identity: ['remove-packages', result.scope.id, ...retirementPackages] });
+      const retirementPackages = selected.map(({ packageId, nativeId }) => ({ packageId, nativeId }))
+        .sort((left, right) => left.packageId.localeCompare(right.packageId) || left.nativeId.localeCompare(right.nativeId));
+      prepared.push({ ...result, retirementPackages,
+        identity: ['remove-packages', result.scope.id, ...retirementPackages.flatMap((row) => [row.packageId, row.nativeId])] });
     } else prepared.push(result);
   }
 
@@ -541,7 +543,8 @@ async function planRetire(
 ): Promise<{ readonly kind: 'planned'; readonly scope: PlannedScope; readonly operations: readonly FrozenOperation[] } | Defect> {
   const activations = state.activations
     .filter((activation) => activation.scopeId === item.recorded.id
-      && (item.retirementPackages === undefined || item.retirementPackages.includes(activation.packageId)))
+      && (item.retirementPackages === undefined || item.retirementPackages.some((row) =>
+        row.packageId === activation.packageId && row.nativeId === activation.nativeId)))
     .sort((left, right) => left.packageId < right.packageId ? -1 : left.packageId > right.packageId ? 1 : 0);
   const operations: FrozenOperation[] = [];
   for (const activation of activations) {
@@ -1228,7 +1231,7 @@ export function lifecycleAttemptIdForPlannedScopes(
   scopes: readonly PlannedAttemptScope[],
 ): string {
   return lifecycleAttemptId(stateGeneration, scopes.map((planned) => planned.retirementPackages !== undefined
-    ? ['remove-packages', planned.scope.id, ...planned.retirementPackages]
+    ? ['remove-packages', planned.scope.id, ...planned.retirementPackages.flatMap((row) => [row.packageId, row.nativeId])]
     : plannedAttemptIdentity(
     planned.scope.id,
     planned.desired?.sourceFingerprint,
@@ -1241,7 +1244,7 @@ type PlannedAttemptScope = {
   readonly scope: { readonly id: string };
   readonly selectorMode: 'all' | 'explicit' | 'retired';
   readonly desired: { readonly sourceFingerprint: string; readonly packages: readonly { readonly packageId: string }[] } | null;
-  readonly retirementPackages?: readonly string[];
+  readonly retirementPackages?: readonly { readonly packageId: string; readonly nativeId: string }[];
 };
 
 function plannedAttemptIdentity(
