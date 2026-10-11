@@ -201,6 +201,8 @@ asserted only by the mutating report is explicitly insufficient authority.
    alias, ambiguous old/new IDs and bad-last scope: zero ledger/native writes.
 3. Real subprocess interruption before seal, after apply, before commit, and after
    commit/artifact disposal: safe retry, exact rollback/retention and visible proof.
+   Shared legacy attempt A rollback → B progress → A retry preserves A's one
+   immutable original snapshot/digest while correctly refreshing its command CAS.
 4. Public inventory/report negatives: forged/missing/duplicate/nonrequested links,
    unverified commit, legacy fake settlement, dangling replacement and corruption.
 5. Multi-journal and changed-intent consumer composition: exact original accounting

@@ -82,8 +82,29 @@ phase/mutation/timestamps may legitimately change when other entries are process
 Historical validity must NOT require those mutable aggregate fields to remain
 equal to the snapshot forever. Require live attempt ID/command/scope membership
 and the exact original journal identity/action/state to agree, plus the retained
-immutable snapshot/commit. Admission's precommand record digest binds the header
-as captured for that transaction; it is not a permanent hash of a mutable attempt.
+immutable snapshot/commit.
+
+Choose **one immutable snapshot per original**. Before any adoption record exists,
+the read-only preview projects the current validated original snapshot. The first
+atomic retained prepared relation establishes it, even if that fresh intent later
+settles not-attempted or rolls back. Every later admission, retry and relation for
+that original reuses this exact retained `LegacyRecordProof` and `recordDigest`;
+it never recaptures a new snapshot from the shared attempt's newer aggregate header.
+All retained relations for one original must therefore contain identical canonical
+snapshots. Preserve the original journal and legacy activation fields exactly;
+while the old activation still exists, compare those authority-bearing values to
+the retained snapshot. After verified replacement, validate them from retained
+history rather than a legitimately changed/retired canonical live activation.
+
+No new mutable-header wire field or digest is needed. Current shared aggregate
+phase/mutation/timestamps are not ownership or original-operation authority and
+are deliberately excluded from the permanent snapshot-equality check. Existing
+`fresh.baseStateGeneration`, deterministic admission identity and ledger CAS bind
+each command's actual precommand generation; a concurrent legitimate header update
+advances that generation and invalidates a caller's earlier expectation before
+writes. Native/Source/target and the original journal/legacy activation remain
+independently exact preconditions. This does not claim that a hash of the old
+snapshot detects arbitrary edits to unrelated mutable aggregate metadata.
 
 The initial Cursor variant proves one physical root; exact adapter enumeration
 must map old ledger ID and canonical native ID to that root. It cannot admit a
@@ -108,7 +129,9 @@ are rejected. JSON object key order alone is not historical evidence.
 
 `H(domain,x) = "sha256:" + SHA256(UTF8(domain + "\0") || C(x))`, lowercase hex.
 
-- `recordDigest = H("plugnz/legacy-record/v1", snapshot)`.
+- `recordDigest = H("plugnz/legacy-record/v1", snapshot)` of the single snapshot
+  established by the first retained relation; never recomputed from newer live
+  aggregate headers. A pre-retention preview uses the current validated snapshot.
 - Marker `rawDigest = "sha256:" + SHA256(exact marker file bytes)`; root full and
   payload fingerprints use the existing framed tree algorithm, prefixed on wire.
 - `admissionId = H("plugnz/legacy-admission/v1", admission without admissionId)`.
@@ -134,10 +157,16 @@ type AdoptionExpectation = { schemaVersion: 1; admissionId: Digest };
 // { ...existingFields, adoption?: AdoptionAdmission }
 ```
 
-`expectedAdoption` requires `adoptExisting: true`, one explicit selector, and one
-admissible legacy original. Unknown versions, unsolicited expectations or a missing
-expected admission are global preflight failures. It is not an implicit adoption
-flag, a new command, or permission to rebind a different Source/target/record.
+`expectedAdoption` is optional. When provided, it requires `adoptExisting: true`,
+one explicit selector and one exactly matching admissible legacy original.
+Unknown versions, unsolicited expectations, or a provided expectation without a
+matching actual admission are global preflight failures. Absence of this field is
+not itself a failure and does not introduce a mandatory preprobe CLI requirement.
+Ordinary direct `sync` with an adoption flag, like direct `add --adopt-existing`,
+may freeze admission in the same process and use the full global/native-CAS
+protocol. The field is not implicit adoption authority or permission to rebind a
+different Source/target/record; Personal's two-process adoption flow always supplies
+the expectation obtained from its precommand preview.
 
 The consumer reads scopes, compiles the original batch, and uses the existing
 `sync --manifest ... --dry-run --json` seam only if that requested batch contains
@@ -210,7 +239,9 @@ every identity/Source/action/route/root/retention field, not just its hash. Exis
 serialized operation shape and rollback authority remain unchanged.
 
 Persist the fresh accepted journal plus prepared relation atomically before any
-stage writes. A prepared relation may initially have null seal/digest; only modern
+stage writes. This first retention fixes the original's immutable snapshot for all
+future relations; rejected previews do not persist or redefine it. A prepared
+relation may initially have null seal/digest; only modern
 accepted no-write rules can discard that intent as not attempted. Persist its
 actual seal/projection/digest with the fresh handle before markApplying. One open
 prepared relation per legacy original is allowed; historical closed failed or
@@ -258,10 +289,13 @@ type AdoptionReceipt = {
 
 The inventory gathers every relevant legacy record and linked fresh relation
 across attempts, not just lastAttemptId. It verifies all relations using pure state
-parsers and sealed projections without importing runtime or writers. Before commit,
-legacy proof comes from the current legacy activation; afterward it comes from the
-retained snapshot. Deduplicate identical proofs by original tuple plus digest;
-conflicting snapshots for one original are corruption. Empty envelopes may be
+parsers and sealed projections without importing runtime or writers. Before the
+first retained relation, legacy proof comes from the current legacy activation
+and header. Once any relation is retained, including a not-attempted/rolled-back
+one, inventory and every new admission reuse that single immutable original
+snapshot. They do not recapture a header after another journal progresses.
+Deduplicate identical proofs by original tuple plus digest; conflicting retained
+snapshots for one original are corruption. Empty envelopes may be
 omitted. All enclosing scopes/contexts and original/record identities must match.
 
 Keep `openJournals.operations` faithful to every physically open journal, including
@@ -308,7 +342,8 @@ original legacy fields remain unchanged. Recovery admits that modern same-verb
 operation, with its fenced prior/candidate CAS; the linked legacy original is a
 dependency, not recovery authority. A fresh rollback closes only the modern
 operation. If explicit current adoption remains requested, generate a new admission
-using the same frozen Source and proven restored prior; retain the old relation.
+using the same frozen Source and proven restored prior; retain the old relation
+and reuse its immutable original snapshot/digest, not the newer shared header.
 Only the final admission is the legacy original's one adoption receipt, while the
 old modern rollback remains an ordinary recovery receipt. A changed Source or
 ambiguous original/native binding that cannot be independently classified before
@@ -349,6 +384,15 @@ Cursor fixture RED→GREEN, global bad-last/drift zero-write, canonical literal
 digest/ID vectors, process-kill/fence prior-candidate and cleanup-release retries,
 reader no-writer gates, adoption→update→retire→restart history, complete composed
 consumer accounting/forgery/probe negatives, focused/full and packed Node gates.
+Add the shared-attempt public gate: legacy journals A and B share one attempt;
+A's fresh adoption rolls back and retains its snapshot, B progresses and changes
+the live aggregate header, then A retries successfully. A's original snapshot and
+recordDigest stay identical across both relations; A's new admission ID/attempt
+uses the newer live generation; B's progress does not become corruption or give
+A authority over B. A stale expectation from before B's progress refuses globally
+with zero writes; a refreshed expectation succeeds without relaxing original
+journal/activation or native-byte checks. Preserve both failed and successful
+relations plus unknown original history through later retirement/restart.
 The genuine `75d7bc1` public lifecycle fixture now captures ZCode physical
 `demo@catalog`, different from the current hashed physical ID. This proves that
 isolated historical CLI/fixture layout, NOT released native-runtime admission.
