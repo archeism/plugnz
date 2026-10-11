@@ -2,6 +2,7 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync,
 import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
+import { readState } from '../src/state';
 
 declare const TextDecoder: { new (): { decode(input?: Uint8Array): string } };
 declare const TextEncoder: { new (): { encode(input?: string): Uint8Array } };
@@ -54,6 +55,34 @@ const LOCKED_ENV = new Set([
 export interface StateDocument {
   version: number;
   installs: Array<{ host: string; id: string; source: string; sourceSha: string; sourceDir?: string; pending?: 'install' | 'remove' }>;
+}
+
+/** Project a captured ledger. Version 2 has scopes and activations; the harness assertions read the v1 rows `readState` already produces. */
+export function projectedState(bytes: number[]): StateDocument {
+  const text = bytesToText(bytes);
+  const parsed: unknown = JSON.parse(text);
+  const version = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) && typeof (parsed as { version?: unknown }).version === 'number'
+    ? (parsed as { version: number }).version
+    : 0;
+  const dir = mkdtempSync(join(tmpdir(), 'plugnz-projected-state-'));
+  const file = join(dir, 'state.json');
+  try {
+    writeFileSync(file, new Uint8Array(bytes));
+    const installs = readState(file).map((record) => {
+      const row: StateDocument['installs'][number] = {
+        host: record.host,
+        id: record.id,
+        source: record.source,
+        sourceSha: record.sourceSha,
+      };
+      if (record.sourceDir !== undefined) row.sourceDir = record.sourceDir;
+      if (record.pending !== undefined) row.pending = record.pending;
+      return row;
+    });
+    return { version, installs };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 export interface TreeSnapshot {

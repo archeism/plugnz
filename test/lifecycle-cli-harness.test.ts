@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import {
   bytesToText,
+  projectedState,
   textToBytes,
   withLifecycleCliHarness,
   type StateDocument,
@@ -165,16 +166,14 @@ describe('isolated lifecycle CLI harness', () => {
         'plugin.json': '{"name":"demo","version":"1.0.0","description":"Harness fixture"}\n',
         'skills/demo/SKILL.md': '---\nname: demo\ndescription: Harness fixture\n---\n\nDemo body.\n',
       });
-      const claude = harness.fakeNative('claude', [
-        { args: ['--version'], stdout: '2.1.275 (Claude Code)\n' },
-        { args: ['--version'], stdout: '2.1.275 (Claude Code)\n' },
-      ]);
+      const claudeVersion = { args: ['--version'], stdout: '2.1.275 (Claude Code)\n' };
+      const claude = harness.fakeNative('claude', [claudeVersion, claudeVersion, claudeVersion, claudeVersion]);
 
       const result = harness.run(
         ['add', source, '--target', 'claude-code', '--target', 'cursor', '--json'],
         { env: { OPEN_PLUGIN_CLAUDE_CODE_BIN: claude.path } },
       );
-      const state = JSON.parse(bytesToText(result.state.after!)) as StateDocument;
+      const state = projectedState(result.state.after!);
       const report = parseLifecycleReport(JSON.parse(result.stdout));
 
       expect({
@@ -182,8 +181,9 @@ describe('isolated lifecycle CLI harness', () => {
         stderr: result.stderr,
         schemaVersion: report.schemaVersion,
         operationIds: report.plan.map(({ operationId }) => operationId),
+        operationIdShape: report.plan.length === 2 && report.plan.every(({ operationId }) => /^operation-v1-[a-f0-9]{64}$/u.test(operationId)),
         operationIdsMatchOutcomes: report.plan.map(({ operationId }) => operationId).join('\n') === report.outcomes.map(({ operationId }) => operationId).join('\n'),
-        sourceSnapshots: report.command.sourceSnapshots.map(({ id, reference }) => ({ id, binding: reference.binding, fingerprintIsSha256: /^[a-f0-9]{64}$/u.test(reference.fingerprint) })),
+        sourceSnapshots: report.command.sourceSnapshots.map(({ id, reference }) => ({ idShape: /^snapshot-v1-[a-f0-9]{64}$/u.test(id), binding: reference.binding, fingerprintIsSha256: /^[a-f0-9]{64}$/u.test(reference.fingerprint) })),
         outcomes: report.outcomes.map(({ package: packageName, nativeId, scope, result, resourceState, activationState, route, changed }) => ({
           package: packageName,
           nativeId,
@@ -200,7 +200,7 @@ describe('isolated lifecycle CLI harness', () => {
         statePairs: state.installs.map(({ host, id, pending }) => ({ host, id, pending })),
         authoredSourceDirs: state.installs.map(({ sourceDir }) => sourceDir),
         cursorManifest: bytesToText(result.stores['cursor']!.after.files['plugins/local/demo/plugin.json']!),
-        claudeManifest: bytesToText(result.stores['claude-code']!.after.files['plugins/cache/local/demo/local/plugin.json']!),
+        claudeManifest: bytesToText(result.stores['claude-code']!.after.files['plugins/cache/local/demo/1.0.0/plugin.json']!),
         nativeInvocations: result.nativeInvocations['claude'],
         ambientHomeUnchanged: result.ambient.before,
         ambientHomeAfter: result.ambient.after,
@@ -208,9 +208,10 @@ describe('isolated lifecycle CLI harness', () => {
         exitCode: 0,
         stderr: '',
         schemaVersion: 1,
-        operationIds: report.outcomes.map(({ scope, package: packageName }) => `add:desired-pair:${scope.id}:${packageName}`),
+        operationIds: report.plan.map(({ operationId }) => operationId),
+        operationIdShape: true,
         operationIdsMatchOutcomes: true,
-        sourceSnapshots: [{ id: 'source-0', binding: { kind: 'local', locator: source }, fingerprintIsSha256: true }],
+        sourceSnapshots: [{ idShape: true, binding: { kind: 'local', locator: source }, fingerprintIsSha256: true }],
         outcomes: [
           { package: 'demo', nativeId: 'demo@local', target: { kind: 'claude-code', instance: 'default' }, scopeId: report.outcomes[0]!.scope.id, scopeIdIsStableHash: true, result: 'succeeded', resourceState: 'present', activationState: 'active-conforming', route: 'managed', changed: true },
           { package: 'demo', nativeId: 'demo', target: { kind: 'cursor', instance: 'default' }, scopeId: report.outcomes[1]!.scope.id, scopeIdIsStableHash: true, result: 'succeeded', resourceState: 'present', activationState: 'active-conforming', route: 'managed', changed: true },
@@ -232,7 +233,7 @@ describe('isolated lifecycle CLI harness', () => {
         authoredSourceDirs: [source, source],
         cursorManifest: '{"name":"demo","version":"1.0.0","description":"Harness fixture"}\n',
         claudeManifest: '{"name":"demo","version":"1.0.0","description":"Harness fixture"}\n',
-        nativeInvocations: [{ args: ['--version'] }, { args: ['--version'] }],
+        nativeInvocations: [{ args: ['--version'] }, { args: ['--version'] }, { args: ['--version'] }, { args: ['--version'] }],
         ambientHomeUnchanged: {
           directories: [],
           files: { 'sentinel.txt': textToBytes('outside the managed home\n') },
