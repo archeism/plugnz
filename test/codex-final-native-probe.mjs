@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 import { captureSurfaces } from './codex-final-native-surfaces.mjs';
 
 const [phase, name, revision] = process.argv.slice(2);
+const resumeDiscovery = phase === 'bootstrap' && process.argv[5] === 'resume-discovery';
 assert(['bootstrap', 'refresh', 'native-exit', 'foreign-checkout'].includes(phase));
 assert(['rollback', 'foreign'].includes(name));
 assert(/^[a-f0-9]{40}$/.test(revision));
@@ -20,7 +21,8 @@ assert.equal(sha(readFileSync(artifact)), 'd82ecd244e9d06647f7ea528ae614fa5bd0fa
 const caps = readFileSync('/proc/self/status', 'utf8').split('\n').filter(line => /^Cap(Inh|Prm|Eff|Bnd|Amb):/.test(line));
 assert.equal(caps.length, 5); assert(caps.every(line => /\s0+$/.test(line)), caps.join('\n'));
 assert.match(readFileSync('/proc/self/status', 'utf8'), /^NoNewPrivs:\s+1$/m);
-if (phase === 'bootstrap') { assert(!existsSync(root)); mkdirSync(codexHome, { recursive: true }); }
+if (phase === 'bootstrap' && !resumeDiscovery) { assert(!existsSync(root)); mkdirSync(codexHome, { recursive: true }); }
+if (resumeDiscovery) assert(existsSync(join(root, 'bootstrap-report.json')), 'resume only the retained successful bootstrap report');
 const streamsPath = join(root, 'streams.json');
 const streams = existsSync(streamsPath) ? JSON.parse(readFileSync(streamsPath, 'utf8')) : [];
 const env = {
@@ -51,7 +53,7 @@ function command(label, executable, args, allowed = [0]) {
   return result;
 }
 async function discoverSkill() {
-  const child = spawn(native, ['app-server'], { env, cwd: root, stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(native, ['app-server'], { env, cwd: root, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
   let buffer = '', stderr = '', outputBytes = 0;
   const responses = [];
   try {
@@ -103,8 +105,9 @@ async function discoverSkill() {
     assert.match(readFileSync(rows[0].path, 'utf8'), phase === 'bootstrap' ? /Proof bytes V1\./ : /Proof bytes V2, unchanged declared version\./);
     return rows[0];
   } finally {
-    writeFileSync(join(root, `${phase}-skills-list.json`), JSON.stringify({ responses, stderr }, null, 2));
-    child.stdin.end(); child.kill('SIGKILL');
+    writeFileSync(join(root, `${phase}${resumeDiscovery ? '-resumed' : ''}-skills-list.json`), JSON.stringify({ responses, stderr }, null, 2));
+    child.stdin.end();
+    try { process.kill(-child.pid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; }
     if (child.exitCode === null && child.signalCode === null) await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('actual app-server did not close after SIGKILL')), 5000);
       child.once('close', () => { clearTimeout(timer); resolve(); });
@@ -112,11 +115,11 @@ async function discoverSkill() {
   }
 }
 assert.equal(command('actual-version', native, ['--version']).stdout.trim(), 'codex-cli 0.162.0');
-if (phase === 'bootstrap') {
+if (phase === 'bootstrap' && !resumeDiscovery) {
   command('actual-marketplace-config', native, ['plugin', 'marketplace', 'add', 'https://github.com/archeism/plugnz.git', '--ref', revision, '--json']);
   const data = join(codexHome, 'plugins/data/lifecycle-probe/keep.txt');
   mkdirSync(dirname(data), { recursive: true }); writeFileSync(data, 'valuable runtime data\n');
-} else {
+} else if (phase !== 'bootstrap') {
   const file = join(codexHome, 'config.toml'), config = readFileSync(file, 'utf8');
   assert.equal((config.match(/ref = "[a-f0-9]{40}"/g) ?? []).length, 1);
   writeFileSync(file, config.replace(/ref = "[a-f0-9]{40}"/, `ref = "${revision}"`));
@@ -128,9 +131,10 @@ if (faulting) {
   chmodSync(wrapper, 0o755); env.OPEN_PLUGIN_CODEX_BIN = wrapper;
 }
 const before = captureSurfaces(codexHome);
+writeFileSync(join(root, `${phase}${resumeDiscovery ? '-resumed' : ''}-before.json`), JSON.stringify(before, null, 2));
 const statePath = join(home, 'state.json');
 const priorAttemptIds = existsSync(statePath) ? JSON.parse(readFileSync(statePath, 'utf8')).attempts.map(row => row.id) : [];
-const result = command(`public-${phase}`, process.execPath, [artifact, 'sync', source, '--target', 'codex', '--json'], faulting ? [1] : [0]);
+const result = resumeDiscovery ? { stdout: readFileSync(join(root, 'bootstrap-report.json'), 'utf8') } : command(`public-${phase}`, process.execPath, [artifact, 'sync', source, '--target', 'codex', '--json'], faulting ? [1] : [0]);
 const report = JSON.parse(result.stdout), after = captureSurfaces(codexHome);
 const state = JSON.parse(readFileSync(statePath, 'utf8'));
 writeFileSync(join(root, `${phase}-state.json`), JSON.stringify(state, null, 2));
@@ -197,6 +201,6 @@ if (!faulting) {
 }
 assert.equal(readFileSync(join(codexHome, 'plugins/data/lifecycle-probe/keep.txt'), 'utf8'), 'valuable runtime data\n');
 const diskAfterKiB = diskUsage('after');
-const evidence = { phase, source, revision, artifactSha256: sha(readFileSync(artifact)), before, after, summary: report.summary, discoveredSkill, diskBeforeKiB, diskAfterKiB, caps, wallMs: Date.now() - started, cpuMicroseconds: process.cpuUsage(cpu) };
+const evidence = { phase, resumeDiscovery, source, revision, artifactSha256: sha(readFileSync(artifact)), before, after, summary: report.summary, discoveredSkill, diskBeforeKiB, diskAfterKiB, caps, wallMs: Date.now() - started, cpuMicroseconds: process.cpuUsage(cpu) };
 writeFileSync(join(root, `${phase}-result.json`), JSON.stringify(evidence, null, 2));
 console.log(JSON.stringify(evidence));
