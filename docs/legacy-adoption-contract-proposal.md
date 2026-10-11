@@ -94,9 +94,12 @@ alongside the handle, not inside a forged canonical prior activation.
 
 After fresh readback verifies active conforming bytes and retention, one ledger
 CAS commits the canonical activation, removes only the proven active alias, and
-persists a committed supersession relation. Retain the old activation snapshot in
-that durable relation and all original attempt/journal fields. Only then clean
-fresh transaction artifacts. Data and inactive historical metadata survive.
+persists a committed supersession relation **together with** the fresh journal's
+verified COMMIT settlement and `cleanup-pending` state. These are one atomic ledger
+transition, not independently persisted steps. Retain the old activation snapshot
+in that durable relation and all original attempt/journal fields. Only then clean
+fresh transaction artifacts. The fresh journal closes only after cleanup and fence
+release both succeed. Data and inactive historical metadata survive.
 
 - Before fresh seal/apply: original history unchanged; accepted modern intent can
   be settled as not attempted only by existing zero-write rules.
@@ -130,8 +133,13 @@ Reader-only inventory exposes versioned committed supersession links, including
 their exact original proof and replacement identity; keep unknown history visible
 to doctor/list. Original journals retain their original state. They cease to be
 eligible blocking recovery obligations **only** when a strict committed relation
-validates against the retained record and modern commit. Invalid, dangling,
-duplicate, cross-scope or contradictory relations are corruption and loud.
+validates against the retained record and an immutable, verified modern adoption
+commit. Validity does not depend on the replacement activation still existing or
+having its original fingerprint: ordinary update, remove and source-free retirement
+must preserve this historical relation and must not resurrect the unknown legacy
+journal as an active obligation. “Dangling” means missing or contradictory retained
+historical evidence, not a legitimately retired or updated live activation.
+Invalid, dangling, duplicate or cross-scope relations are corruption and loud.
 
 During a fresh adoption, every eligible precommand original is accounted exactly
 once by either an ordinary recovery receipt or an adoption relation receipt.
@@ -145,6 +153,24 @@ Strict parsers explicitly admit these versioned fields; unknown versions/fields
 remain rejected. Old strict consumers will reject new adoption reports until
 deliberate producer release, artifact proof, consumer golden and pin advancement.
 No reinterpretation of `recovery.schemaVersion: 1` or relaxed consumer coverage.
+
+### Remaining wire freeze requirement — blocks implementation
+
+Independent design review requires exact versioned relation, plan, inventory and
+receipt fields before runtime code. In particular, `admissionProofId` is not authority
+merely because a report asserts it. Specify the canonical digest inputs and expose
+the necessary retained-record digest through the read-only precommand inventory;
+correlate the admission with that exact original, frozen Source/target, old/new native
+IDs and fresh planned operation. Specify how the fresh attempt and immutable commit
+identity are verified against durable reader evidence rather than arbitrary report
+IDs. This must work for both a newly applied adoption and a resumed modern attempt.
+
+Freeze the rules for superseded-original visibility versus blocking eligibility,
+and require a disjoint, complete union of ordinary recovery and adoption receipts.
+Reject missing, forged, duplicate, cross-scope or doubly accounted originals and
+replacement identities. No producer/consumer may independently invent a different
+interpretation. This proposal remains unapproved until that schema/correlation
+freeze receives independent review.
 
 ## Dependent scan / implementation boundaries
 
@@ -183,6 +209,8 @@ No reinterpretation of `recovery.schemaVersion: 1` or relaxed consumer coverage.
    unverified commit, legacy fake settlement, dangling replacement and corruption.
 5. Multi-journal and changed-intent consumer composition: exact original accounting
    plus one current pair each; source-free retirement only from new owned record.
+   Adoption → update → retire → restart preserves the verified historical relation
+   and never reopens its unknown original as a blocking recovery obligation.
 6. Doctor import/read-only gates, focused/full producer and Personal checks, packed
    supported Node proof, independent two-axis review, then published-artifact golden.
 
