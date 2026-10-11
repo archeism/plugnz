@@ -44,3 +44,33 @@ The full combined Standards review, not merely the final increment, approved `cd
 Root's exact `bun run check:plugin-lifecycle` also passed 52 tests / 246 assertions (21.26s), followed by the Hermes skip safety gate. Raw output: `~/.local/state/plugnz-evidence/20261011/personal-reader-merge-lifecycle.log`, SHA256 `517c31d5f2f9ac70df78f1476b40efd259f9a9e1134bb64bea461ae3b6d9ffae`.
 
 **Full-range Spec review blocks this candidate.** A permitted completed, verified historical receipt may retain its uniquely identified `summary.readbackId` while current outcomes converge and `recoveryId` is null. Parsing accepts this valid report, but `plugin-sync.ts` treats that historical readback pointer as unfinished recovery; actual public `deployPlugins` then hard-blocks and performs unnecessary read-only probes. Existing composed producer outputs clear successful readback IDs, so passing them does not cover this edge. The fix must exempt only completed verified historical readback, retaining hard blocks for pending, invalid, failed, or potentially changed state. No consumer main push occurred; a new candidate requires re-review and isolated gates.
+
+## Consumer blocker resolution and main integration
+
+The historical-pointer defect was repaired in Personal `50963b0`. Review then
+found a distinct summary-only current readback failure that incorrectly inherited
+the exemption; `4d3fc30` restored that required read-only probe. Both are actual
+public-boundary RED→GREEN checks, not waived failures.
+
+The full combined consumer was independently approved by both axes, with current
+Desired/retirement coverage and complete historical membership retained. Two
+measured existing multi-CLI watchdog cases now have explicit 20-second test budgets,
+without assertion or production-timeout changes; their failed reviewer attempts
+remain documented. Root's final exact lifecycle gate passed **57 tests / 273
+assertions / 32.88s**, and its fresh isolated full `bun run check` passed. Raw logs:
+
+- `personal-reader-ship-lifecycle.log`, SHA256 `955be759f4af0d6625eef4c44240bac7032e294698230984fc9aa950d0b7058b`.
+- `personal-reader-ship-full.log`, SHA256 `c50434cd1392619e8170f85a7f9ebc84798fe2858af3df9db14b031f12d38681`.
+
+Both live under the same retained evidence directory above. The unrelated remote
+main journal commit `16e14ff` was merged preserving history; no user change was
+discarded. Personal main integration is **`3daf6ca8d358c052a1c5d92bb1e40a195af03778`**,
+verified by remote ref after successful push. CI run **38173798571** was queued at
+that checkpoint; queue status is not a green-CI claim.
+
+Personal's production pin remains **0.0.9**. This integrates the reviewed compatible
+consumer, not the unreleased producer receipt contract or a fleet rollout. Producer
+legacy adoption remains a design/implementation blocker. Actual Claude native
+proof separately exposed malformed foreign-marketplace global-config false-green,
+which also remains a product blocker; a clean native lifecycle pass does not waive it.
+Skills are unchanged; no method-improvement claim is made.
