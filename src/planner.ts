@@ -1127,8 +1127,7 @@ export function resolvePlannedSource(
   transportSource: string | undefined,
   cache: Map<string, FrozenSource>,
 ): FrozenSource {
-  const argument = transportArgument(binding, transportSource);
-  if (argument === undefined) return resolveSource(sourceArgument(binding));
+  const argument = transportArgument(binding, transportSource) ?? sourceArgument(binding);
   const cached = cache.get(argument);
   if (cached !== undefined) return cached;
   const frozen = resolveSource(argument);
