@@ -41,8 +41,10 @@ SHA256: `fa44bcca89c8480630d05126a64a554d61ad206b0f6a28e9e215e1ac2083dc3d`.
 Real restore: `/tmp/plugnz-codex-final-complete-restore.JdWFyj`, 159892 KiB.
 Archive: 66860 KiB. All eight restored checkout/cache/config/data surface hashes
 match the two native boundary post-call records. Both sealed pending journals,
-rollback bundles, Sources, resource data, original installer rejection and
-original discovery-controller failure are retained. The foreign-checkout case
+rollback bundles, Sources and resource data are retained. Rejected installer and
+discovery-controller scripts and the original SDK response are retained; the
+earlier outer-controller failure streams are not independently archive-verified.
+The foreign-checkout case
 correctly refused rollback without overwriting the injected foreign bytes.
 
 Supplier executable body is not duplicated in the archive; official immutable
