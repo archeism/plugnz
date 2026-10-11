@@ -39,15 +39,17 @@ test('a later recovery failure reports earlier verified rollback receipts and ag
     const report = parseLifecycleReport(JSON.parse(resumed.stdout));
     expect(resumed.exitCode).toBe(1);
     expect(report.outcomes).toHaveLength(2);
-    const restored = report.outcomes.find(row => row.package === 'demo')!;
-    expect(restored.operationId).toBe(originalOperations[0]);
-    expect(restored.result).toBe('failed');
+    expect(report.outcomes.every(row => row.result === 'not-attempted' && !row.changed)).toBe(true);
+    const restored = report.recovery!.receipts.find(row => row.original.package === 'demo')!;
+    expect(restored.original.operationId).toBe(originalOperations[0]);
+    expect(restored.status).toBe('completed');
     expect(restored.changed).toBe(true);
     expect(restored.activationState).toBe('retained-prior');
-    expect(restored.reason!.diagnostic).toContain('verified rollback');
-    const unresolved = report.outcomes.find(row => row.package === 'sibling')!;
-    expect(unresolved.operationId).toBe(originalOperations[1]);
-    expect(unresolved.result).toBe('pending');
+    expect(restored.settlement).toBe('rollback');
+    expect(restored.readbackVerified).toBe(true);
+    const unresolved = report.recovery!.receipts.find(row => row.original.package === 'sibling')!;
+    expect(unresolved.original.operationId).toBe(originalOperations[1]);
+    expect(unresolved.status).toBe('pending');
     expect(unresolved.changed).toBe(false);
     expect(report.summary.changed).toBe(true);
     expect(report.summary.recoveryId).toBe(originalOperations[1]);
@@ -89,10 +91,10 @@ test('failed recovery retains every requested Desired pair and exact pending ope
     const report = parseLifecycleReport(JSON.parse(resumed.stdout));
     expect(resumed.exitCode).toBe(1);
     expect(report.outcomes.map(row => row.package).sort()).toEqual(['demo', 'sibling']);
-    const pending = report.outcomes.find(row => row.package === 'demo')!;
-    expect(pending.operationId).toBe(original.operationId);
-    expect(pending.action).toBe(original.action);
-    expect(pending.result).toBe('pending');
+    const pending = report.recovery!.receipts.find(row => row.original.package === 'demo')!;
+    expect(pending.original.operationId).toBe(original.operationId);
+    expect(pending.original.action).toBe(original.action);
+    expect(pending.status).toBe('pending');
     expect(pending.reason!.code).toBe('recovery.required');
     const sibling = report.outcomes.find(row => row.package === 'sibling')!;
     expect(sibling.result).toBe('not-attempted');
@@ -113,7 +115,7 @@ test('failed recovery retains every requested Desired pair and exact pending ope
     const mixedReport = parseLifecycleReport(JSON.parse(mixed.stdout));
     expect(mixedReport.outcomes.map(row => row.package).sort()).toEqual(['demo', 'sibling']);
     expect(mixedReport.outcomes.find(row => row.package === 'sibling')!.result).toBe('not-attempted');
-    expect(mixedReport.outcomes.find(row => row.package === 'demo')!.reason!.code).toBe('recovery.required');
+    expect(mixedReport.recovery!.receipts.find(row => row.original.package === 'demo')!.reason!.code).toBe('recovery.required');
     expect(mixed.state.after).toEqual(mixed.state.before);
     expect(mixed.stores.dcode.after).toEqual(mixed.stores.dcode.before);
   });
@@ -188,8 +190,9 @@ test('a fresh sync process recovers pending disable rollback before applying cur
     const stale = harness.run(['sync', source, '--target', 'dcode', '--json'], { env });
     expect(stale.stderr).toBe('');
     const staleReport = parseLifecycleReport(JSON.parse(stale.stdout));
-    expect(staleReport.outcomes[0]!.result).toBe('pending');
-    expect(staleReport.outcomes[0]!.reason!.code).toBe('recovery.required');
+    expect(staleReport.outcomes[0]!.result).toBe('not-attempted');
+    expect(staleReport.recovery!.receipts[0]!.status).toBe('pending');
+    expect(staleReport.recovery!.receipts[0]!.reason!.code).toBe('recovery.required');
     expect(stale.stores.dcode.after).toEqual(stale.stores.dcode.before);
     expect(stale.state.after).toEqual(stale.state.before);
     writeFileSync(nativeManifest, priorManifest);
@@ -253,7 +256,7 @@ for (const action of ['install', 'update', 'retire'] as const) {
             writeFileSync(join(rollback, 'next-path.json'), artifact === 'next-path.json' ? JSON.stringify({ target: sentinel }) : expectedMetadata);
             const corrupted = harness.run(args, { env });
             expect(corrupted.exitCode).toBe(1);
-            expect(parseLifecycleReport(JSON.parse(corrupted.stdout)).outcomes[0]!.result).toBe('pending');
+            expect(parseLifecycleReport(JSON.parse(corrupted.stdout)).recovery!.receipts[0]!.status).toBe('pending');
             expect(readFileSync(join(sentinel, 'keep.txt'), 'utf8')).toBe('unrelated native bytes');
             expect(existsSync(join(rollback, artifact))).toBe(true);
             expect(readFileSync(registry, 'utf8')).toBe(acceptedRegistry);
@@ -261,8 +264,19 @@ for (const action of ['install', 'update', 'retire'] as const) {
           writeFileSync(join(rollback, 'state.json'), priorMetadata); writeFileSync(join(rollback, 'next-path.json'), expectedMetadata);
         }
         const resumeNative = action === 'update' ? harness.fakeNative('source-drift', steps.map((step, index) => index === 0 ? { ...step, writes: { [join(source, 'plugin.json')]: '{"name":"demo","version":"3.0.0"}\n' } } : step)) : native;
+        const priorInventory = JSON.parse(harness.run(['scopes', '--json']).stdout);
         const resumed = harness.run(args, { env: { ...env, OPEN_PLUGIN_DCODE_BIN: resumeNative.path } });
         expect(resumed.exitCode).toBe(0);
+        const resumedReport = parseLifecycleReport(JSON.parse(resumed.stdout));
+        expect(resumedReport.recovery!.receipts.map(row => row.original)).toEqual(priorInventory.scopes[0].openJournals.operations);
+        expect(resumedReport.recovery!.receipts.every(row => row.status === 'completed' && row.settlement === 'commit')).toBe(true);
+        if (action === 'retire') {
+          expect(resumedReport.outcomes.map(row => ({ package: row.package, action: row.action, result: row.result,
+            resource: row.resourceState, activation: row.activationState, changed: row.changed }))).toEqual([
+            { package: 'demo', action: 'retire-orphan', result: 'succeeded', resource: 'absent', activation: 'inactive', changed: false },
+          ]);
+          expect(resumedReport.outcomes[0]!.operationId === resumedReport.recovery!.receipts[0]!.original.operationId).toBe(false);
+        }
         const after = JSON.parse(bytesToText(resumed.state.after!));
         expect(after.attempts.find((attempt: { id: string }) => attempt.id === oldAttempt.id).journal[0].state).toBe('completed');
         expect(readFileSync(registry, 'utf8')).toBe(acceptedRegistry);
@@ -331,10 +345,11 @@ for (const action of ['accepted-install', 'install', 'disable', 'retire'] as con
         const refusedReport = parseLifecycleReport(JSON.parse(refusedRecovery.stdout));
         expect(refusedRecovery.exitCode).toBe(1);
         expect(refusedReport.outcomes).toHaveLength(1);
-        expect(refusedReport.outcomes[0]!.operationId).toBe(interruptedJournal.operationId);
+        expect(refusedReport.recovery!.receipts[0]!.original.operationId).toBe(interruptedJournal.operationId);
         expect(refusedReport.outcomes[0]!.coverage).toBe(action === 'retire' ? 'retirement' : 'desired-pair');
-        expect(refusedReport.outcomes[0]!.result).toBe('pending');
-        expect(refusedReport.outcomes[0]!.reason!.code).toBe('recovery.required');
+        expect(refusedReport.outcomes[0]!.result).toBe('not-attempted');
+        expect(refusedReport.recovery!.receipts[0]!.status).toBe('pending');
+        expect(refusedReport.recovery!.receipts[0]!.reason!.code).toBe('recovery.required');
         expect(refusedRecovery.state.after).toEqual(refusedRecovery.state.before);
         expect(refusedRecovery.stores.dcode.after).toEqual(refusedRecovery.stores.dcode.before);
       }

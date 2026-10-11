@@ -179,3 +179,45 @@ Result: 1 passed, 31 assertions, 0 failed, 13.36 seconds. This is actual publish
 producer with fixture version/lock launchers, not every native adapter proof.
 The receipt contract requires a subsequent deliberate producer/consumer release;
 this evidence does not authorize advancing the intermediate fleet pin.
+
+Root also verified the exact downloaded 0.0.10 artifact, not a local rebuild,
+under Node 22 and the real dcode Python/FileLock runtime: 22 passed, 292
+assertions, 0 failed, 92.36 seconds. Command: designated Bun 1.4 `bun test
+test/recovery-public.test.ts test/dcode-sync-public.test.ts --timeout 30000`, with
+`OPEN_PLUGIN_TEST_PACKED_NODE=/home/charlesfengyc/.local/bin/node` and
+`OPEN_PLUGIN_TEST_DCODE_PYTHON=/tmp/plugnz-dcode-native-proof/bin/python`.
+Durable log:
+`/home/charlesfengyc/.local/state/plugnz-evidence/20261011/plugnz-0010-public-node22-recovery.log`;
+SHA256 `3ac2c462249e1049295bc3ca541ef987ff2f3340761bc3f7948689215989e1cc`.
+Fixture CLI responses qualify this as packed CLI/recovery/native-filelock
+interoperability, not new native component support.
+
+## Runtime receipt checkpoint (not complete acceptance)
+
+The isolated public successful-recovery regression proved actual native
+enablement false-to-true while both current Desired outcomes stayed unchanged;
+before the runtime change, aggregate changed was false. Recovery now emits
+separate original-proof receipts on success/failure, preserves all current
+coverage, and holds durable cleanup-pending until cleanup/release succeeds.
+
+Current retirement obligations surviving a completed recovery use an explicit
+private readback-only frozen operation. Admission requires the exact current
+precommand pair, completed original retirement COMMIT receipt and matching
+retained tombstone scope/package/native/route ownership proof. Executor rereads
+that proof and live absence/inactivity; it never invents an Activation, mutates
+foreign content, or substitutes historical settlement for current coverage.
+Rollback receipts still use normal Activation replanning. The journal-only
+retirement public test asserts one current succeeded absent/inactive unchanged
+retirement plus its separate historical receipt after Source deletion.
+
+Fresh focused gate: 50 passed, 329 assertions, 0 failed, 43.18 seconds across
+recovery-public, recovery-receipts-public, lifecycle-report, recovery-proof,
+recovery-inventory-public and doctor-imports; `bun run check` passed. Earlier
+gate with one retirement tuple failure is retained as a failed attempt; the
+fix corrected the implementation tuple, not the expected absence assertion.
+
+Remaining before acceptance: explicit changed-intent/sibling and foreign
+reappearance negatives; release-failure retry after artifact disposal; exact
+remaining-journal completeness regression; strict consumer precommand receipt
+admission/composed public proof; independent review and frozen full/packed gates.
+No production pin advancement or real-home deployment has occurred.

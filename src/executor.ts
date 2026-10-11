@@ -98,7 +98,8 @@ async function executeFrozen(
         continue;
       }
     }
-    const result = await runOperation(plan, row.operation, hosts, ledger);
+    const result = row.completedRetirement === undefined ? await runOperation(plan, row.operation, hosts, ledger)
+      : await readbackCompletedRetirement(plan, row.operation, row.completedRetirement, hosts);
     outcomes.push(result.outcome);
     if (result.stop && result.reason !== null) stopped = result.reason;
   }
@@ -109,6 +110,24 @@ async function executeFrozen(
     outcomes,
     summary: summaryFor(outcomes),
   }));
+}
+
+async function readbackCompletedRetirement(plan: FrozenPlan, operation: LifecyclePlanOperation, proof: import('./state').TombstoneRecord, hosts: readonly PlannerHost[]): Promise<OperationStep> {
+  try {
+    const recorded = readLifecycleState().state.tombstones.find(row => row.id === proof.id);
+    if (recorded === undefined || JSON.stringify(recorded) !== JSON.stringify(proof)
+      || proof.scopeId !== operation.scope.id || proof.packageId !== operation.package || proof.nativeId !== operation.nativeId
+      || proof.route.kind !== operation.route) throw new Error('completed retirement retained ownership proof changed');
+    const host = hosts.find(candidate => candidate.kinds.includes(operation.scope.target.kind));
+    if (host === undefined) throw new Error('completed retirement native reader is unavailable');
+    const observation = await host.adapter.observeTarget(lifecycleTarget(plan, operation));
+    const live = observation.installations.find(row => row.nativeId === operation.nativeId);
+    if (live !== undefined && (live.presence !== 'absent' || live.activation !== 'inactive')) {
+      throw new Error(`retired native identity '${operation.nativeId}' reappeared or its absence is unverified; refusing foreign mutation`);
+    }
+    const step = succeeded(operation, false);
+    return { ...step, outcome: { ...step.outcome, resourceState: 'absent', activationState: 'inactive' } };
+  } catch (error) { return stop(operation, createLifecycleReason('runtime', 'runtime.operation-failed', unknownErrorDiagnostic(error))); }
 }
 
 async function runOperation(
