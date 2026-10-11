@@ -111,3 +111,43 @@ The final ancestor guard's separate activation/retirement gate passed 11 tests,
 needs review: home symlinks remain covered, but this guard refuses symlinked
 storage/CLI roots. None of these commands is a fresh full-suite or
 released-native Sandbox admission.
+
+## Stable native-root links and captured canonical authority
+
+Both review axes reproduced a compatibility bug in the ancestor guard: a
+preexisting declared CLI-root symlink installed and verified successfully but
+then failed cleanup. The independent positive control was also reproduced
+locally (1 failure, 2.45 seconds), retained in
+`/tmp/plugnz-zcode-stable-root-red.log`. Stable storage/CLI-root symlinks are
+supported, not an intentional exception to scope.
+
+The internal cleanup contract now preserves the asserted handle's existing
+private rollback reference (contract checkpoint `eb16558`). ZCode captures an
+absolute canonical physical snapshot root, revalidates that exact operation
+reference/current native root before mutation, rollback, compensation and
+cleanup, and captures canonical root identity in opaque pre-seal staging IDs.
+Stable declared links work; retargeted roots, redirected owned-scratch parents
+and dangling snapshot ancestors retain foreign data and recovery evidence.
+Disposed-stage and artifact-less retirement cleanup use the durable canonical
+reference rather than guessing from the current declared path. Historical
+noncanonical references authorize cleanup only where the exact physical root
+is independently established; ambiguous references remain loud/pending.
+
+Two empty/dangling-edge controls were RED (2 failures, 4.67 seconds) before the
+explicit root-hash and snapshot-ancestor checks. A native-failure/retarget
+control found lexical compensation attempted deletion in the foreign root and
+masked the original failure with a backup-rename error (1 failure, 6.02 seconds).
+Compensation now checks captured authority before any restore write and
+preserves both the native error and the refusal reason; the control passed
+5 assertions in 8.67 seconds.
+
+The preceding five-file gate passed 38 tests, 2 platform skips, 390 assertions
+in 96.27 seconds. The final exact activation/retirement/generic-contract gate
+passed 32 tests, 0 failures, 249 assertions in 68.91 seconds. Both stable CLI
+and storage links cover install → readback → cleanup → retirement → repeatable
+cleanup; negatives cover pre-seal (including absent stage), before/after apply,
+already-disposed artifact, retirement, stage/snapshot parent substitution and
+native-failure compensation. Failure injection now uses the controlled fake
+native environment instead of modifying a sealed marketplace. Typecheck and
+diff checks passed. These remain isolated factory/CLI fixture proofs, not a
+fresh full suite or released-native Sandbox admission.

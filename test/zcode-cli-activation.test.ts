@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { zcodeCliEvidenceProfiles, zcodeCliLifecycle, zcodeCliWriter } from '../src/hosts/zcode-cli-writer';
 import { fingerprintTree } from '../src/fingerprint';
-import { createFrozenPackageSnapshot, createLifecyclePlanCoverage, createResolvedLifecyclePins, hydrateDurableLifecycleOperation } from '../src/lifecycle-runtime';
+import { createFrozenPackageSnapshot, createLifecyclePlanCoverage, createRecordedOwnedActivation, createResolvedLifecyclePins, hydrateDurableLifecycleOperation } from '../src/lifecycle-runtime';
 import { inventoryPackageSemantics } from '../src/semantic-inventory';
 import type { PluginSource } from '../src/source';
 
@@ -12,7 +12,7 @@ const NATIVE = 'demo@plgnz-activation01';
 
 function officialFake(path: string): void {
   writeFileSync(path, `#!/usr/bin/env bun
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 const storage = process.env.ZCODE_STORAGE_DIR;
@@ -64,11 +64,12 @@ if (args[0] === 'plugins' && args[1] === 'marketplace' && args[2] === 'update') 
   const markets = readJson(marketsPath, {});
   const marketPath = markets[market];
   if (typeof marketPath !== 'string') process.exit(93);
-  if (args[1] === 'install' && existsSync(join(marketPath, 'FAIL_INSTALL'))) {
+  if (args[1] === 'install' && process.env.ZCODE_TEST_FAIL_INSTALL === '1') {
     console.error('plugin install failed');
     process.exit(1);
   }
-  if (args[1] === 'update' && existsSync(join(marketPath, 'FAIL_UPDATE'))) {
+  if (args[1] === 'update' && process.env.ZCODE_TEST_FAIL_UPDATE === '1') {
+    if (process.env.ZCODE_TEST_RETARGET_ON_UPDATE) { rmSync(root); symlinkSync(process.env.ZCODE_TEST_RETARGET_ON_UPDATE, root); }
     console.error('plugin update failed');
     process.exit(1);
   }
@@ -122,7 +123,7 @@ async function withHome(run: (home: string, cliRoot: string) => Promise<void>): 
   const home = mkdtempSync(join(tmpdir(), 'plgnz-zcode-activate-'));
   const cliRoot = join(home, '.zcode', 'cli');
   const binary = join(home, 'zcode');
-  const keys = ['OPEN_PLUGIN_HOME', 'OPEN_PLUGIN_ZCODE_CLI_BIN', 'ZCODE_STORAGE_DIR'] as const;
+  const keys = ['OPEN_PLUGIN_HOME', 'OPEN_PLUGIN_ZCODE_CLI_BIN', 'ZCODE_STORAGE_DIR', 'ZCODE_TEST_FAIL_INSTALL', 'ZCODE_TEST_FAIL_UPDATE', 'ZCODE_TEST_RETARGET_ON_UPDATE'] as const;
   const prior = keys.map((key) => process.env[key]);
   const originalCwd = process.cwd();
   process.env.OPEN_PLUGIN_HOME = home;
@@ -216,7 +217,116 @@ async function activate(home: string, action: 'install' | 'update', operationId:
   return { decision, staged, prepared, packageRoot };
 }
 
+async function prepareRetire(handle: Awaited<ReturnType<typeof activate>>['prepared']['handle']) {
+  const target = handle.target, operationId = 'linked-retire', attemptId = 'linked-retirement';
+  const observed = await zcodeCliLifecycle.observeTarget(target);
+  const installation = observed.installations.find(row => row.nativeId === NATIVE)!;
+  if (installation.ownership.kind !== 'owned') throw new Error('missing owned install');
+  const activation = createRecordedOwnedActivation({ scopeId: handle.scopeId, target, packageName: 'demo', nativeId: NATIVE, sourceType: 'local', sourceRevision: handle.sourceRevision, sourceLocator: null, installedVersion: installation.installedVersion, route: 'native', evidenceId: handle.evidenceId, ownership: { kind: 'created', proofId: installation.ownership.proofId }, activation: 'active', enablement: 'enabled', installedFingerprint: installation.installedFingerprint!, contentRoots: installation.contentRoots });
+  const nativeScope = await zcodeCliLifecycle.observeNativeMutationScope({ targetObservation: observed, operation: 'retire', packageName: 'demo', nativeId: NATIVE, sourceType: 'local' });
+  const nativeProjection = await zcodeCliLifecycle.observeNativeProjection({ targetObservation: observed, operation: 'retire', operationId, attemptId, activation });
+  const selection = zcodeCliLifecycle.decideRoute({ target, operation: 'retire', operationId, attemptId, scopeId: handle.scopeId, packageName: 'demo', nativeId: NATIVE, sourceType: 'local', version: await zcodeCliLifecycle.probeVersion(target), targetObservation: observed, nativeScope, nativeProjection, planCoverage: createLifecyclePlanCoverage(observed, [{ nativeId: NATIVE, operationId, operation: 'retire', mutationGroupId: 'linked-retire-group', authorization: 'observed-owned' }]), activation });
+  if (selection.kind !== 'selected') throw new Error('retirement unavailable');
+  return zcodeCliLifecycle.prepareRetirement({ operationId, attemptId, action: 'remove', selection, activation });
+}
+
 describe('ZCode CLI native activation', () => {
+  test('a native update failure cannot compensate through a retargeted declared root', async () => {
+    await withHome(async (home, cliRoot) => {
+      const physical = join(home, 'captured-cli'); renameSync(cliRoot, physical); symlinkSync(physical, cliRoot);
+      writePackage(join(home, 'package'));
+      const installed = await activate(home, 'install', 'native-first', 'native-attempt-first');
+      await zcodeCliLifecycle.apply(installed.prepared);
+      zcodeCliLifecycle.verify(installed.prepared.handle, await zcodeCliLifecycle.readback(installed.prepared.handle));
+      await zcodeCliLifecycle.cleanup(installed.prepared.handle, 'verified-commit');
+      writeFileSync(join(home, 'package/skills/manual/notes.txt'), 'updated notes');
+      const updated = await activate(home, 'update', 'native-update', 'native-attempt-update');
+      const foreign = join(home, 'foreign-cli'); cpSync(physical, foreign, { recursive: true });
+      const foreignMarket = join(foreign, 'plgnz-marketplaces', NATIVE.split('@')[1]!);
+      writeFileSync(join(foreignMarket, 'sentinel'), 'foreign marketplace bytes');
+      const before = fingerprintTree(foreign);
+      process.env.ZCODE_TEST_FAIL_UPDATE = '1'; process.env.ZCODE_TEST_RETARGET_ON_UPDATE = foreign;
+      let error = '';
+      try { await zcodeCliLifecycle.apply(updated.prepared); } catch (failure) { error = failure instanceof Error ? failure.message : String(failure); }
+      expect(error).toContain('plugin update failed');
+      expect(error).toContain('captured native root was redirected');
+      expect(fingerprintTree(foreign)).toBe(before);
+      expect(existsSync(updated.prepared.handle.rollbackReference)).toBe(true);
+      expect(readFileSync(join(foreignMarket, 'sentinel'), 'utf8')).toBe('foreign marketplace bytes');
+    });
+  }, 20_000);
+  for (const linked of ['cli', 'storage'] as const) test(`keeps a stable declared native ${linked} root symlink through verified cleanup and retirement`, async () => {
+    await withHome(async (home, cliRoot) => {
+      const declared = linked === 'cli' ? cliRoot : join(home, '.zcode');
+      const physical = join(home, `physical-${linked}`);
+      renameSync(declared, physical); symlinkSync(physical, declared);
+      writePackage(join(home, 'package'));
+      const installed = await activate(home, 'install', 'linked-install', 'linked-attempt');
+      await zcodeCliLifecycle.apply(installed.prepared);
+      const verified = zcodeCliLifecycle.verify(installed.prepared.handle, await zcodeCliLifecycle.readback(installed.prepared.handle));
+      await zcodeCliLifecycle.cleanup(verified.handle, 'verified-commit');
+      expect(lstatSync(declared).isSymbolicLink()).toBe(true);
+      expect(existsSync(installed.prepared.stagingRoot)).toBe(false);
+      expect((await zcodeCliLifecycle.readback(installed.prepared.handle)).activation).toBe('active');
+      await zcodeCliLifecycle.cleanup(installed.prepared.handle, 'verified-commit');
+      const retirement = await prepareRetire(installed.prepared.handle);
+      await zcodeCliLifecycle.retire(retirement);
+      zcodeCliLifecycle.verify(retirement.handle, await zcodeCliLifecycle.readback(retirement.handle));
+      await zcodeCliLifecycle.cleanup(retirement.handle, 'verified-commit');
+      await zcodeCliLifecycle.cleanup(retirement.handle, 'verified-commit');
+      expect(lstatSync(declared).isSymbolicLink()).toBe(true);
+    });
+  }, 20_000);
+  for (const phase of ['pre-seal', 'pre-seal-empty', 'before-apply', 'after-apply', 'disposed', 'retired', 'snapshot-parent', 'snapshot-parent-dangling', 'stage-parent'] as const) {
+    test(`retargeting the declared native root preserves foreign data at ${phase}`, async () => {
+      await withHome(async (home, cliRoot) => {
+        const physical = join(home, 'captured-cli'); renameSync(cliRoot, physical); symlinkSync(physical, cliRoot);
+        writePackage(join(home, 'package'));
+        const installed = await activate(home, 'install', 'retarget-install', 'retarget-attempt');
+        let handle = installed.prepared.handle;
+        if (phase === 'after-apply' || phase === 'disposed' || phase === 'retired' || phase === 'snapshot-parent' || phase === 'snapshot-parent-dangling') {
+          await zcodeCliLifecycle.apply(installed.prepared);
+          zcodeCliLifecycle.verify(handle, await zcodeCliLifecycle.readback(handle));
+        }
+        if (phase === 'disposed') await zcodeCliLifecycle.cleanup(handle, 'verified-commit');
+        const retirement = phase === 'retired' ? await prepareRetire(handle) : null;
+        if (retirement !== null) {
+          await zcodeCliLifecycle.retire(retirement);
+          zcodeCliLifecycle.verify(retirement.handle, await zcodeCliLifecycle.readback(retirement.handle));
+        }
+        const authority = retirement?.handle ?? hydrateDurableLifecycleOperation(JSON.parse(JSON.stringify(handle)));
+        if (phase === 'snapshot-parent' || phase === 'snapshot-parent-dangling' || phase === 'stage-parent') {
+          const parent = join(physical, phase === 'stage-parent' ? '.plgnz-zcode-stage' : 'plgnz-lifecycle');
+          const retained = join(home, 'retained-owned-parent'); renameSync(parent, retained);
+          const foreign = join(home, 'foreign-parent'); cpSync(retained, foreign, { recursive: true });
+          writeFileSync(join(foreign, 'sentinel'), 'foreign parent bytes'); symlinkSync(phase === 'snapshot-parent-dangling' ? join(foreign, 'missing-parent') : foreign, parent);
+          const before = fingerprintTree(foreign), ownedBefore = fingerprintTree(retained);
+          let rejected = false;
+          try { await zcodeCliLifecycle.cleanup(authority, 'aborted-preparation'); } catch { rejected = true; }
+          expect(rejected).toBe(true);
+          rejected = false;
+          try { if (phase === 'stage-parent') await zcodeCliLifecycle.apply(installed.prepared); else await zcodeCliLifecycle.rollback(authority); } catch { rejected = true; }
+          expect(rejected).toBe(true);
+          expect(fingerprintTree(foreign)).toBe(before); expect(fingerprintTree(retained)).toBe(ownedBefore);
+          return;
+        }
+        const foreign = join(home, 'foreign-cli'); cpSync(physical, foreign, { recursive: true });
+        const foreignSnapshot = join(foreign, 'plgnz-lifecycle', authority.attemptId, authority.operationId);
+        mkdirSync(foreignSnapshot, { recursive: true }); writeFileSync(join(foreignSnapshot, 'sentinel'), 'foreign snapshot bytes');
+        if (phase === 'pre-seal-empty') { rmSync(join(foreign, '.plgnz-zcode-stage'), { recursive: true }); rmSync(join(foreign, 'plgnz-lifecycle'), { recursive: true }); }
+        writeFileSync(join(foreign, 'foreign-user-data'), 'untouched');
+        rmSync(cliRoot); symlinkSync(foreign, cliRoot);
+        const before = fingerprintTree(foreign), ownedBefore = fingerprintTree(physical);
+        const fails = async (run: Promise<unknown>) => { let rejected = false; try { await run; } catch { rejected = true; } expect(rejected).toBe(true); };
+        if (phase === 'before-apply') await fails(zcodeCliLifecycle.apply(installed.prepared));
+        await fails(zcodeCliLifecycle.cleanup(phase === 'pre-seal' || phase === 'pre-seal-empty' ? installed.staged : authority, 'aborted-preparation'));
+        if (phase !== 'pre-seal' && phase !== 'pre-seal-empty') await fails(zcodeCliLifecycle.rollback(authority));
+        expect(fingerprintTree(foreign)).toBe(before);
+        expect(fingerprintTree(physical)).toBe(ownedBefore);
+        if (phase !== 'pre-seal-empty') expect(readFileSync(join(foreignSnapshot, 'sentinel'), 'utf8')).toBe('foreign snapshot bytes');
+      });
+    }, 20_000);
+  }
   for (const phase of ['pre-seal', 'durable'] as const) {
     test(`cleanup preserves a foreign replacement stage using ${phase} authority`, async () => {
       await withHome(async (home) => {
@@ -361,7 +471,7 @@ describe('ZCode CLI native activation', () => {
     await withHome(async (home, cliRoot) => {
       writePackage(join(home, 'package'));
       const installed = await activate(home, 'install', 'op-install-fail', 'attempt-install-fail');
-      writeFileSync(join(installed.prepared.stagingRoot, '..', '..', 'FAIL_INSTALL'), '1\n');
+      process.env.ZCODE_TEST_FAIL_INSTALL = '1';
       let failure: Error | undefined;
       try {
         await zcodeCliLifecycle.apply(installed.prepared);
@@ -385,7 +495,7 @@ describe('ZCode CLI native activation', () => {
       await zcodeCliLifecycle.apply(installed.prepared);
       writeFileSync(join(packageRoot, 'commands', 'report.md'), '---\ndescription: Report\nargument-hint: topic\n---\nReport $ARGUMENTS failed\n');
       const updated = await activate(home, 'update', 'op-update-fail', 'attempt-update-fail');
-      writeFileSync(join(updated.prepared.stagingRoot, '..', '..', 'FAIL_UPDATE'), '1\n');
+      process.env.ZCODE_TEST_FAIL_UPDATE = '1';
       let failure: Error | undefined;
       try {
         await zcodeCliLifecycle.apply(updated.prepared);
