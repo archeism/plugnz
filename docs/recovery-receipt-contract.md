@@ -45,7 +45,8 @@ Each receipt has exactly these fields:
 
 - `original`: the exact precommand open-journal proof above, including its
   original command/action and journal state; its identity is never relabelled.
-- `status`: `completed` or `pending` (the recovery operation, not current Desired).
+- `status`: `completed`, `pending`, or `not-attempted` (the recovery operation,
+  not current Desired; the last form accounts for blocked remaining journals).
 - `settlement`: `not-attempted`, `commit`, `rollback`, or null while unverified.
 - `finalJournalState`: the actual persisted journal state after this recovery.
 - `resourceState`, `activationState`, `mutationStarted`, `changed`,
@@ -55,10 +56,21 @@ Each receipt has exactly these fields:
 Receipts are unique by `(attemptId, operationId)`, not by current Desired pair.
 All successful and failed recovery paths emit receipts. `completed` requires a
 durably closed journal and successful recovery-resource release; commit/rollback
-requires verified native readback. A release failure after journal finalization
-is `pending`, preserves the actual closed `finalJournalState` and verified
-settlement, and carries the exact recovery diagnostic. It must not pretend that
-the durable journal reopened or that verified native state became unknown.
+requires verified native readback.
+
+Keep the existing durable `cleanup-pending` journal with its verified settlement
+until both cleanup and explicit recovery-fence release succeed; only then close
+the journal. No new durable marker is needed. A failed release therefore remains
+discoverable in `scopes` and the next same-verb retry. Retrying this phase verifies
+the settled native state and performs idempotent cleanup/release, not rollback
+again. dcode evidence: cleanup itself releases the native lock in its `finally`,
+so the subsequent explicit release is normally a no-op; the current final
+release after closing the journal must move before finalization. Its existing
+sealed handle plus `settlement` supports cleanup retry after artifacts have been
+disposed. Prove this ordering and deleted-artifact retry publicly; if an adapter
+cannot prove idempotent cleanup/release it remains loud and unverified rather
+than receiving invented recovery authority. `pending` preserves verified
+settlement/readback facts; it does not pretend verified native state is unknown.
 
 An accepted/unsealed modern intent may settle `not-attempted`, with no native
 mutation/readback claim. An applying/unsealed or incomplete legacy operation
@@ -85,20 +97,36 @@ remains blocked; no original identity or authority is guessed.
 6. Consumer receipt admission requires exact original-proof equality with its
    read-only precommand inventory, and a scope requested by this invocation.
    Generic `RecordedScope.attempt` and postcommand inventory are insufficient.
+   Membership alone is insufficient: after successful global preflight, every
+   recovery-eligible precommand journal in requested scopes has exactly one
+   receipt. Convergence requires all such receipts completed. Failure includes
+   exact `not-attempted` receipts for every remaining journal, preserving their
+   original identity/state and claiming no observation or mutation. Cross-verb
+   refusal likewise accounts for the blocked originals. Global zero-write
+   preflight failure may omit the envelope because recovery never began.
 7. Dry runs neither recover nor emit new recovery receipts. Global bad-last
    Source, policy, route and adoption preflight remains zero-write before any
    recovery. Foreign/stale native CAS refusal remains loud and non-overwriting.
 8. Exact nested versions/fields/enums are checked on both sides. Unknown versions,
    forged originals, duplicate receipts and contradictory flags fail loudly.
+9. Freeze current retirement obligations from the precommand plan/inventory
+   before recovery. Replanning cannot drop a requested retirement merely because
+   recovery removed its Activation. Keep exactly one current retirement outcome
+   with live verified absence/inactivity if already retired, or its actual
+   current mutation/failure. Historical receipts do not replace that outcome.
+   Frozen obligations do not grant new ownership: bind exact recorded scope,
+   package and native ID, and refuse foreign live state rather than delete it.
 
 ## Implementation and proof slices
 
 1. Add shared pure proof/receipt types and strict producer parsers; expose all
    open-journal proofs through the existing read-only inventory. Cover nonlatest,
    journal-only, legacy and doctor import-boundary cases.
-2. Return structured receipts on every recovery path, preserve exact original
-   journal identity, and aggregate them without relabelling current operations.
-   Cover release failure after durable close separately from native failure.
+2. Return complete structured receipts on every recovery path, preserve exact
+   original journal identity, and aggregate them without relabelling current
+   operations. Keep `cleanup-pending` discoverable through cleanup/release and
+   close only afterward; prove retry after artifact disposal. Carry frozen
+   precommand retirement obligations through replan and verify live absence.
 3. Public CLI regressions: real enablement false-to-true plus fresh `unchanged`;
    changed-intent recovery followed by current retirement; multi-journal earlier
    change then later failure; current sibling coverage; accepted/unsealed intent;
