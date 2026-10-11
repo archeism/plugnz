@@ -504,6 +504,7 @@ async function runRetire(
     if (preparation !== undefined && ledger.journalState(plan.attemptId, operation.operationId) === 'applying') {
       return recoverApplied(plan, operation, host, ledger, preparation.handle, reason);
     }
+    if (preparation === undefined) ledger.markNotApplied(plan, operation);
     return stop(operation, reason);
   }
   if (receipt === undefined || verified === undefined) {

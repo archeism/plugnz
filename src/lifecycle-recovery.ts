@@ -5,13 +5,14 @@ import { createLifecycleReason, type LifecycleReason, type LifecyclePlanOperatio
 import type { LifecyclePlan, PlannerHost } from './planner';
 import { readLifecycleState, type JournalEntryRecord, type LifecycleStateV2 } from './state';
 import { writeLifecycleState } from './state-write';
+import { canonicalTargetContextBytes } from './target-identity';
 
 const OPEN = new Set(['pending', 'applying', 'applied', 'readback-verified', 'rollback', 'cleanup-pending']);
 /** All Sources have already resolved and frozen before this write-capable boundary. */
 export async function recoverLifecycleJournals(plan: Extract<LifecyclePlan, { kind: 'frozen' }>, hosts: readonly PlannerHost[], now: string): Promise<{ reason: LifecycleReason; operation: LifecyclePlanOperation | null; changed: boolean } | boolean> {
   let state = readLifecycleState().state;
   const scopeIds = new Set(plan.scopes.map(row => row.scope.id));
-  const journals = state.attempts.flatMap(attempt => attempt.journal.filter(row => scopeIds.has(row.scopeId) && OPEN.has(row.state)).map(row => ({ attempt, row })));
+  const journals = state.attempts.filter(attempt => attempt.command !== 'legacy-recovery').flatMap(attempt => attempt.journal.filter(row => scopeIds.has(row.scopeId) && OPEN.has(row.state)).map(row => ({ attempt, row })));
   if (journals.length === 0) return false;
   const incompatible = journals.find(({ attempt }) => attempt.command !== plan.report.command.name);
   if (incompatible !== undefined) return {
@@ -24,13 +25,15 @@ export async function recoverLifecycleJournals(plan: Extract<LifecyclePlan, { ki
     for (const source of plan.frozenSources.values()) if (fingerprintTree(source.snapshotDir) !== source.snapshot.fingerprint) throw new Error('retained Source drifted before recovery');
     // Hydrate every handle before the first recovery write, including a bad last scope.
     const prepared = journals.map(({ attempt, row }) => {
+      if (row.state === 'pending' && row.sealedOperation === undefined) return { row, attemptId: attempt.id, handle: null, host: null };
       if (row.sealedOperation === undefined) throw new Error(`journal '${row.operationId}' has no durable sealed operation; recovery remains unverified`);
       const handle = hydrateDurableLifecycleOperation(row.sealedOperation);
       const scope = state.scopes.find(scope => scope.id === row.scopeId);
-      if (handle.attemptId !== attempt.id || JSON.stringify(handle.target) !== JSON.stringify(scope?.target)) throw new Error('recovery target/attempt differs from recorded authority');
+      if (handle.attemptId !== attempt.id || handle.target.kind !== scope?.target.kind || handle.target.instance !== scope.target.instance
+        || canonicalTargetContextBytes(handle.target.context) !== canonicalTargetContextBytes(scope.target.context)) throw new Error('recovery target/attempt differs from recorded authority');
       const host = hosts.find(host => host.adapter.id === handle.adapterId && host.kinds.includes(handle.target.kind));
       if (host === undefined) throw new Error(`recovery adapter '${handle.adapterId}' is unavailable`);
-      return { row, handle, host };
+      return { row, attemptId: attempt.id, handle, host };
     });
     const persist = (row: JournalEntryRecord, settled: 'commit' | 'rollback', finished: boolean): void => {
       if (readLifecycleState().state.stateGeneration !== state.stateGeneration) throw new Error('recovery ledger changed concurrently; refusing stale commit');
@@ -58,9 +61,21 @@ export async function recoverLifecycleJournals(plan: Extract<LifecyclePlan, { ki
       });
       writeLifecycleState(next, { globalPreflight: 'succeeded' }); state = next;
     };
-    for (const { row, handle, host } of prepared) {
+    for (const { row, attemptId, handle, host } of prepared) {
       pending = row;
       changed = false;
+      if (handle === null || host === null) {
+        if (readLifecycleState().state.stateGeneration !== state.stateGeneration) throw new Error('recovery ledger changed concurrently; refusing stale accepted-intent settlement');
+        const next: LifecycleStateV2 = { ...state, stateGeneration: state.stateGeneration + 1,
+          activations: state.activations.map(activation => {
+            if (activation.pending?.attemptId !== attemptId || activation.scopeId !== row.scopeId || activation.packageId !== row.packageId || activation.nativeId !== row.nativeId) return activation;
+            const { pending: _pending, ...kept } = activation; return { ...kept, readbackState: activation.readbackState === 'pending' ? 'unverified' : activation.readbackState, updatedAt: now };
+          }),
+          attempts: state.attempts.map(attempt => attempt.id !== attemptId ? attempt : { ...attempt, phase: 'failed', updatedAt: now, journal: attempt.journal.map(entry => entry.operationId !== row.operationId ? entry : { ...entry, state: 'not-attempted', updatedAt: now }) }),
+        };
+        writeLifecycleState(next, { globalPreflight: 'succeeded' }); state = next;
+        continue; // No native apply began; any unsealed preparation remains retained.
+      }
       try {
         const observed = await host.adapter.beginRecovery(handle);
         const committed = row.settlement === 'commit' || row.settlement === undefined && (row.state === 'readback-verified' || row.state === 'cleanup-pending');

@@ -9,7 +9,7 @@ import { repoRoot } from './util';
 
 test('a fresh sync process recovers pending disable rollback before applying current Desired', async () => {
   await withLifecycleCliHarness(harness => {
-    harness.writeHome({ '.deepagents/.keep': '' });
+    harness.writeHome({ '.deepagents/.keep': '', '.deepagents/plugins/data/demo/keep.txt': 'retained user data' });
     const source = harness.source('resume-disable', { 'plugin.json': '{"name":"demo","version":"1.0.0"}\n' });
     const steps = () => Array.from({ length: 32 }, () => ({ args: ['--version'], stdout: 'deepagents-code 0.1.83\n' }));
     const initial = harness.fakeNative('initial', steps());
@@ -43,6 +43,32 @@ test('a fresh sync process recovers pending disable rollback before applying cur
     expect(parseLifecycleReport(JSON.parse(refused.stdout)).summary.reason!.diagnostic).toContain('missing-source');
     expect(refused.state.after).toEqual(refused.state.before);
     expect(refused.stores.dcode.after).toEqual(refused.stores.dcode.before);
+    const malformed = harness.source('bad-policy', { 'plugin.json': '{"name":"bad-policy","version":"1.0.0"}\n', 'skills/bad/SKILL.md': '---\nname: bad\ndisable-model-invocation: maybe\n---\ninvalid\n' });
+    writeFileSync(manifest, JSON.stringify({ schemaVersion: 1, entries: [
+      { operation: 'sync', source: pending.scopes[0].source, target: pending.scopes[0].target },
+      { operation: 'sync', source: { kind: 'local', locator: malformed }, target: { kind: 'cursor', instance: 'default' } },
+    ] }));
+    const badPolicy = harness.run(['sync', '--manifest', manifest, '--json'], { env });
+    expect(badPolicy.exitCode).toBe(2);
+    expect(parseLifecycleReport(JSON.parse(badPolicy.stdout)).summary.reason!.diagnostic).toContain('must be boolean');
+    expect(badPolicy.state.after).toEqual(badPolicy.state.before);
+    expect(badPolicy.stores.dcode.after).toEqual(badPolicy.stores.dcode.before);
+    const legacySource = harness.source('bad-adoption', { 'plugin.json': '{"name":"legacy","version":"1.0.0"}\n' });
+    const legacyRoot = join(harness.home, '.deepagents/plugins/cache/unmanaged-legacy');
+    mkdirSync(legacyRoot, { recursive: true }); writeFileSync(join(legacyRoot, 'plugin.json'), '{"name":"legacy","version":"2.0.0"}\n');
+    const registryFile = join(harness.home, '.deepagents/.state/installed_plugins.json');
+    const originalRegistry = readFileSync(registryFile, 'utf8');
+    const registry = JSON.parse(originalRegistry); registry.plugins['legacy@local'] = [{ installPath: legacyRoot }]; writeFileSync(registryFile, JSON.stringify(registry));
+    writeFileSync(manifest, JSON.stringify({ schemaVersion: 1, entries: [
+      { operation: 'sync', source: pending.scopes[0].source, target: pending.scopes[0].target },
+      { operation: 'sync', source: { kind: 'local', locator: legacySource }, target: { kind: 'dcode', instance: 'default' }, selectors: [{ package: 'legacy', adoptExisting: true }] },
+    ] }));
+    const badAdoption = harness.run(['sync', '--manifest', manifest, '--json'], { env });
+    expect(badAdoption.exitCode).toBe(1);
+    expect(parseLifecycleReport(JSON.parse(badAdoption.stdout)).summary.mutationStarted).toBe(false);
+    expect(badAdoption.state.after).toEqual(badAdoption.state.before);
+    expect(badAdoption.stores.dcode.after).toEqual(badAdoption.stores.dcode.before);
+    writeFileSync(registryFile, originalRegistry); rmSync(legacyRoot, { recursive: true });
     const nativeSlot = JSON.parse(readFileSync(join(harness.home, '.deepagents/.state/installed_plugins.json'), 'utf8')).plugins['demo@local'][0].installPath;
     const nativeManifest = join(nativeSlot, 'plugin.json');
     const priorManifest = readFileSync(nativeManifest, 'utf8');
@@ -64,13 +90,14 @@ test('a fresh sync process recovers pending disable rollback before applying cur
     expect(after.activations[0].pending).toBeUndefined();
     expect(after.attempts.find((attempt: { id: string }) => attempt.id === oldAttempt).journal[0].state).toBe('rolled-back');
     expect(Object.keys(resumed.stores.dcode.after.files).some(path => path.includes('/rollback/state.json'))).toBe(false);
+    expect(readFileSync(join(harness.home, '.deepagents/plugins/data/demo/keep.txt'), 'utf8')).toBe('retained user data');
   });
 }, 30_000);
 
 for (const action of ['install', 'update', 'retire'] as const) {
   test(`fresh ${action === 'retire' ? 'retire-source' : 'sync'} finishes committed ${action} cleanup without undoing accepted native state`, async () => {
     await withLifecycleCliHarness(harness => {
-      harness.writeHome({ '.deepagents/.keep': '' });
+      harness.writeHome({ '.deepagents/.keep': '', '.deepagents/plugins/data/demo/keep.txt': 'retained user data' });
       const source = harness.source(`resume-${action}`, { 'plugin.json': '{"name":"demo","version":"1.0.0"}\n' });
       const steps = Array.from({ length: 32 }, () => ({ args: ['--version'], stdout: 'deepagents-code 0.1.83\n' }));
       const native = harness.fakeNative('normal', steps);
@@ -95,11 +122,32 @@ for (const action of ['install', 'update', 'retire'] as const) {
         const oldAttempt = before.attempts.at(-1);
         expect(oldAttempt.journal[0].state).toBe('cleanup-pending');
         expect(before.activations.length).toBe(action === 'retire' ? 0 : 1);
+        if (action === 'retire') expect(before.scopes[0].desired === undefined).toBe(false);
         const acceptedTombstones = before.tombstones;
         const registry = join(harness.home, '.deepagents/.state/installed_plugins.json');
         const acceptedRegistry = readFileSync(registry, 'utf8');
         if (action === 'retire') rmSync(source, { recursive: true });
         chmodSync(operations, 0o755);
+        if (action === 'update') {
+          const handle = oldAttempt.journal[0].sealedOperation;
+          const rollback = handle.rollbackReference;
+          mkdirSync(rollback, { recursive: true });
+          const sentinel = join(harness.home, '.deepagents/plugins/cache/unrelated');
+          mkdirSync(sentinel, { recursive: true }); writeFileSync(join(sentinel, 'keep.txt'), 'unrelated native bytes');
+          const priorMetadata = JSON.stringify({ row: handle.prior.contentRoots.map((root: { path: string }) => ({ installPath: root.path })), enabled: true, registryExisted: true, enablementExisted: true });
+          const expectedMetadata = JSON.stringify({ target: handle.expected.contentRoots[0].path });
+          for (const artifact of ['state.json', 'next-path.json']) {
+            writeFileSync(join(rollback, 'state.json'), artifact === 'state.json' ? JSON.stringify({ row: [{ installPath: sentinel }], enabled: true }) : priorMetadata);
+            writeFileSync(join(rollback, 'next-path.json'), artifact === 'next-path.json' ? JSON.stringify({ target: sentinel }) : expectedMetadata);
+            const corrupted = harness.run(args, { env });
+            expect(corrupted.exitCode).toBe(1);
+            expect(parseLifecycleReport(JSON.parse(corrupted.stdout)).outcomes[0]!.result).toBe('pending');
+            expect(readFileSync(join(sentinel, 'keep.txt'), 'utf8')).toBe('unrelated native bytes');
+            expect(existsSync(join(rollback, artifact))).toBe(true);
+            expect(readFileSync(registry, 'utf8')).toBe(acceptedRegistry);
+          }
+          writeFileSync(join(rollback, 'state.json'), priorMetadata); writeFileSync(join(rollback, 'next-path.json'), expectedMetadata);
+        }
         const resumeNative = action === 'update' ? harness.fakeNative('source-drift', steps.map((step, index) => index === 0 ? { ...step, writes: { [join(source, 'plugin.json')]: '{"name":"demo","version":"3.0.0"}\n' } } : step)) : native;
         const resumed = harness.run(args, { env: { ...env, OPEN_PLUGIN_DCODE_BIN: resumeNative.path } });
         expect(resumed.exitCode).toBe(0);
@@ -107,6 +155,7 @@ for (const action of ['install', 'update', 'retire'] as const) {
         expect(after.attempts.find((attempt: { id: string }) => attempt.id === oldAttempt.id).journal[0].state).toBe('completed');
         expect(readFileSync(registry, 'utf8')).toBe(acceptedRegistry);
         expect(after.tombstones).toEqual(acceptedTombstones);
+        expect(readFileSync(join(harness.home, '.deepagents/plugins/data/demo/keep.txt'), 'utf8')).toBe('retained user data');
         if (action === 'retire') expect(after.scopes[0].lifecycle).toBe('retired');
         else expect(after.activations[0].pending).toBeUndefined();
       } finally { if (existsSync(operations)) chmodSync(operations, 0o755); }
@@ -114,15 +163,16 @@ for (const action of ['install', 'update', 'retire'] as const) {
   }, 30_000);
 }
 
-for (const action of ['install', 'disable', 'retire'] as const) {
+for (const action of ['accepted-install', 'install', 'disable', 'retire'] as const) {
   test(`SIGKILL after durable applying intent resumes ${action} from journals in a fresh CLI`, async () => {
     await withLifecycleCliHarness(async harness => {
-      harness.writeHome({ '.deepagents/.keep': '' });
+      harness.writeHome({ '.deepagents/.keep': '', '.deepagents/plugins/data/demo/keep.txt': 'retained user data' });
       const source = harness.source(`kill-${action}`, { 'plugin.json': '{"name":"demo","version":"1.0.0"}\n', 'large.txt': 'data'.repeat(500_000) });
       const native = harness.fakeNative('normal', Array.from({ length: 64 }, () => ({ args: ['--version'], stdout: 'deepagents-code 0.1.83\n' })));
       const env = { OPEN_PLUGIN_DCODE_BIN: native.path, OPEN_PLUGIN_DCODE_PYTHON_BIN: fakeDcodeLockInterpreter(harness.root) };
       let scopeId: string | undefined;
-      if (action !== 'install') {
+      const freshInstall = action === 'install' || action === 'accepted-install';
+      if (!freshInstall) {
         const installed = harness.run(['sync', source, '--target', 'dcode', '--json'], { env });
         expect(installed.exitCode).toBe(0);
         const state = JSON.parse(bytesToText(installed.state.after!)); scopeId = state.scopes[0].id;
@@ -139,7 +189,8 @@ for (const action of ['install', 'disable', 'retire'] as const) {
         if (name !== 'state.json' || killed) return;
         const state = JSON.parse(readFileSync(join(harness.home, 'state.json'), 'utf8'));
         const attempt = state.attempts.at(-1);
-        if (attempt?.journal[0]?.state !== 'applying') return;
+        if (attempt?.journal[0]?.state !== (action === 'accepted-install' ? 'pending' : 'applying')) return;
+        if (action === 'accepted-install' && attempt.journal[0].sealedOperation !== undefined) return;
         interruptedId = attempt.id; killed = true;
         child.kill('SIGSTOP'); child.kill('SIGKILL');
       });
@@ -151,16 +202,26 @@ for (const action of ['install', 'disable', 'retire'] as const) {
       } finally { watcher.close(); }
       expect(killed).toBe(true);
       const interrupted = JSON.parse(readFileSync(join(harness.home, 'state.json'), 'utf8'));
-      expect(interrupted.attempts.find((attempt: { id: string }) => attempt.id === interruptedId).journal[0].sealedOperation.schemaVersion).toBe(1);
-      if (action === 'install') expect(interrupted.activations.length).toBe(0);
+      const interruptedJournal = interrupted.attempts.find((attempt: { id: string }) => attempt.id === interruptedId).journal[0];
+      if (action === 'accepted-install') expect(interruptedJournal.sealedOperation).toBeUndefined();
+      else expect(interruptedJournal.sealedOperation.schemaVersion).toBe(1);
+      if (freshInstall) expect(interrupted.activations.length).toBe(0);
+      const diagnosed = harness.run(['doctor', '--target', 'dcode', '--json'], { env });
+      expect(diagnosed.exitCode).toBe(1);
+      expect(diagnosed.stdout).toContain(interruptedJournal.operationId);
+      expect(diagnosed.state.after).toEqual(diagnosed.state.before);
+      expect(diagnosed.stores.dcode.after).toEqual(diagnosed.stores.dcode.before);
+      const listed = harness.run(['list', '--target', 'dcode', '--json'], { env });
+      expect(JSON.parse(listed.stdout)[0].recovery[0].operationId).toBe(interruptedJournal.operationId);
       if (action === 'retire') rmSync(source, { recursive: true });
       const resumed = harness.run(args, { env });
       const report = parseLifecycleReport(JSON.parse(resumed.stdout));
       expect(resumed.exitCode).toBe(action === 'disable' ? 1 : 0);
       if (action === 'disable') expect(report.outcomes[0]!.reason!.category).toBe('capability');
       const after = JSON.parse(bytesToText(resumed.state.after!));
-      expect(after.attempts.find((attempt: { id: string }) => attempt.id === interruptedId).journal[0].state).toBe('rolled-back');
+      expect(after.attempts.find((attempt: { id: string }) => attempt.id === interruptedId).journal[0].state).toBe(action === 'accepted-install' ? 'not-attempted' : 'rolled-back');
       expect(after.activations.length).toBe(action === 'retire' ? 0 : 1);
+      expect(readFileSync(join(harness.home, '.deepagents/plugins/data/demo/keep.txt'), 'utf8')).toBe('retained user data');
     });
   }, 30_000);
 }

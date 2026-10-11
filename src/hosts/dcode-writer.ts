@@ -156,6 +156,12 @@ function captureDcodeRollback(binding: DcodeBinding, attemptId: string, operatio
   return dir;
 }
 
+function assertRecoveryRollbackMetadata(handle: DurableLifecycleOperation, state: Doc): void {
+  const rows = rowsFor(state.row);
+  if (rows.length !== handle.prior.contentRoots.length || rows.some((row, index) => resolve(rowInstall(row, handle.nativeId)) !== resolve(handle.prior.contentRoots[index]!.path))
+    || handle.prior.presence === 'present' && (state.enabled === true) !== (handle.prior.enablement === 'enabled')) throw new Error('dcode rollback registry snapshot differs from the sealed prior; recovery refused');
+}
+
 async function lockPreparation(binding: DcodeBinding, attemptId: string, operationId: string, expectedObservationId: string): Promise<void> {
   await acquireNativeLock(attemptId, operationId);
   const observed = createTargetInventoryObservation('dcode', { target: binding.target, installations: observeDcodeTarget(binding.target) });
@@ -313,6 +319,8 @@ const dcodeDefinition: LifecycleHostDefinition = {
   rollback: async handle => {
     await acquireNativeLock(handle.attemptId, handle.operationId);
     if (!existsSync(join(handle.rollbackReference, 'state.json'))) throw new Error('dcode rollback snapshot is missing; recovery refused');
+    const state = readDoc(join(handle.rollbackReference, 'state.json'), {}, 'rollback state');
+    if (recoveringNativeLocks.has(`${handle.attemptId}:${handle.operationId}`)) assertRecoveryRollbackMetadata(handle, state);
     for (const [index, root] of handle.prior.contentRoots.entries()) {
       const backup = join(handle.rollbackReference, `content-${index}`);
       if (!existsSync(backup) || fingerprintTree(backup) !== root.fingerprint) throw new Error('dcode rollback snapshot bytes do not match the sealed prior');
@@ -324,7 +332,6 @@ const dcodeDefinition: LifecycleHostDefinition = {
       if (ownership(target)?.pluginId !== handle.nativeId || recoveringNativeLocks.has(`${handle.attemptId}:${handle.operationId}`) && fingerprintTree(target) !== handle.projectedFingerprint) throw new Error('dcode rollback candidate differs from the sealed operation; refusing stale overwrite');
       rmSync(target, { recursive: true });
     }
-    const state = readDoc(join(handle.rollbackReference, 'state.json'), {}, 'rollback state');
     for (const [index, row] of rowsFor(state.row).entries()) {
       const path = rowInstall(row, handle.nativeId); assertCachePath(path);
       const backup = join(handle.rollbackReference, `content-${index}`);
@@ -348,15 +355,20 @@ const dcodeDefinition: LifecycleHostDefinition = {
     try {
       const dir = lifecycleDirectory(reference.attemptId, reference.operationId);
       const recovering = recoveringNativeLocks.get(`${reference.attemptId}:${reference.operationId}`);
+      const nextFile = join(dir, 'rollback', 'next-path.json');
+      const priorFile = join(dir, 'rollback', 'state.json');
+      const next = readDoc(nextFile, {}, 'cleanup target');
       if (disposition === 'verified-commit' && recovering !== undefined) {
-        for (const root of recovering.prior.contentRoots) {
-          if (recovering.expected.contentRoots.some(next => resolve(next.path) === resolve(root.path))) continue;
+        const retiredRoots = recovering.prior.contentRoots.filter(root => !recovering.expected.contentRoots.some(next => resolve(next.path) === resolve(root.path)));
+        if (existsSync(priorFile)) assertRecoveryRollbackMetadata(recovering, readDoc(priorFile, {}, 'rollback state'));
+        else if (retiredRoots.some(root => existsSync(root.path))) throw new Error('dcode cleanup prior metadata is missing; recovery refused');
+        if (existsSync(nextFile) && (typeof next.target !== 'string' || !recovering.expected.contentRoots.some(root => resolve(root.path) === resolve(next.target as string)))) throw new Error('dcode cleanup target differs from the sealed expected root; recovery refused');
+        for (const root of retiredRoots) {
           if (existsSync(root.path) && fingerprintTree(root.path) !== root.fingerprint) throw new Error('dcode cleanup prior root changed; refusing stale deletion');
         }
-      }
-      const next = readDoc(join(dir, 'rollback', 'next-path.json'), {}, 'cleanup target');
-      if (disposition === 'verified-commit' && typeof next.target === 'string') {
-        const prior = readDoc(join(dir, 'rollback', 'state.json'), {}, 'rollback state');
+        for (const root of retiredRoots) rmSync(root.path, { recursive: true, force: true });
+      } else if (disposition === 'verified-commit' && typeof next.target === 'string') {
+        const prior = readDoc(priorFile, {}, 'rollback state');
         for (const row of rowsFor(prior.row)) {
           const path = rowInstall(row, reference.operationId); assertCachePath(path);
           if (resolve(path) !== resolve(next.target)) rmSync(path, { recursive: true, force: true });

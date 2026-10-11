@@ -138,6 +138,14 @@ Dcode 0.1.83 implements this fence using its native filelock. Other adapters,
 older journals without a sealed operation, changed native state, and cross-verb
 retries remain loud, non-convergent refusals with proof/artifacts retained.
 Cross-verb diagnostics name the original command, attempt and scope to resume.
+An accepted modern journal with no sealed handle has not entered native apply;
+same-verb retry closes it as `not-attempted` after global preflight and replans,
+retaining any unsealed preparation artifacts. This does not admit an unsealed
+`applying` or rollback journal. Existing explicit legacy alias adoption repair
+remains on its ownership-revalidation path, not the new recovery path.
+`doctor` reports every unresolved modern journal as a nonzero finding, and
+`list --json` adds per-host `recovery` entries with exact operation, attempt,
+scope, phase and original command—even when no Activation exists.
 Doctor remains reader-only: structural journal parsing imports no writer or
 lifecycle runtime. Public restart proofs are in `test/recovery-public.test.ts`
 and `test/dcode-sync-public.test.ts`; they do not establish other hosts' recovery.
