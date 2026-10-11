@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { createCapabilityEvidenceProfile } from '../capability-evidence';
 import { projectPluginForHermes } from '../conversion';
 import { fingerprintTree } from '../fingerprint';
+import { capturePriorSourceRepair, priorSourceRepairAllows, recordedPriorSource, releasePriorSourceRepair, type PriorSourceProof } from '../prior-source-proof';
 import type { AddOptions, HostWriter, InstalledPlugin, PinOptions, PinOutcome } from '../host';
 import {
   HERMES_PORTABLE_SURFACE,
@@ -368,11 +369,18 @@ function sameLifecycleOwner(marker: Marker, claim: LifecycleOwner): boolean {
     && installed.locator === claim.locator;
 }
 
-function assertLifecycleOwned(target: string, claim: LifecycleOwner): void {
+function assertLifecycleOwned(target: string, claim: LifecycleOwner, handle?: DurableLifecycleOperation): void {
   if (!existsSync(target)) return;
   const marker = readMarker(target);
   if (marker === null) throw new Error(`Hermes plugin ${claim.pluginId} is unowned and differs from the staged representation; pass --adopt-existing to take ownership explicitly`);
-  if (!sameLifecycleOwner(marker, claim)) throw new Error(`Hermes plugin ${claim.pluginId} belongs to another source; refusing to replace it`);
+  const repairing = handle !== undefined && priorSourceRepairAllows(handle, proof => historicalGitMarker(marker, proof));
+  if (!sameLifecycleOwner(marker, claim) && !repairing) throw new Error(`Hermes plugin ${claim.pluginId} belongs to another source; refusing to replace it`);
+}
+
+function historicalGitMarker(marker: Marker, proof: Readonly<PriorSourceProof>): boolean {
+  return marker.source === proof.revision && marker.pluginId === proof.nativeId && marker.scopeId === proof.scopeId
+    && marker.fingerprint === proof.sourceFingerprint && marker.sourceType === 'git'
+    && marker.sourceRevision === proof.revision && marker.sourceLocator == null;
 }
 
 function copyReplace(stage: string, target: string, root: string): Change {
@@ -567,7 +575,7 @@ function restoreRollback(store: HermesStore, reference: string, packageDir: stri
 
 function sourceIdentity(marker: Marker | null): { type: 'local' | 'git'; immutableRevision: string; locator: string | null } | null {
   if (marker?.sourceType === 'local' && marker.sourceRevision !== undefined) return { type: 'local', immutableRevision: marker.sourceRevision, locator: null };
-  if (marker?.sourceType === 'git' && marker.sourceRevision !== undefined && typeof marker.sourceLocator === 'string') return { type: 'git', immutableRevision: marker.sourceRevision, locator: marker.sourceLocator };
+  if (marker?.sourceType === 'git' && marker.sourceRevision !== undefined && (typeof marker.sourceLocator === 'string' || (marker.sourceLocator == null && marker.source === marker.sourceRevision))) return { type: 'git', immutableRevision: marker.sourceRevision, locator: marker.sourceLocator ?? null };
   return null;
 }
 
@@ -653,7 +661,17 @@ const hermesLifecycleDefinition: LifecycleHostDefinition = {
     assertPackageIdentity(request.packageName, request.nativeId);
     return { kind: 'bounded', mode: 'exact-package', affectedNativeIds: [request.nativeId] };
   },
-  async observeNativeProjection(_request: NativeProjectionRequest) {
+  async observeNativeProjection(request: NativeProjectionRequest) {
+    if ('snapshot' in request) {
+      const proof = recordedPriorSource(request.snapshot);
+      if (proof !== undefined) {
+        const installed = request.targetObservation.installations.find(row => row.nativeId === request.snapshot.nativeId);
+        for (const root of installed?.contentRoots ?? []) {
+          const marker = readMarker(root.path);
+          if (marker === null || !historicalGitMarker(marker, proof)) throw new Error('Hermes historical Git marker does not match recorded prior Source proof');
+        }
+      }
+    }
     const decision = decideHermesNativeUpdate(hermesNativeUpdateProof);
     switch (decision.route) {
       case 'managed': return { kind: 'requires-managed', reasonId: decision.refusedGate };
@@ -710,6 +728,7 @@ const hermesLifecycleDefinition: LifecycleHostDefinition = {
     const store = storeFor(projection.target);
     const paths = packagePaths(store, projection.packageName);
     const prior = withIdentity(inspect(store, projection.nativeId, projection.packageName, 'none'), projection.target, projection.scopeId, projection.packageName, projection.nativeId);
+    capturePriorSourceRepair(projection, prior.installedFingerprint);
     const hasCompanion = existsSync(join(projection.stagingRoot, 'commands'));
     const contentRoots = [{ label: 'package', path: paths.packageDir, fingerprint: fingerprintTree(join(projection.stagingRoot, 'package')) }];
     if (hasCompanion) contentRoots.push({ label: 'commands', path: paths.companionDir, fingerprint: fingerprintTree(join(projection.stagingRoot, 'commands')) });
@@ -748,9 +767,9 @@ const hermesLifecycleDefinition: LifecycleHostDefinition = {
     const stagedCompanion = join(prepared.stagingRoot, 'commands');
     const hasCompanion = existsSync(stagedCompanion);
     const owner = ownerFromHandle(prepared.handle);
-    assertLifecycleOwned(paths.packageDir, owner);
-    if (hasCompanion) assertLifecycleOwned(paths.companionDir, owner);
-    else if (existsSync(paths.companionDir)) assertLifecycleOwned(paths.companionDir, owner);
+    assertLifecycleOwned(paths.packageDir, owner, prepared.handle);
+    if (hasCompanion) assertLifecycleOwned(paths.companionDir, owner, prepared.handle);
+    else if (existsSync(paths.companionDir)) assertLifecycleOwned(paths.companionDir, owner, prepared.handle);
     mkdirSync(store.pluginsDir, { recursive: true });
     const unchanged = existsSync(paths.packageDir)
       && atomicFingerprint(paths.packageDir, hasCompanion ? paths.companionDir : undefined) === fingerprintTree(prepared.stagingRoot)
@@ -811,6 +830,7 @@ const hermesLifecycleDefinition: LifecycleHostDefinition = {
     return { receiptId: `rollback:${handle.attemptId}:${handle.operationId}`, changed: true };
   },
   async cleanup(reference: CleanupReference, _disposition: CleanupDisposition) {
+    releasePriorSourceRepair(reference);
     const store = storeFor(reference.target);
     rmSync(workDir(store, reference.attemptId, reference.operationId), { recursive: true, force: true });
     return { cleanupId: `cleanup:${reference.attemptId}:${reference.operationId}`, completed: true };

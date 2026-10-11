@@ -1285,8 +1285,10 @@ function normalizeInstalledSource(input: NonNullable<TargetInstallationData['sou
   stable(input.immutableRevision, 'target source revision');
   if (input.type === 'git') {
     immutableGitRevision(input.immutableRevision);
-    if (input.locator === null) invariant('installed Git source needs a credential-free locator');
-    validateSourceBinding({ kind: 'git', locator: input.locator, ref: input.immutableRevision });
+    // Inventory may faithfully expose a historical owned marker with an
+    // incomplete origin. It is not Source authority; preparation must obtain
+    // a canonical locator from the strict recorded scope, never this null.
+    if (input.locator !== null) validateSourceBinding({ kind: 'git', locator: input.locator, ref: input.immutableRevision });
   } else if (input.type === 'local') {
     if (input.locator !== null) invariant('installed local source locator must be omitted');
   } else {

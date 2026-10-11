@@ -26,6 +26,7 @@ import {
   createResolvedLifecyclePins,
 } from './lifecycle-runtime';
 import { ownedActivation } from './owned-activation';
+import { bindRecordedPriorSource } from './prior-source-proof';
 import { sameSourceBinding } from './scope-inventory';
 import { CryptoHasher } from './runtime';
 import {
@@ -448,6 +449,10 @@ async function classifyDesired(
     ));
   }
   const replacing = installation?.presence === 'present' && installation.ownership.kind === 'owned';
+  if (replacing && item.scope.source.kind === 'git' && installation?.source?.locator != null
+    && installation.source.locator !== item.scope.source.locator) {
+    return defect(createLifecycleReason('internal', 'internal.ambiguous-ownership', 'owned native Git origin differs from the recorded deployment Source'));
+  }
   const capabilityOperation = replacing ? 'update' : 'install';
   let version: TargetVersionObservation;
   try {
@@ -455,7 +460,7 @@ async function classifyDesired(
   } catch (error) {
     return defect(createLifecycleReason('internal', 'internal.defect', unknownErrorDiagnostic(error)));
   }
-  const decision = await selectPairRoute(item, selected.plugin, inventory, nativeId, operationId, attemptId, capabilityOperation, version);
+  const decision = await selectPairRoute(item, selected.plugin, inventory, nativeId, operationId, attemptId, capabilityOperation, version, state.scopes.find(row => row.id === item.scope.id), activation);
   if (decision.kind === 'defect') return decision;
   if (decision.kind === 'gap') {
     const prior = priorKind(activation);
@@ -472,7 +477,7 @@ async function classifyDesired(
     return classified(operationId, 'desired-pair', item.scope, snapshotId, selected.plugin.name, nativeId, 'not-attempted', 'none', decision.reason);
   }
   const recordedRoute = activation?.route.kind === 'managed' || activation?.route.kind === 'native' ? activation.route.kind : null;
-  const matchingBytes = sameBytes(activation, installation, selected.plugin)
+  const matchingBytes = !decision.provenanceRepair && sameBytes(activation, installation, selected.plugin)
     && installation?.activation === 'active' && installation.enablement === 'enabled';
   const action = chosenAction(replacing, recordedRoute, decision.route, matchingBytes, reapplyMatchingUpdate);
   return classified(operationId, 'desired-pair', item.scope, snapshotId, selected.plugin.name, nativeId, action, decision.route, null);
@@ -575,7 +580,9 @@ async function selectPairRoute(
   attemptId: string,
   operation: 'install' | 'update',
   version: TargetVersionObservation,
-): Promise<{ readonly kind: 'selected'; readonly route: 'native' | 'managed' } | { readonly kind: 'gap'; readonly reason: LifecycleReason } | Defect> {
+  recordedScope?: DeploymentScopeRecord,
+  activation?: ActivationRecord,
+): Promise<{ readonly kind: 'selected'; readonly route: 'native' | 'managed'; readonly provenanceRepair: boolean } | { readonly kind: 'gap'; readonly reason: LifecycleReason } | Defect> {
   if (item.host === null || item.observation === null) {
     return { kind: 'gap', reason: createLifecycleReason('capability', 'capability.unverified', 'missing lifecycle adapter', 'lifecycle-adapter') };
   }
@@ -602,6 +609,12 @@ async function selectPairRoute(
       packageFingerprint: plugin.contentFingerprint,
       inventory,
     });
+    const provenanceRepair = bindRecordedPriorSource(snapshot, item.scope, recordedScope, activation, item.observation.installations.find(row => row.nativeId === nativeId));
+    const installed = item.observation.installations.find(row => row.nativeId === nativeId);
+    if (item.scope.source.kind === 'git' && installed?.presence === 'present' && installed.ownership.kind === 'owned'
+      && (installed.source === null || installed.source.locator === null) && !provenanceRepair) {
+      return defect(createLifecycleReason('internal', 'internal.invariant', 'owned Git installation has incomplete native provenance and no exact recorded prior Source proof'));
+    }
     const planCoverage = createLifecyclePlanCoverage(item.observation, [{
       nativeId,
       operationId,
@@ -640,7 +653,7 @@ async function selectPairRoute(
       pins,
     });
     if (decision.kind === 'capability-gap') return { kind: 'gap', reason: decision.gaps[0] };
-    return { kind: 'selected', route: decision.route };
+    return { kind: 'selected', route: decision.route, provenanceRepair };
   } catch (error) {
     return defect(createLifecycleReason('internal', 'internal.defect', unknownErrorDiagnostic(error)));
   }

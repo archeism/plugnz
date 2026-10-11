@@ -14,6 +14,7 @@ import {
 } from './lifecycle-report';
 import { LifecycleHostPhaseError, createFrozenPackageSnapshot, createLifecyclePlanCoverage, createResolvedLifecyclePins } from './lifecycle-runtime';
 import { ownedActivation, retirementTombstone } from './owned-activation';
+import { bindRecordedPriorSource } from './prior-source-proof';
 import { lifecycleAttemptIdForPlannedScopes, type LifecyclePlan, type PlannerHost } from './planner';
 import { fingerprintTree } from './fingerprint';
 import { inventoryPackageSemantics, SemanticInventoryError, type PackageSemanticInventory } from './semantic-inventory';
@@ -162,7 +163,7 @@ async function runActivation(
   let prepared: Awaited<ReturnType<typeof prepareActivation>>;
   try {
     const recorded = ledger.activation(operation.scope.id, operation.package, nativeId);
-    prepared = await prepareActivation(plan, operation, host, nativeId, action, recorded?.pins ?? [], recorded);
+    prepared = await prepareActivation(plan, operation, host, nativeId, action, recorded?.pins ?? [], recorded, ledger.scope(operation.scope.id));
   } catch (error) {
     if (action === 'update' && error instanceof SemanticInventoryError && ledger.activation(operation.scope.id, operation.package, nativeId) !== undefined) {
       ledger.acceptJournal(plan, operation, action);
@@ -293,6 +294,7 @@ async function prepareActivation(
   action: 'install' | 'update' | 'route-migrate',
   recordedPins: readonly string[],
   recorded: ActivationRecord | undefined,
+  recordedScope: DeploymentScopeRecord | undefined,
 ): Promise<
   | {
       readonly kind: 'ready';
@@ -345,6 +347,16 @@ async function prepareActivation(
   const pinNames = resolvedPins.pins.map((pin) => pin.server);
   const notices = resolvedPins.dropped.map((server) => `dropped pin '${server}'`);
   const snapshot = sealActivationSnapshot(operation, plan.attemptId, nativeId, frozen, plugin, packageFingerprint, inventory, observation.target, action);
+  const observedInstallation = observation.installations.find(row => row.nativeId === nativeId);
+  if (operation.scope.source.kind === 'git' && observedInstallation?.source?.locator != null
+    && observedInstallation.source.locator !== operation.scope.source.locator) {
+    return refused(createLifecycleReason('internal', 'internal.ambiguous-ownership', 'owned native Git origin differs from the recorded deployment Source'));
+  }
+  const provenanceRepair = bindRecordedPriorSource(snapshot, operation.scope, recordedScope, recorded, observedInstallation);
+  if (operation.scope.source.kind === 'git' && observedInstallation?.presence === 'present' && observedInstallation.ownership.kind === 'owned'
+    && (observedInstallation.source === null || observedInstallation.source.locator === null) && !provenanceRepair) {
+    return refused(createLifecycleReason('internal', 'internal.invariant', 'owned Git installation has incomplete native provenance and no exact recorded prior Source proof'));
+  }
   const capabilityOperation = action === 'route-migrate' ? 'update' : action;
   const planCoverage = createLifecyclePlanCoverage(observation, [{
     nativeId,
@@ -696,6 +708,10 @@ class Ledger {
 
   activation(scopeId: string, packageId: string, nativeId: string): ActivationRecord | undefined {
     return this.state.activations.find((row) => row.scopeId === scopeId && row.packageId === packageId && row.nativeId === nativeId);
+  }
+
+  scope(scopeId: string): DeploymentScopeRecord | undefined {
+    return this.state.scopes.find(row => row.id === scopeId);
   }
 
   markApplying(plan: FrozenPlan, operation: LifecyclePlanOperation): void {

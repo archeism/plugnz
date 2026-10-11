@@ -11,6 +11,7 @@ import { requirePackageSemantics } from '../capability-evidence';
 import { inventoryPackageSemantics } from '../semantic-inventory';
 import { capabilityEvidenceProfiles, createCapabilityEvidenceProfile } from '../capability-evidence';
 import { fingerprintTree } from '../fingerprint';
+import { recordedPriorSource } from '../prior-source-proof';
 import { createLifecycleHostAdapter, createTargetInventoryObservation } from '../lifecycle-runtime';
 import type { LifecycleHostDefinition, LifecycleReadbackData, LifecycleTargetIdentity, NativeProjectionRequest, TargetInstallationData } from '../lifecycle-host';
 declare const TextDecoder: { new(): { decode(input: Uint8Array): string } };
@@ -115,7 +116,7 @@ function observeDcodeTarget(target: LifecycleTargetIdentity): TargetInstallation
       presence: present ? 'present' : 'absent', enablement: enabled[nativeId] === true ? 'enabled' : 'disabled',
       activation: enabled[nativeId] === true && present ? 'active' : 'inactive',
       installedFingerprint: fingerprint, installedVersion: present ? declaredManifest(path, nativeId.split('@')[0]!).version : null,
-      source: owned ? { type: body.sourceType === 'git' ? 'git' : 'local', immutableRevision: marker.kind === 'current' ? marker.sourceRevision : marker.fingerprint, locator: body.sourceType === 'git' ? marker.source : null } : null,
+      source: owned ? { type: body.sourceType === 'git' ? 'git' : 'local', immutableRevision: marker.kind === 'current' ? marker.sourceRevision : marker.fingerprint, locator: body.sourceType === 'git' && marker.source !== `local:${String(body.scopeId)}` ? marker.source : null } : null,
       contentRoots: fingerprint === null ? [] : [{ label: 'managed', path, fingerprint }],
     };
   });
@@ -164,6 +165,16 @@ function preflightAdoption(request: NativeProjectionRequest): void {
   if (request.operation !== 'install' && request.operation !== 'update') return;
   const snapshot = request.snapshot;
   const installed = request.targetObservation.installations.find(item => item.nativeId === snapshot.nativeId);
+  const proof = recordedPriorSource(snapshot);
+  if (proof !== undefined) {
+    for (const root of installed?.contentRoots ?? []) {
+      const body = readDoc(join(root.path, MARKER), {}, 'ownership marker');
+      if (body.source !== `local:${proof.scopeId}` || body.pluginId !== proof.nativeId || body.scopeId !== proof.scopeId
+        || body.sourceType !== 'git' || body.sourceRevision !== proof.revision || body.fingerprint !== proof.revision) {
+        throw new Error('dcode historical Git marker does not match recorded prior Source proof');
+      }
+    }
+  }
   if (installed?.ownership.kind !== 'unmanaged' || installed.presence !== 'present') return;
   const path = installed.contentRoots[0]?.path;
   if (path === undefined) throw new Error('dcode unmanaged adoption has no native root');
