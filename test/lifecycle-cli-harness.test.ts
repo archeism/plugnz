@@ -115,11 +115,23 @@ describe('isolated lifecycle CLI harness', () => {
       harness.writeHome({ '.cursor/.keep': '' });
       const work = harness.source('instance-work', { 'plugin.json': '{"name":"demo","version":"1.0.0"}\n' });
       const defaultSource = harness.source('instance-default', { 'plugin.json': '{"name":"demo","version":"1.0.0"}\n' });
+      const defaultScopeId = createDeploymentScopeIdentity(
+        { kind: 'local', locator: defaultSource },
+        { kind: 'cursor', instance: 'default' },
+      ).id;
       harness.writeHome({
         'state.json': JSON.stringify(scopedV2State([
           { source: work, instance: 'work' },
           { source: defaultSource, instance: 'default' },
         ])),
+        '.cursor/plugins/local/demo/.cursor-plugin/plugin.json': '{"name":"demo","version":"1.0.0"}\n',
+        '.cursor/plugins/local/demo/.plgnz-install.json': JSON.stringify({
+          source: defaultSource,
+          pluginId: 'demo',
+          fingerprint: 'installed',
+          scopeId: defaultScopeId,
+          proof: 'created',
+        }),
       });
 
       for (const command of ['update', 'remove'] as const) {
