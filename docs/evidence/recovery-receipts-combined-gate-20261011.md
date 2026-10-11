@@ -85,8 +85,9 @@ found a real retry contradiction: a shared attempt's legitimate aggregate-header
 change could produce a new snapshot and incorrectly conflict with retained failed
 adoption history. The correction establishes one immutable original snapshot at
 first retention and reuses it across all retries, while current generation/CAS
-binds command expectations. The combined Spec design review approves the corrected
-contract; final Standards design review is pending. This is not runtime delivery.
+binds command expectations. Both independent axes approve the full combined and
+corrected design; implementation is proceeding against that frozen contract.
+This is not runtime delivery.
 
 Claude's demonstrated malformed global-marketplace envelope correction is frozen
 at `83f1b035cc1af28b9a0ba8a970f806cf9d79c28e`. Both independent axes approve its
