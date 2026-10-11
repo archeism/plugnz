@@ -64,3 +64,41 @@ test('a zero-write retirement refusal leaves no false applying journal or stale 
     expect(retry.exitCode).toBe(0);
   });
 }, 20_000);
+
+test('a partly failed source retirement retains authority and desired state until every package is verified retired', async () => {
+  await withLifecycleCliHarness((harness) => {
+    harness.writeHome({ '.cursor/.keep': '' });
+    const source = harness.source('partial-retirement', {
+      'alpha/plugin.json': '{"name":"alpha","version":"1.0.0"}\n',
+      'beta/plugin.json': '{"name":"beta","version":"1.0.0"}\n',
+      'gamma/plugin.json': '{"name":"gamma","version":"1.0.0"}\n',
+    });
+    const steps = (): FakeNativeStep[] => Array.from({ length: 24 }, () => ({ args: ['--version'], stdout: '2.4.0\n' }));
+    const initial = harness.fakeNative('initial', steps());
+    const installed = harness.run(['sync', source, '--target', 'cursor', '--json'], { env: { OPEN_PLUGIN_CURSOR_BIN: initial.path } });
+    expect(installed.exitCode).toBe(0);
+    const prior = JSON.parse(bytesToText(installed.state.after!));
+    const failing = harness.fakeNative('readback-failure', steps().map((step, index) => index === 4 ? {
+      ...step, writes: { [join(harness.home, '.cursor/plugins/retained/beta/data')]: 'not a retained directory\n' },
+    } : step));
+    const failed = harness.run(['retire-source', source, '--target', 'cursor', '--json'], { env: { OPEN_PLUGIN_CURSOR_BIN: failing.path } });
+    const report = parseLifecycleReport(JSON.parse(failed.stdout));
+    expect(failed.exitCode).toBe(1);
+    expect(report.outcomes.map(row => row.result)).toEqual(['succeeded', 'failed', 'not-attempted']);
+    const after = JSON.parse(bytesToText(failed.state.after!));
+    expect(after.scopes[0].lifecycle).toBe('active');
+    expect(after.scopes[0].selectorMode).toBe(prior.scopes[0].selectorMode);
+    expect(after.scopes[0].authority).toBe('authoritative');
+    expect(after.scopes[0].desired).toEqual(prior.scopes[0].desired);
+    expect(after.scopes[0].lastConverged).toEqual(prior.scopes[0].lastConverged);
+    expect(after.activations.map((row: { packageId: string }) => row.packageId).sort()).toEqual(['beta', 'gamma']);
+    rmSync(join(harness.home, '.cursor/plugins/retained/beta/data'));
+    const clean = harness.fakeNative('clean', steps());
+    const retry = harness.run(['retire-source', source, '--target', 'cursor', '--json'], { env: { OPEN_PLUGIN_CURSOR_BIN: clean.path } });
+    expect(retry.exitCode).toBe(0);
+    const retired = JSON.parse(bytesToText(retry.state.after!));
+    expect(retired.scopes[0].lifecycle).toBe('retired');
+    expect(retired.scopes[0].desired).toBeUndefined();
+    expect(retired.activations).toEqual([]);
+  });
+}, 20_000);

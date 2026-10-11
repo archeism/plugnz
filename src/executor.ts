@@ -816,6 +816,12 @@ class Ledger {
     const planned = plan.scopes.find((row) => row.scope.id === scope.id);
     if (planned?.retirementPackages !== undefined) return scope;
     if (planned?.selectorMode === 'retired') {
+      // Individual verified removals do not retire the Source's authority.
+      // Preserve its desired state while siblings or cleanup remain pending.
+      if (this.state.activations.some(row => row.scopeId === scope.id)) return scope;
+      if (plan.operations.some(row => row.operation.scope.id === scope.id
+        && row.operation.operationId !== operation.operationId
+        && this.journalState(plan.attemptId, row.operation.operationId) !== 'completed')) return scope;
       const { desired: _desired, lastConverged: _converged, ...kept } = scope;
       return {
         ...kept,
