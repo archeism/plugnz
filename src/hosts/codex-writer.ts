@@ -418,6 +418,9 @@ function cleanupOwnedVersions(slot: string, active: string, id: string, source: 
     const candidate = join(slot, version);
     if (candidate === active || !statSync(candidate).isDirectory()) continue;
     const marker = readOwnership(candidate);
+    // The lifecycle handle proves the active prior only. Older inactive code
+    // may have the same marker identity without captured replacement authority.
+    if (handle !== undefined && !handle.prior.contentRoots.some(root => root.path === candidate && root.fingerprint === fingerprintTree(candidate))) continue;
     if (marker?.pluginId === id && (marker.source === source || (handle !== undefined
       && fingerprintTree(candidate) === handle.prior.installedFingerprint
       && priorSourceRepairAllows(handle, proof => historicalGitMarker(marker, proof))))) rmSync(candidate, { recursive: true, force: true });
@@ -555,6 +558,14 @@ function codexRouteProfile(
 
 function revalidateCodexTarget(handle: DurableLifecycleOperation): { version: ReturnType<typeof probeCodexVersion>; targetObservationId: string } {
   const bundle = rollbackBundle(handle.attemptId, handle.operationId);
+  if (handle.route === 'native') {
+    for (const slot of readNativeCacheSnapshots(handle)) {
+      assertNativeCacheParent(slot);
+      if (nativeCacheFingerprint(slot.path) !== slot.fingerprint) throw new Error('Codex complete cache slot changed after rollback capture');
+    }
+  } else if (handle.expected.presence === 'present') {
+    for (const root of handle.expected.contentRoots) assertRequestedCacheOwnership(root.path, handle.prior.contentRoots);
+  }
   if (existsSync(join(bundle, 'marketplace.json'))) {
     const metadata = JSON.parse(readFileSync(join(bundle, 'marketplace.json'), 'utf8')) as { marketplace: string; fingerprint: string | null };
     const checkout = marketplaceCheckout(metadata.marketplace);
@@ -611,7 +622,10 @@ function captureCodexActivation(projection: PinsAppliedProjection, projectedFing
   });
   capturePriorSourceRepair(projection, prior.installedFingerprint);
   saveCodexRollback(projection.attemptId, projection.operationId, projection.affectedNativeIds);
-  if (projection.route === 'native') captureMarketplaceRollback(projection);
+  if (projection.route === 'native') {
+    captureNativeCacheSnapshots(projection);
+    captureMarketplaceRollback(projection);
+  }
   return {
     prior,
     expected: {
@@ -974,11 +988,143 @@ function parseUpgradeJson(stdout: string): { readonly errors: readonly { readonl
 }
 
 function codexRollbackReference(attemptId: string, operationId: string): string {
-  return `codex:${attemptId}:${operationId}`;
+  const reference = `codex:${attemptId}:${operationId}`;
+  const bundle = rollbackBundle(attemptId, operationId);
+  const capture = join(bundle, 'native-cache.json');
+  if (!existsSync(capture)) return reference;
+  const digest = new CryptoHasher('sha256').update(readFileSync(capture, 'utf8')).update('\0')
+    .update(readFileSync(join(bundle, 'manifest.json'), 'utf8')).digest('hex');
+  return `${reference}:native-cache-sha256:${digest}`;
 }
 
 function rollbackBundle(attemptId: string, operationId: string): string {
   return resolve(join(codexHome(), '.plgnz-rollback', attemptId, operationId));
+}
+
+/** Complete physical cache proof, including modes; Source fingerprints stay portable. */
+function nativeCacheFingerprint(root: string, ignoreOwnership = false): string {
+  const hash = new CryptoHasher('sha256');
+  const read = readFileSync as unknown as (file: string) => Uint8Array;
+  const walk = (path: string, relative: string): void => {
+    const stat = lstatSync(path);
+    if (stat.isSymbolicLink() || (!stat.isDirectory() && !stat.isFile())) throw new Error(`Codex native cache contains an unsafe resource: ${path}`);
+    hash.update(`${stat.isDirectory() ? 'd' : 'f'}\0${relative}\0${stat.mode & 0o7777}\0`);
+    if (stat.isDirectory()) {
+      for (const entry of readdirSync(path).sort()) {
+        if (ignoreOwnership && relative === '' && entry === OWNERSHIP) {
+          const marker = lstatSync(join(path, entry));
+          if (marker.isSymbolicLink() || !marker.isFile()) throw new Error('Codex attempted cache ownership marker is unsafe');
+          continue;
+        }
+        walk(join(path, entry), relative === '' ? entry : `${relative}/${entry}`);
+      }
+    } else hash.update(new CryptoHasher('sha256').update(read(path)).digest('hex'));
+  };
+  walk(root, '');
+  return hash.digest('hex');
+}
+
+function nativeSlotIsOwned(installation: TargetInstallationData, source: string): boolean {
+  if (installation.ownership.kind !== 'owned' || installation.presence !== 'present' || installation.contentRoots.length !== 1) return false;
+  const packageName = installation.packageName;
+  if (packageName === null) return false;
+  const slot = pluginSlot(installation.nativeId);
+  const active = installation.contentRoots[0]!;
+  if (slot === null || dirname(active.path) !== slot || fingerprintTree(active.path) !== installation.installedFingerprint) return false;
+  assertManagedPath(codexHome(), slot);
+  const owner = readOwnership(active.path);
+  if (owner?.pluginId !== installation.nativeId || owner.source !== source
+    || (owner.scopeId !== undefined && owner.scopeId !== installation.ownership.scopeId)) return false;
+  const activeProof = nativeCacheFingerprint(active.path);
+  // Inventory has no historical Source authority. An inactive copy is proven
+  // only when its complete bytes, modes and marker match the observed active
+  // Source; older revisions and unknown metadata require Managed preservation.
+  return readdirSync(slot).every(version => {
+    const path = join(slot, version);
+    const stat = lstatSync(path);
+    if (stat.isSymbolicLink()) throw new Error('Codex native cache slot is redirected');
+    if (!validVersionSegment(version) || !stat.isDirectory()) return false;
+    try { validateCachedIdentity(path, packageName, version); }
+    catch { return false; }
+    return nativeCacheFingerprint(path) === activeProof;
+  });
+}
+
+interface NativeCacheSnapshot {
+  readonly nativeId: string;
+  readonly path: string;
+  readonly saved: string;
+  readonly fingerprint: string;
+  readonly parentIdentity: string;
+  readonly parentMode: number;
+}
+
+function nativeCacheParentIdentity(path: string): string {
+  const stat = statSync(dirname(path)) as ReturnType<typeof statSync> & { dev: number; ino: number };
+  return `${stat.dev}:${stat.ino}`;
+}
+
+function assertNativeCacheParent(slot: NativeCacheSnapshot): void {
+  assertManagedPath(codexHome(), dirname(slot.path));
+  if (nativeCacheParentIdentity(slot.path) !== slot.parentIdentity || (statSync(dirname(slot.path)).mode & 0o7777) !== slot.parentMode) {
+    throw new Error('Codex native cache parent changed outside the captured attempt');
+  }
+}
+
+function captureNativeCacheSnapshots(projection: PinsAppliedProjection): void {
+  const bundle = rollbackBundle(projection.attemptId, projection.operationId);
+  const source = projection.snapshot.nativeGit?.locator;
+  const installations = codex.listInstalled().map(installationRecord);
+  const slots = projection.affectedNativeIds.map((nativeId, index): NativeCacheSnapshot => {
+    const installed = installations.find(row => row.nativeId === nativeId);
+    if (installed === undefined || source === undefined || !nativeSlotIsOwned(installed, source)) throw new Error('Codex complete native cache ownership changed before capture');
+    const path = pluginSlot(nativeId)!;
+    const fingerprint = nativeCacheFingerprint(path);
+    const saved = String(index);
+    const snapshot = join(bundle, 'native-cache', saved);
+    const parentIdentity = nativeCacheParentIdentity(path);
+    const parentMode = statSync(dirname(path)).mode & 0o7777;
+    cpSync(path, snapshot, { recursive: true });
+    if (nativeCacheFingerprint(snapshot) !== fingerprint || nativeCacheFingerprint(path) !== fingerprint) throw new Error('Codex complete native cache changed during capture');
+    const slot = { nativeId, path, saved, fingerprint, parentIdentity, parentMode };
+    assertNativeCacheParent(slot);
+    return slot;
+  });
+  writeFileSync(join(bundle, 'native-cache.json'), JSON.stringify(slots));
+}
+
+function readNativeCacheSnapshots(handle: DurableLifecycleOperation): readonly NativeCacheSnapshot[] {
+  const file = join(rollbackBundle(handle.attemptId, handle.operationId), 'native-cache.json');
+  if (!existsSync(file)) throw new Error('Codex complete native cache rollback capture is missing');
+  if (handle.rollbackReference !== codexRollbackReference(handle.attemptId, handle.operationId)) throw new Error('Codex complete native cache authority differs from its sealed rollback reference');
+  const value: unknown = JSON.parse(readFileSync(file, 'utf8'));
+  if (!Array.isArray(value) || value.length !== handle.affectedNativeIds.length) throw new Error('Codex complete native cache rollback capture is invalid');
+  return value.map((entry: unknown, index: number) => {
+    const row = table(entry);
+    const nativeId = handle.affectedNativeIds[index]!;
+    if (row === null || row['nativeId'] !== nativeId || row['path'] !== pluginSlot(nativeId) || row['saved'] !== String(index)
+      || typeof row['fingerprint'] !== 'string' || !/^[0-9a-f]{64}$/u.test(row['fingerprint'])
+      || typeof row['parentIdentity'] !== 'string' || !/^\d+:\d+$/u.test(row['parentIdentity'])
+      || typeof row['parentMode'] !== 'number' || !Number.isInteger(row['parentMode']) || row['parentMode'] < 0 || row['parentMode'] > 0o7777) throw new Error('Codex complete native cache rollback identity is invalid');
+    return { nativeId, path: row['path'] as string, saved: String(index), fingerprint: row['fingerprint'], parentIdentity: row['parentIdentity'], parentMode: row['parentMode'] };
+  });
+}
+
+function restoreNativeCacheSnapshots(handle: DurableLifecycleOperation, slots: readonly (NativeCacheSnapshot & { readonly currentFingerprint: string })[]): void {
+  const bundle = rollbackBundle(handle.attemptId, handle.operationId);
+  for (const slot of slots) {
+    assertNativeCacheParent(slot);
+    if (nativeCacheFingerprint(slot.path) !== slot.currentFingerprint) throw new Error('Codex complete native cache changed before restore');
+    const saved = join(bundle, 'native-cache', slot.saved);
+    const scratch = mkdtempSync(join(dirname(slot.path), '.plgnz-cache-restore-'));
+    try {
+      cpSync(saved, scratch, { recursive: true });
+      chmodSync(scratch, statSync(saved).mode & 0o7777);
+      if (nativeCacheFingerprint(scratch) !== slot.fingerprint) throw new Error('Codex complete native cache restore staging drifted');
+      activate(scratch, slot.path, dirname(slot.path)).commit();
+      if (nativeCacheFingerprint(slot.path) !== slot.fingerprint) throw new Error('Codex complete native cache rollback did not verify');
+    } finally { rmSync(scratch, { recursive: true, force: true }); }
+  }
 }
 
 function saveCodexRollback(attemptId: string, operationId: string, nativeIds: readonly string[]): void {
@@ -1006,10 +1152,11 @@ function restoreCodexRollback(handle: DurableLifecycleOperation): MutationResult
   if (!existsSync(manifestPath)) throw new Error(`codex lifecycle rollback bundle is missing: ${handle.operationId}`);
   const manifest = parseRollbackManifest(readFileSync(manifestPath, 'utf8'));
   assertMarketplaceRollbackCurrent(handle);
-  if (handle.route === 'native') assertNativeRollbackSurfaces(handle, manifest, bundle);
+  const nativeSlots = handle.route === 'native' ? assertNativeRollbackSurfaces(handle, manifest, bundle) : null;
   const before = rollbackSurface(manifest.installs.map((install) => install.nativeId));
   restorePluginTables(manifest.tables);
-  for (const install of manifest.installs) {
+  if (nativeSlots !== null) restoreNativeCacheSnapshots(handle, nativeSlots);
+  else for (const install of manifest.installs) {
     if (!install.existed) {
       const current = codex.listInstalled().find((plugin) => plugin.id === install.nativeId)?.path;
       if (current !== undefined) {
@@ -1036,28 +1183,42 @@ function marketplaceCheckout(marketplace: string): string {
   return path;
 }
 
-function assertNativeRollbackSurfaces(handle: DurableLifecycleOperation, manifest: ReturnType<typeof parseRollbackManifest>, bundle: string): void {
+function assertNativeRollbackSurfaces(handle: DurableLifecycleOperation, manifest: ReturnType<typeof parseRollbackManifest>, bundle: string): readonly (NativeCacheSnapshot & { readonly currentFingerprint: string })[] {
   const config = existsSync(configFile()) ? readFileSync(configFile(), 'utf8') : '';
   for (const table of manifest.tables) {
     if (extractPluginTable(config, table.nativeId) !== table.block) throw new Error('Codex affected plugin config changed outside the captured native attempt; refusing rollback before any restore write');
   }
   const projections = handle.affectedOperationIds.map(id => join(codexHome(), '.plgnz-lifecycle', `${handle.attemptId}:${id}`));
-  for (const install of manifest.installs) {
-    const projected = projections.find(path => existsSync(path) && readOwnership(path)?.pluginId === install.nativeId);
-    const desired = (path: string): boolean => {
-      const marker = readOwnership(path);
-      return projected !== undefined && (marker === null || (marker.pluginId === install.nativeId && marker.scopeId === handle.scopeId)) && sameTree(path, projected);
-    };
-    if (install.existed && existsSync(install.cachePath)) {
-      const saved = join(bundle, 'cache', install.saved);
-      if (fingerprintTree(install.cachePath) !== fingerprintTree(saved) && !desired(install.cachePath)) throw new Error('Codex prior cache changed outside the captured native attempt; refusing rollback before any restore write');
+  return readNativeCacheSnapshots(handle).map(slot => {
+    assertNativeCacheParent(slot);
+    assertManagedPath(codexHome(), slot.path);
+    const saved = join(bundle, 'native-cache', slot.saved);
+    if (nativeCacheFingerprint(saved) !== slot.fingerprint) throw new Error('Codex retained complete cache rollback bytes or modes drifted');
+    const currentFingerprint = nativeCacheFingerprint(slot.path);
+    if (currentFingerprint === slot.fingerprint) return { ...slot, currentFingerprint };
+    const projected = projections.find(path => existsSync(path) && readOwnership(path)?.pluginId === slot.nativeId);
+    let containsCandidate = false;
+    for (const version of readdirSync(slot.path)) {
+      const path = join(slot.path, version);
+      if (!validVersionSegment(version) || !lstatSync(path).isDirectory()) throw new Error('Codex complete cache contains an unproven resource; refusing rollback before any restore write');
+      const priorVersion = join(saved, version);
+      if (existsSync(priorVersion) && nativeCacheFingerprint(path) === nativeCacheFingerprint(priorVersion)) continue;
+      if (projected === undefined || version !== pluginVersion(projected)
+        || (readOwnership(path) === null
+          ? nativeCacheFingerprint(path, true) !== nativeCacheFingerprint(projected, true)
+          : nativeCacheFingerprint(path) !== nativeCacheFingerprint(projected))) {
+        throw new Error('Codex complete cache changed outside the captured native attempt; refusing rollback before any restore write');
+      }
+      containsCandidate = true;
     }
-    if (install.slot === null || !existsSync(install.slot)) continue;
-    for (const version of slotVersions(install.slot)) {
-      if (install.versions.includes(version)) continue;
-      if (!desired(join(install.slot, version))) throw new Error('Codex new cache version is not the proven attempt projection; refusing rollback before any restore write');
+    // Released Codex only discards old versions as part of installing the exact
+    // candidate. A missing prior or changed slot mode alone is not our write.
+    if (!containsCandidate || projected === undefined
+      || ![statSync(saved).mode & 0o7777, statSync(projected).mode & 0o7777].includes(statSync(slot.path).mode & 0o7777)) {
+      throw new Error('Codex complete cache has no proven attempted replacement; refusing rollback before any restore write');
     }
-  }
+    return { ...slot, currentFingerprint };
+  });
 }
 
 function captureMarketplaceRollback(projection: PinsAppliedProjection): void {
@@ -1314,6 +1475,11 @@ function installationRecord(plugin: InstalledPlugin): TargetInstallationData {
 
 function nativeProjection(request: NativeProjectionRequest): NativeProjectionData {
   if ('snapshot' in request) {
+    const installed = request.targetObservation.installations.find(row => row.nativeId === request.snapshot.nativeId);
+    const destination = cacheDestination(request.snapshot.nativeId, pluginVersion(request.snapshot.packageRoot));
+    assertRequestedCacheOwnership(destination, installed?.contentRoots ?? []);
+    const configuredMarketplace = marketplaceOf(request.snapshot.nativeId);
+    if (configuredMarketplace !== null) catalogBinding(configuredMarketplace); // Invalid config blocks Managed as well as Native.
     const proof = recordedPriorSource(request.snapshot);
     if (proof !== undefined) {
       const installed = request.targetObservation.installations.find(row => row.nativeId === request.snapshot.nativeId);
@@ -1337,6 +1503,8 @@ function nativeProjection(request: NativeProjectionRequest): NativeProjectionDat
   const binding = catalogBinding(marketplace);
   const git = request.snapshot.nativeGit;
   if (binding.kind === 'sha-bound' && git !== undefined && git.resolvedRevision === binding.sha && git.locator === binding.source) {
+    const installations = request.targetObservation.installations.filter(row => marketplaceOf(row.nativeId) === marketplace);
+    if (!installations.every(row => nativeSlotIsOwned(row, git.locator))) return { kind: 'requires-managed', reasonId: 'native-cache-slot-ownership-unproven' };
     if (!projectionMatchesPackage(request.snapshot.packageRoot, request.snapshot.packageName)) {
       return { kind: 'requires-managed', reasonId: 'projection-not-identity' };
     }
@@ -1352,6 +1520,22 @@ function nativeProjection(request: NativeProjectionRequest): NativeProjectionDat
   return { kind: 'requires-managed', reasonId: catalogRefusal(binding, git) };
 }
 
+function assertRequestedCacheOwnership(destination: string, observedRoots: readonly { readonly path: string }[]): void {
+  assertManagedPath(codexHome(), destination);
+  if (existsSync(destination) && !observedRoots.some(root => root.path === destination)) {
+    throw new Error('Codex inactive requested version has no captured active ownership; refusing to replace it');
+  }
+  const slot = dirname(destination);
+  if (!existsSync(slot)) return;
+  const requested = destination.slice(slot.length + 1);
+  for (const version of readdirSync(slot)) {
+    const path = join(slot, version);
+    if (lstatSync(path).isDirectory() && wins(version, requested) && !observedRoots.some(root => root.path === path)) {
+      throw new Error(`Codex inactive cache version ${version} has no captured retirement authority and would remain active over ${requested}`);
+    }
+  }
+}
+
 function historicalGitMarker(marker: CodexOwnership, proof: Readonly<PriorSourceProof>): boolean {
   return marker.source === `scope:${proof.scopeId}` && marker.scopeId === proof.scopeId && marker.pluginId === proof.nativeId
     && marker.fingerprint === proof.sourceFingerprint && marker.sourceType === 'git' && marker.sourceRevision === proof.revision && marker.route === proof.route;
@@ -1361,6 +1545,12 @@ function catalogBinding(marketplace: string): CodexCatalogBinding {
   const config = readConfigDocument();
   const entry = table(table(config?.['marketplaces'])?.[marketplace]);
   if (entry === null) return { kind: 'absent', marketplace };
+  // Native rollback proves the complete frozen Source, not a sparse checkout.
+  const sparsePaths = entry['sparse_paths'];
+  if (sparsePaths !== undefined) {
+    if (!Array.isArray(sparsePaths) || sparsePaths.some(path => typeof path !== 'string')) throw new Error('invalid Codex marketplace sparse_paths: expected an array of strings');
+    if (sparsePaths.length !== 0) return { kind: 'unbound', marketplace };
+  }
   const ref = entry['source_type'] === 'git' && typeof entry['ref'] === 'string' ? entry['ref'] : null;
   const source = typeof entry['source'] === 'string' ? entry['source'] : null;
   const sha = ref?.toLowerCase() ?? '';

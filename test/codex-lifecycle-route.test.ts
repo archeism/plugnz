@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fingerprintTree } from '../src/fingerprint';
@@ -10,6 +10,7 @@ import {
   createLifecyclePlanCoverage,
   createRecordedOwnedActivation,
   createResolvedLifecyclePins,
+  hydrateDurableLifecycleOperation,
 } from '../src/lifecycle-runtime';
 import { emptyInventory } from './lifecycle-fixtures';
 import { withHostEnvAsync, writeFiles } from './util';
@@ -23,6 +24,186 @@ const otherId = 'other-plugin@demo-market';
 const foreignId = 'foreign-plugin@other-market';
 
 describe('codex native marketplace upgrade route', () => {
+  test('sparse checkout configuration selects Managed before native writes', async () => {
+    await withCodexBinary(async home => {
+      const snapshot = frozenSnapshot(home);
+      writeCatalog(home, frozenSha, [demoId]); installPlugin(home, 'demo-plugin', demoId, true);
+      const config = join(home, '.codex/config.toml');
+      const original = readFileSync(config, 'utf8');
+      for (const sparse of ['["packages/demo-plugin"]']) {
+        writeFileSync(config, original.replace('[marketplaces.demo-market]', `[marketplaces.demo-market]\nsparse_paths = ${sparse}`));
+        const before = fingerprintTree(join(home, '.codex'));
+        expect(selectedRoute(await selectedUpdate(snapshot, createResolvedLifecyclePins([]))).route).toBe('managed');
+        expect(fingerprintTree(join(home, '.codex'))).toBe(before);
+      }
+      writeFileSync(config, original.replace('[marketplaces.demo-market]', '[marketplaces.demo-market]\nsparse_paths = []'));
+      expect(selectedRoute(await selectedUpdate(snapshot, createResolvedLifecyclePins([]))).route).toBe('native');
+      expect(readFileSync(join(home, 'codex-invocations.log'), 'utf8').includes('marketplace upgrade')).toBe(false);
+    });
+  });
+  test('malformed sparse checkout configuration is a preflight defect', async () => {
+    await withCodexBinary(async home => {
+      const snapshot = frozenSnapshot(home);
+      writeCatalog(home, frozenSha, [demoId]); installPlugin(home, 'demo-plugin', demoId, true);
+      const config = join(home, '.codex/config.toml');
+      const original = readFileSync(config, 'utf8');
+      for (const sparse of ['"packages/demo-plugin"', '[1]']) {
+        writeFileSync(config, original.replace('[marketplaces.demo-market]', `[marketplaces.demo-market]\nsparse_paths = ${sparse}`));
+        const before = fingerprintTree(join(home, '.codex'));
+        let diagnostic = '';
+        try { await selectedUpdate(snapshot, createResolvedLifecyclePins([])); } catch (error) { diagnostic = String(error); }
+        expect(diagnostic).toContain('invalid Codex marketplace sparse_paths');
+        expect(fingerprintTree(join(home, '.codex'))).toBe(before);
+      }
+      expect(readFileSync(join(home, 'codex-invocations.log'), 'utf8').includes('marketplace upgrade')).toBe(false);
+    });
+  });
+  test('unproven inactive slot contents survive a Managed update with no native write', async () => {
+    for (const extra of ['unowned-version', 'older-owned-version', 'metadata']) {
+      await withCodexBinary(async home => {
+        const snapshot = frozenSnapshot(home, '1.1.0');
+        writeCatalog(home, frozenSha, [demoId]); installPlugin(home, 'demo-plugin', demoId, true);
+        const slot = join(home, '.codex/plugins/cache/demo-market/demo-plugin');
+        const kept = extra === 'metadata' ? join(slot, 'user-note.json') : join(slot, '0.9.0');
+        if (extra === 'metadata') writeFileSync(kept, '{"valuable":"metadata"}');
+        else {
+          writeFiles(kept, { 'plugin.json': '{"name":"demo-plugin","version":"0.9.0"}', 'valuable.txt': 'older bytes' });
+          if (extra === 'older-owned-version') writeFiles(kept, { '.plgnz-install.json': JSON.stringify({ source: sourceLocator, pluginId: demoId, fingerprint: 'older-source' }) });
+        }
+        const before = extra === 'metadata' ? readFileSync(kept, 'utf8') : fingerprintTree(kept);
+        const prepared = await prepareUpdate(snapshot, createResolvedLifecyclePins([]));
+        expect(prepared.handle.route).toBe('managed');
+        await codexLifecycle.apply(prepared);
+        codexLifecycle.verify(prepared.handle, await codexLifecycle.readback(prepared.handle));
+        expect(extra === 'metadata' ? readFileSync(kept, 'utf8') : fingerprintTree(kept)).toBe(before);
+        expect(readFileSync(join(home, 'codex-invocations.log'), 'utf8').includes('marketplace upgrade')).toBe(false);
+      });
+    }
+  });
+  test('Managed selection cannot overwrite an unproven inactive requested version', async () => {
+    await withCodexBinary(async home => {
+      const snapshot = frozenSnapshot(home, '0.9.0');
+      writeCatalog(home, frozenSha, [demoId]); installPlugin(home, 'demo-plugin', demoId, true);
+      writeFiles(home, { '.codex/plugins/cache/demo-market/demo-plugin/0.9.0/valuable.txt': 'foreign inactive version' });
+      const before = fingerprintTree(join(home, '.codex'));
+      let diagnostic = '';
+      try { await selectedUpdate(snapshot, createResolvedLifecyclePins([])); } catch (error) { diagnostic = String(error); }
+      expect(diagnostic).toContain('inactive requested version');
+      expect(fingerprintTree(join(home, '.codex'))).toBe(before);
+      expect(readFileSync(join(home, 'codex-invocations.log'), 'utf8').includes('marketplace upgrade')).toBe(false);
+    });
+  });
+  test('native failure restores the complete proven slot and its modes', async () => {
+    await withCodexBinary(async home => {
+      const snapshot = frozenSnapshot(home, '1.1.0');
+      writeCatalog(home, frozenSha, [demoId]); installPlugin(home, 'demo-plugin', demoId, true);
+      const slot = join(home, '.codex/plugins/cache/demo-market/demo-plugin');
+      chmodSync(slot, 0o750);
+      chmodSync(join(slot, '1.0.0'), 0o700);
+      const before = fingerprintTree(slot);
+      writeFiles(home, { '.codex/upgrade-mode': 'replace-slot-failure\n' });
+      const prepared = await prepareUpdate(snapshot, createResolvedLifecyclePins([]));
+      expect(prepared.handle.route).toBe('native');
+      let diagnostic = '';
+      try { await codexLifecycle.apply(prepared); } catch (error) { diagnostic = String(error); }
+      expect(diagnostic).toContain('native failure after complete slot replacement');
+      const hydrated = hydrateDurableLifecycleOperation(JSON.parse(JSON.stringify(prepared.handle)));
+      await codexLifecycle.rollback(hydrated);
+      codexLifecycle.verifyRollback(prepared.handle, await codexLifecycle.readback(prepared.handle));
+      expect(readdirSync(slot).sort()).toEqual(['1.0.0']);
+      expect(fingerprintTree(slot)).toBe(before);
+      expect(statSync(slot).mode & 0o777).toBe(0o750);
+      expect(statSync(join(slot, '1.0.0')).mode & 0o777).toBe(0o700);
+    });
+  });
+  test('complete slot CAS refuses changed inactive bytes, modes, metadata and parent before any rollback write', async () => {
+    for (const changed of ['inactive-bytes', 'inactive-mode', 'slot-mode', 'metadata', 'parent-mode', 'snapshot', 'captured-authority']) {
+      await withCodexBinary(async home => {
+        const snapshot = frozenSnapshot(home);
+        writeCatalog(home, frozenSha, [demoId]); installPlugin(home, 'demo-plugin', demoId, true);
+        const slot = join(home, '.codex/plugins/cache/demo-market/demo-plugin');
+        const prepared = await prepareUpdate(snapshot, createResolvedLifecyclePins([]));
+        expect(prepared.handle.route).toBe('native');
+        if (changed === 'inactive-bytes') writeFiles(join(slot, '0.9.0'), { 'foreign.txt': 'concurrent value' });
+        else if (changed === 'inactive-mode') chmodSync(join(slot, '1.0.0'), 0o700);
+        else if (changed === 'slot-mode') chmodSync(slot, 0o700);
+        else if (changed === 'metadata') writeFileSync(join(slot, 'foreign.json'), '{"keep":true}');
+        else if (changed === 'parent-mode') chmodSync(join(home, '.codex/plugins/cache/demo-market'), 0o700);
+        else if (changed === 'captured-authority') {
+          const capture = join(home, '.codex/.plgnz-rollback', prepared.handle.attemptId, prepared.handle.operationId, 'native-cache.json');
+          const rows = JSON.parse(readFileSync(capture, 'utf8'));
+          rows[0].parentMode = 0o700;
+          chmodSync(join(home, '.codex/plugins/cache/demo-market'), 0o700);
+          writeFileSync(capture, JSON.stringify(rows));
+        }
+        else writeFiles(join(home, '.codex/.plgnz-rollback', prepared.handle.attemptId, prepared.handle.operationId, 'native-cache/0'), { 'foreign.txt': 'corrupt capture' });
+        const before = fingerprintTree(join(home, '.codex'));
+        const slotMode = statSync(slot).mode;
+        const parentMode = statSync(join(home, '.codex/plugins/cache/demo-market')).mode;
+        let diagnostic = '';
+        try { await codexLifecycle.rollback(prepared.handle); } catch (error) { diagnostic = String(error); }
+        expect(diagnostic).toContain('Codex');
+        expect(fingerprintTree(join(home, '.codex'))).toBe(before);
+        expect(statSync(slot).mode).toBe(slotMode);
+        expect(statSync(join(home, '.codex/plugins/cache/demo-market')).mode).toBe(parentMode);
+      });
+    }
+  });
+  test('changed inactive slot bytes are rejected before the native call', async () => {
+    await withCodexBinary(async home => {
+      const snapshot = frozenSnapshot(home);
+      writeCatalog(home, frozenSha, [demoId]); installPlugin(home, 'demo-plugin', demoId, true);
+      const slot = join(home, '.codex/plugins/cache/demo-market/demo-plugin');
+      const prepared = await prepareUpdate(snapshot, createResolvedLifecyclePins([]));
+      writeFiles(join(slot, '0.9.0'), { 'foreign.txt': 'concurrent value' });
+      const before = fingerprintTree(join(home, '.codex'));
+      let diagnostic = '';
+      try { await codexLifecycle.apply(prepared); } catch (error) { diagnostic = String(error); }
+      expect(diagnostic).toContain('complete cache slot changed');
+      expect(fingerprintTree(join(home, '.codex'))).toBe(before);
+      expect(readFileSync(join(home, 'codex-invocations.log'), 'utf8').includes('marketplace upgrade')).toBe(false);
+    });
+  });
+  test('byte-identical directories with mismatched native version identities cannot prove multiversion ownership', async () => {
+    await withCodexBinary(async home => {
+      const snapshot = frozenSnapshot(home);
+      writeCatalog(home, frozenSha, [demoId]); installPlugin(home, 'demo-plugin', demoId, true);
+      const slot = join(home, '.codex/plugins/cache/demo-market/demo-plugin');
+      cpSync(join(slot, '1.0.0'), join(slot, '0.9.0'), { recursive: true });
+      expect(selectedRoute(await selectedUpdate(snapshot, createResolvedLifecyclePins([]))).route).toBe('managed');
+    });
+  });
+  test('a concurrent inactive version after native failure is preserved with no rollback writes', async () => {
+    await withCodexBinary(async home => {
+      const snapshot = frozenSnapshot(home, '1.1.0');
+      writeCatalog(home, frozenSha, [demoId]); installPlugin(home, 'demo-plugin', demoId, true);
+      writeFiles(home, { '.codex/upgrade-mode': 'replace-slot-failure\n' });
+      const prepared = await prepareUpdate(snapshot, createResolvedLifecyclePins([]));
+      try { await codexLifecycle.apply(prepared); } catch { /* the native fixture fails after replacing its slot */ }
+      const slot = join(home, '.codex/plugins/cache/demo-market/demo-plugin');
+      writeFiles(join(slot, '0.9.0'), { 'foreign.txt': 'concurrent inactive bytes' });
+      const before = fingerprintTree(join(home, '.codex'));
+      let diagnostic = '';
+      try { await codexLifecycle.rollback(prepared.handle); } catch (error) { diagnostic = String(error); }
+      expect(diagnostic).toContain('refusing rollback before any restore write');
+      expect(fingerprintTree(join(home, '.codex'))).toBe(before);
+    });
+  });
+  test('historical unbound rollback references remain readable but cannot authorize a complete-slot restore', async () => {
+    await withCodexBinary(async home => {
+      const snapshot = frozenSnapshot(home);
+      writeCatalog(home, frozenSha, [demoId]); installPlugin(home, 'demo-plugin', demoId, true);
+      const prepared = await prepareUpdate(snapshot, createResolvedLifecyclePins([]));
+      const historicalReference = `codex:${prepared.handle.attemptId}:${prepared.handle.operationId}`;
+      const historical = hydrateDurableLifecycleOperation({ ...prepared.handle, rollbackReference: historicalReference });
+      expect(historical.rollbackReference).toBe(historicalReference);
+      const before = fingerprintTree(join(home, '.codex'));
+      let diagnostic = '';
+      try { await codexLifecycle.rollback(historical); } catch (error) { diagnostic = String(error); }
+      expect(diagnostic).toContain('sealed rollback reference');
+      expect(fingerprintTree(join(home, '.codex'))).toBe(before);
+    });
+  });
   test('Source-authored native metadata selects Managed before any native write', async () => {
     await withCodexBinary(async home => {
       const original = frozenSnapshot(home);
@@ -601,6 +782,12 @@ copy_package() {
   cp -a "$package"/. "$dest"/
   rm -f "$dest/.plgnz-install.json"
 }
+if [ "$mode" = "replace-slot-failure" ]; then
+  rm -rf "$CODEX_HOME/plugins/cache/demo-market/demo-plugin"
+  copy_package "$CODEX_HOME/plugins/cache/demo-market/demo-plugin/1.1.0"
+  echo 'native failure after complete slot replacement' >&2
+  exit 1
+fi
 if [ "$mode" = "rewrite-inplace" ]; then
   copy_package "$CODEX_HOME/plugins/cache/demo-market/demo-plugin/1.0.0"
   printf '%s\\n' '{"selectedMarketplaces":["demo-market"],"upgradedRoots":["demo-market"],"errors":[]}'
