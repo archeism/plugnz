@@ -89,6 +89,11 @@ two tests, 16 assertions, 2.90 seconds. These use a controlled fake interpreter
 to place the concurrent native mutation precisely at lock acquisition; the
 separate real-native interpreter gate above proves ordinary lock compatibility.
 
+The final corrected source checkpoint `3040700` passed the full Bun 1.4.0 gate:
+659 passed, five skipped, zero failed, 4216 assertions across 664 tests in 61
+files, 167.76 seconds; typechecking passed. The retained log is
+`~/.local/state/plugnz-evidence/20261011/plugnz-3040700-lockfix-full-gate.log`.
+
 ## Combined candidate verification
 
 Candidate `fda9912` includes dcode lifecycle, selective package retirement,
