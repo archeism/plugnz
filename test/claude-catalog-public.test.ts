@@ -16,6 +16,29 @@ function plugin(name: string, body = 'first'): Record<string, string> {
   };
 }
 
+test('public Claude rejects malformed foreign marketplace timestamps before any batch mutation', async () => {
+  await withLifecycleCliHarness(harness => {
+    harness.fakeNative('claude', Array.from({ length: 80 }, () => ({ args: ['--version'], stdout: '2.1.295 (Claude Code)\n' })));
+    const foreign = harness.source('timestamp-foreign', { '.claude-plugin/marketplace.json': '{"name":"foreign","owner":{"name":"foreign"},"plugins":[]}' });
+    const alpha = harness.source('timestamp-first', plugin('alpha'));
+    const beta = harness.source('timestamp-last', plugin('beta'));
+    const manifest = join(harness.source('timestamp-batch', {}), 'manifest.json');
+    writeFileSync(manifest, JSON.stringify({ schemaVersion: 1, entries: [alpha, beta].map(locator => ({ operation: 'sync', source: { kind: 'local', locator }, target: { kind: 'claude-code', instance: 'default' } })) }));
+    for (const lastUpdated of [undefined, 17, null]) {
+      harness.writeHome({ '.claude/plugins/known_marketplaces.json': JSON.stringify({ foreign: { source: { source: 'directory', path: foreign }, installLocation: foreign, ...(lastUpdated === undefined ? {} : { lastUpdated }) } }) });
+      const before = snapshotTree(foreign);
+      const result = harness.run(['sync', '--manifest', manifest, '--json']);
+      expect(result.exitCode).toBe(1);
+      const report = parseLifecycleReport(JSON.parse(result.stdout));
+      expect(report.summary.mutationStarted).toBe(false);
+      expect(JSON.stringify(report)).toContain('foreign.lastUpdated');
+      expect(result.stores['claude-code'].after).toEqual(result.stores['claude-code'].before);
+      expect(result.state.after).toEqual(result.state.before);
+      expect(snapshotTree(foreign)).toEqual(before);
+    }
+  });
+});
+
 test('public Claude Managed lifecycle registers a native-loadable owned catalog and repairs missing registration', async () => {
   await withLifecycleCliHarness(harness => {
     harness.writeHome({ '.claude/.keep': '' });
