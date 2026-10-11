@@ -49,5 +49,38 @@ Fresh released-harness Sandbox proof gates newly reachable Native Git behavior;
 fixture success alone is not admission. Kimi changed/forced update and
 retirement remain independently unsupported/unverified, not delivered by an
 unchanged result. Historical ZCode ownership aliases require separately proven
-compatibility authority. External ZCode resource-only drift requires a public
-probe; its readback has a resource root not currently present in inventory.
+compatibility authority. Fresh Native admission and durable identity migration
+are not delivered by this checkpoint.
+
+## Resource-only drift follow-up
+
+The public Local ZCode probe reproduced an unchanged result after changing only
+an external user-only skill resource (1 failure, 13 assertions, 6.23 seconds).
+Native cache bytes alone were insufficient. New owned projection receipts bind
+the external resource fingerprint; inventory and readback inspect the same
+bounded resource root and treat missing, dirty, or receipt-less resources as
+nonconforming. A redirected/foreign resource root fails before mutation.
+
+The failed-update control also found an actual staging leak: random activation
+staging paths were not reconstructible from durable cleanup references. New
+stages have deterministic hashed attempt/operation paths and a receipt binding
+the frozen Source and projected artifact. Creation refuses an existing path;
+cleanup validates that exact receipt, then removes only the operation's stage.
+Rollback controls require exact cache/resource bytes and semantic shared JSON,
+including unrelated user options/settings; selective JSON restoration may
+legitimately reserialize those files.
+
+Focused follow-up command: `bun test test/native-git-provenance-public.test.ts
+test/zcode-cli-activation.test.ts test/zcode-cli-lifecycle.test.ts --timeout
+20000`: 14 passes, 2 existing macOS-only skips, 0 failures, 188 assertions in
+77.08 seconds. Both Git and Local public cases include dirty-resource rollback,
+missing-resource repair, foreign-root zero writes and source-free retirement.
+`bun run check` and `git diff --check` passed. This is not a new full-suite or
+released-native Sandbox gate.
+
+The frozen `432b7d7` full suite finished with 723 passes, 5 skips, 1 failure,
+4911 assertions in 385.79 seconds. The sole failed-update case hit its implicit
+5-second test deadline. A separate bounded 20-second diagnostic passed its
+actual rollback assertion in 4.32 seconds. The parent independently reproduced
+both the deadline failure and the bounded passing diagnostic; neither result
+is characterized as a green full gate or solely concurrent-suite noise.

@@ -18,7 +18,7 @@ export const zcodeCliTargetProfile = singleInstanceTargetProfile('zcode-cli');
 declare const TextDecoder: any;
 
 type NativeRecord = { id: string; name: string; marketplace: string; version: string; installPath: string; scope: 'user' | 'workspace' };
-type Ownership = { owner: 'plgnz'; schema: 1; logicalId: string; nativeId: string; fingerprint: string; source: string; resourcePath?: string; scopeId?: string; sourceType?: 'local' | 'git'; sourceRevision?: string; sourceLocator?: string | null };
+type Ownership = { owner: 'plgnz'; schema: 1; logicalId: string; nativeId: string; fingerprint: string; source: string; resourcePath?: string; resourceFingerprint?: string; scopeId?: string; sourceType?: 'local' | 'git'; sourceRevision?: string; sourceLocator?: string | null };
 
 export function zcodeRegistryFile(): string { return join(zcodeCliRoot(), 'plugins', 'installed_plugins.json'); }
 export function zcodeMarketplaceRoot(): string { return join(zcodeCliRoot(), 'plgnz-marketplaces'); }
@@ -87,11 +87,13 @@ export function readZcodeOwnership(root: string): Ownership | null {
     if (!isObject(value) || value['owner'] !== 'plgnz' || value['schema'] !== 1) return null;
     const logicalId = text(value['logicalId']); const nativeId = text(value['nativeId']); const fingerprint = text(value['fingerprint']); const source = text(value['source']);
     const resourcePath = text(value['resourcePath']);
+    const resourceFingerprint = text(value['resourceFingerprint']);
+    if (Object.hasOwn(value, 'resourceFingerprint') && (resourceFingerprint === undefined || !/^[0-9a-f]{64}$/u.test(resourceFingerprint))) return null;
     const lifecycle = ['scopeId', 'sourceType', 'sourceRevision', 'sourceLocator'].some(field => Object.hasOwn(value, field));
     const scopeId = text(value['scopeId']), sourceRevision = text(value['sourceRevision']);
     const sourceType = value['sourceType'], sourceLocator = value['sourceLocator'];
     if (lifecycle && (scopeId === undefined || sourceRevision === undefined || (sourceType !== 'local' && sourceType !== 'git') || (sourceType === 'git' ? typeof sourceLocator !== 'string' : sourceLocator !== null))) return null;
-    return logicalId === undefined || nativeId === undefined || fingerprint === undefined || source === undefined ? null : { owner: 'plgnz', schema: 1, logicalId, nativeId, fingerprint, source, ...(resourcePath === undefined ? {} : { resourcePath }), ...(lifecycle ? { scopeId, sourceType: sourceType as 'local' | 'git', sourceRevision, sourceLocator: sourceLocator as string | null } : {}) };
+    return logicalId === undefined || nativeId === undefined || fingerprint === undefined || source === undefined ? null : { owner: 'plgnz', schema: 1, logicalId, nativeId, fingerprint, source, ...(resourcePath === undefined ? {} : { resourcePath }), ...(resourceFingerprint === undefined ? {} : { resourceFingerprint }), ...(lifecycle ? { scopeId, sourceType: sourceType as 'local' | 'git', sourceRevision, sourceLocator: sourceLocator as string | null } : {}) };
   } catch { return null; }
 }
 

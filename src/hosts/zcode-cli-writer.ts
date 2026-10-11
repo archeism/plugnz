@@ -34,7 +34,7 @@ declare const TextDecoder: { new (): { decode(input: Uint8Array): string } };
 
 
 const MARKER = '.plgnz-install.json';
-type Ownership = { owner: 'plgnz'; schema: 1; logicalId: string; nativeId: string; fingerprint: string; source: string; resourcePath: string };
+type Ownership = { owner: 'plgnz'; schema: 1; logicalId: string; nativeId: string; fingerprint: string; source: string; resourcePath: string; resourceFingerprint: string };
 
 export const zcodeCliWriter: HostWriter = {
   ...zcodeCli,
@@ -115,7 +115,7 @@ export function projectZcodePlugin(source: string, destination: string, resource
   if (hasCommand(target)) manifest['commands'] = 'commands';
   mkdirSync(join(target, '.zcode-plugin'), { recursive: true });
   writeFileSync(join(target, '.zcode-plugin', 'plugin.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-  writeFileSync(join(target, MARKER), `${JSON.stringify({ owner: 'plgnz', schema: 1, logicalId, nativeId, fingerprint, source: sourceUri, resourcePath: resourceLinkRoot } satisfies Ownership, null, 2)}\n`);
+  writeFileSync(join(target, MARKER), `${JSON.stringify({ owner: 'plgnz', schema: 1, logicalId, nativeId, fingerprint, source: sourceUri, resourcePath: resourceLinkRoot, resourceFingerprint: fingerprintTree(ownedResources) } satisfies Ownership, null, 2)}\n`);
   assertNoSymlinks(target); assertNoSymlinks(ownedResources);
 }
 
@@ -370,6 +370,10 @@ function sha256(text: string): string {
   return hash.digest('hex');
 }
 
+function activationStage(attemptId: string, operationId: string): string {
+  return join(zcodeCliRoot(), '.plgnz-zcode-stage', sha256(`${attemptId}\n${operationId}`));
+}
+
 function readConfigObject(): Record<string, unknown> | null {
   const file = join(zcodeCliConfigRoot(), 'config.json');
   if (!existsSync(file)) return null;
@@ -405,6 +409,7 @@ function installationFor(native: ReturnType<typeof readZcodeNativeRecords>[numbe
   const owned = marker !== null && marker.nativeId === native.id && native.scope === 'user';
   const digest = fingerprintTree(root);
   const enabled = readZcodeEnabledPluginIds().get(native.id) === true;
+  const resources = resourceObservation(root, digest);
   return {
     nativeId: native.id,
     packageName: native.name,
@@ -413,14 +418,14 @@ function installationFor(native: ReturnType<typeof readZcodeNativeRecords>[numbe
       : { kind: 'unmanaged' },
     presence: 'present',
     enablement: enabled ? 'enabled' : 'disabled',
-    activation: enabled ? 'active' : 'inactive',
+    activation: enabled ? (resources.conforming ? 'active' : 'unknown') : 'inactive',
     ...(owned ? { observedRoute: 'native' as const } : {}),
     installedFingerprint: digest,
     installedVersion: native.version,
     source: owned
       ? zcodeSourceIdentity(marker)
       : null,
-    contentRoots: [{ label: 'native', path: root, fingerprint: digest }],
+    contentRoots: resources.roots,
   };
 }
 
@@ -465,6 +470,7 @@ function readbackFor(
   }
   const digest = fingerprintTree(root);
   const enabled = readZcodeEnabledPluginIds().get(handle.nativeId) === true;
+  const resources = resourceObservation(root, digest);
   return {
     adapterId: handle.adapterId,
     target: handle.target,
@@ -474,23 +480,29 @@ function readbackFor(
     route: 'native',
     presence: 'present',
     enablement: enabled ? 'enabled' : 'disabled',
-    activation: enabled ? 'active' : 'inactive',
+    activation: enabled ? (resources.conforming ? 'active' : 'unknown') : 'inactive',
     transition: ZCODE_ACTIVATION,
     installedFingerprint: digest,
-    contentRoots: contentRootsFor(root, digest),
+    contentRoots: resources.roots,
     retention,
   };
 }
 
-function contentRootsFor(root: string, digest: string): LifecycleReadbackData['contentRoots'] {
+function resourceObservation(root: string, digest: string): { roots: LifecycleReadbackData['contentRoots']; conforming: boolean } {
   const roots: Array<{ label: string; path: string; fingerprint: string }> = [{ label: 'native', path: root, fingerprint: digest }];
-  const resourcePath = readZcodeOwnership(root)?.resourcePath;
-  if (resourcePath === undefined) return roots;
+  const marker = readZcodeOwnership(root);
+  const resourcePath = marker?.resourcePath;
+  if (marker === null || resourcePath === undefined) return { roots, conforming: false };
+  const expected = join(zcodeResourceRoot(), marketplaceName(marker.nativeId), marker.fingerprint);
+  if (canonicalExistingPath(resourcePath) !== canonicalExistingPath(expected)) throw new Error('ZCode resource receipt names a foreign root');
+  if (!existsSync(resourcePath)) return { roots, conforming: false };
+  if (lstatSync(resourcePath).isSymbolicLink()) throw new Error('ZCode resource receipt root is redirected');
   const resource = realpathSync(resourcePath);
   const owned = realpathSync(zcodeResourceRoot());
-  if (!resource.startsWith(`${owned}/`) || !statSync(resource).isDirectory()) return roots;
-  roots.push({ label: 'resources', path: resource, fingerprint: fingerprintTree(resource) });
-  return roots;
+  if (!resource.startsWith(`${owned}/`) || !statSync(resource).isDirectory()) throw new Error('ZCode resource receipt root is unsafe');
+  const fingerprint = fingerprintTree(resource);
+  roots.push({ label: 'resources', path: resource, fingerprint });
+  return { roots, conforming: marker.resourceFingerprint === fingerprint };
 }
 
 function retirementSnapshot(attemptId: string, operationId: string, nativeId: string): string {
@@ -764,7 +776,11 @@ const zcodeCliLifecycleDefinition: LifecycleHostDefinition = {
     const resourceRoot = join(realpathSync(zcodeCliRoot()), 'plgnz-resources', market, snapshot.packageFingerprint);
     const stageParent = join(zcodeCliRoot(), '.plgnz-zcode-stage');
     mkdirSync(stageParent, { recursive: true });
-    const stage = mkdtempSync(join(stageParent, 'activation-'));
+    if (lstatSync(stageParent).isSymbolicLink()) throw new Error('ZCode staging parent is redirected');
+    const stage = activationStage(request.selection.attemptId, request.selection.operationId);
+    mkdirSync(stage); // Existing foreign or interrupted stages are never overwritten.
+    const receipt = { attemptId: request.selection.attemptId, operationId: request.selection.operationId, sourceRevision: snapshot.immutableRevision, packageFingerprint: snapshot.packageFingerprint };
+    writeFileSync(join(stage, 'stage-receipt.json'), JSON.stringify(receipt));
     const marketStage = join(stage, 'marketplace');
     const resourcesStage = join(stage, 'resources');
     const pluginStage = join(marketStage, 'plugins', snapshot.packageName);
@@ -776,6 +792,7 @@ const zcodeCliLifecycleDefinition: LifecycleHostDefinition = {
     writeFileSync(join(pluginStage, MARKER), `${JSON.stringify({ ...marker, scopeId: snapshot.scopeId, sourceType: snapshot.sourceType, sourceRevision: snapshot.immutableRevision, sourceLocator: snapshot.nativeGit?.locator ?? null }, null, 2)}\n`);
     writeFileSync(join(marketStage, 'marketplace.json'), `${JSON.stringify({ name: market, plugins: [{ name: snapshot.packageName, source: `./plugins/${snapshot.packageName}` }] }, null, 2)}\n`);
     rejectCommandCollisions(marketStage, snapshot.nativeId, nativeById(snapshot.nativeId)?.installPath);
+    writeFileSync(join(stage, 'stage-receipt.json'), JSON.stringify({ ...receipt, projectedFingerprint: fingerprintTree(pluginStage) }));
     return { stagingId: `stage:${request.selection.attemptId}:${request.selection.operationId}`, stagingRoot: pluginStage };
   },
   applyLifecycleDirectives: async () => [],
@@ -919,6 +936,15 @@ const zcodeCliLifecycleDefinition: LifecycleHostDefinition = {
     return { receiptId: `rollback:${handle.attemptId}:${handle.operationId}`, changed: true };
   },
   cleanup: async (reference: CleanupReference, _disposition: CleanupDisposition): Promise<CleanupResultData> => {
+    const stage = activationStage(reference.attemptId, reference.operationId);
+    if (existsSync(stage)) {
+      if (lstatSync(dirname(stage)).isSymbolicLink() || lstatSync(stage).isSymbolicLink()) throw new Error('ZCode cleanup stage is redirected');
+      const receipt = readJson(join(stage, 'stage-receipt.json'));
+      if (receipt?.['attemptId'] !== reference.attemptId || receipt['operationId'] !== reference.operationId
+        || typeof receipt['sourceRevision'] !== 'string' || typeof receipt['packageFingerprint'] !== 'string'
+        || (reference.artifactId?.startsWith('sha256:') && reference.artifactId !== `sha256:${receipt['projectedFingerprint']}`)) throw new Error('ZCode cleanup stage ownership does not match operation');
+      rmSync(stage, { recursive: true });
+    }
     rmSync(join(zcodeCliRoot(), 'plgnz-lifecycle', reference.attemptId, reference.operationId), { recursive: true, force: true });
     return { cleanupId: `cleanup:${reference.attemptId}:${reference.operationId}`, completed: true };
   },
