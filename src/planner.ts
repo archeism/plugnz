@@ -381,7 +381,7 @@ async function planSync(
       requiredCapabilities: [...requiredSemanticsForOperation(inventory, 'install')].sort(),
       adoptionRequested: selected.adoptionRequested,
     });
-    const row = await classifyDesired(item, selected, inventory, nativeId, attemptId, state, command === 'add' || command === 'update');
+    const row = await classifyDesired(item, selected, inventory, nativeId, attemptId, state, command === 'add' || command === 'update', command === 'update');
     if (row.kind === 'defect') return row;
     classified.push(row);
   }
@@ -408,6 +408,7 @@ async function classifyDesired(
   attemptId: string,
   state: LifecycleStateV2,
   applyUpdates: boolean,
+  reapplyMatchingUpdate: boolean,
 ): Promise<Classified | Defect> {
   const operationId = operationIdentity('desired-pair', item.scope.id, selected.plugin.name, nativeId, item.frozen.snapshot.fingerprint);
   const snapshotId = sourceSnapshotId(item.frozen);
@@ -455,7 +456,11 @@ async function classifyDesired(
     return classified(operationId, 'desired-pair', item.scope, snapshotId, selected.plugin.name, nativeId, 'not-attempted', 'none', decision.reason);
   }
   const recordedRoute = activation?.route.kind === 'managed' || activation?.route.kind === 'native' ? activation.route.kind : null;
-  const action = chosenAction(replacing, recordedRoute, decision.route, sameBytes(activation, installation, selected.plugin));
+  const matchingBytes = sameBytes(activation, installation, selected.plugin);
+  const action = chosenAction(replacing, recordedRoute, decision.route, matchingBytes, reapplyMatchingUpdate);
+  const plannedOperationId = action === 'update' && matchingBytes && reapplyMatchingUpdate
+    ? operationIdentity('desired-pair', item.scope.id, selected.plugin.name, nativeId, `${item.frozen.snapshot.fingerprint}\0${state.stateGeneration}`)
+    : operationId;
   if (action === 'route-migrate' || (action === 'update' && !applyUpdates)) {
     return classified(
       operationId,
@@ -474,7 +479,7 @@ async function classifyDesired(
       ),
     );
   }
-  return classified(operationId, 'desired-pair', item.scope, snapshotId, selected.plugin.name, nativeId, action, decision.route, null);
+  return classified(plannedOperationId, 'desired-pair', item.scope, snapshotId, selected.plugin.name, nativeId, action, decision.route, null);
 }
 
 async function planOmissions(
@@ -921,10 +926,11 @@ function chosenAction(
   recordedRoute: 'native' | 'managed' | null,
   selectedRoute: 'native' | 'managed',
   bytesMatch: boolean,
+  reapplyMatchingUpdate: boolean,
 ): LifecyclePlanAction {
   if (!replacing) return 'install';
   if (recordedRoute !== null && recordedRoute !== selectedRoute) return 'route-migrate';
-  if (bytesMatch && recordedRoute === selectedRoute) return 'unchanged';
+  if (bytesMatch && recordedRoute === selectedRoute && !reapplyMatchingUpdate) return 'unchanged';
   return 'update';
 }
 

@@ -1119,7 +1119,8 @@ function summaryFor(outcomes: readonly LifecycleOperationOutcome[]): LifecycleRe
   const changed = outcomes.some((outcome) => outcome.changed);
   const pending = outcomes.find((outcome) => outcome.result === 'pending');
   const readback = outcomes.find((outcome) => outcome.reason?.category === 'readback');
-  const mutationStarted = changed || pending !== undefined;
+  const reapplied = outcomes.some((outcome) => outcome.result === 'succeeded' && outcome.action === 'update');
+  const mutationStarted = changed || pending !== undefined || reapplied;
   if (failed === undefined) {
     return {
       result: 'converged',
