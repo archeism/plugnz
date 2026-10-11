@@ -990,7 +990,7 @@ async function runWriterAdd(
         changed: false,
         resourceState: 'potentially-changed',
         activationState: 'unknown',
-        reason: reason('recovery', 'recovery.required', `install of '${pair.plugin.name}' requires recovery after pending intent was persisted — ${unknownErrorDiagnostic(error)}`),
+        reason: reason('recovery', 'recovery.required', `target '${pair.writer.id}' refused install after pending intent was persisted — ${error instanceof CompatibilityError ? error.message : unknownErrorDiagnostic(error)}`),
       }));
       break;
     }
