@@ -5,6 +5,8 @@ import {
   type DeploymentScopeIdentity,
 } from './deployment-scope';
 import { unknownErrorDiagnostic } from './error-diagnostic';
+import { parseRecoveryOperationProof, type RecoveryOperationProof } from './recovery-proof';
+import type { JournalState } from './state';
 
 export const LIFECYCLE_REPORT_SCHEMA_VERSION = 1 as const;
 
@@ -158,6 +160,21 @@ export interface LifecycleReport {
   plan: LifecyclePlanOperation[];
   outcomes: LifecycleOperationOutcome[];
   summary: LifecycleReportSummary;
+  recovery?: { readonly schemaVersion: 1; readonly receipts: readonly LifecycleRecoveryReceipt[] };
+}
+
+/** Historical recovery facts are not current Desired convergence outcomes. */
+export interface LifecycleRecoveryReceipt {
+  readonly original: RecoveryOperationProof;
+  readonly status: 'completed' | 'pending' | 'not-attempted';
+  readonly settlement: 'not-attempted' | 'commit' | 'rollback' | null;
+  readonly finalJournalState: JournalState;
+  readonly resourceState: LifecycleResourceState;
+  readonly activationState: LifecycleActivationState;
+  readonly mutationStarted: boolean;
+  readonly changed: boolean;
+  readonly readbackVerified: boolean;
+  readonly reason: LifecycleReason | null;
 }
 
 export class LifecycleReportValidationError extends Error {
@@ -178,7 +195,7 @@ export function parseLifecycleReport(value: unknown): LifecycleReport {
   if (!isObject(value)) {
     throw invalid('lifecycle report must be an object');
   }
-  exactFields(value, ['schemaVersion', 'command', 'plan', 'outcomes', 'summary'], 'lifecycle report');
+  exactFields(value, ['schemaVersion', 'command', 'plan', 'outcomes', 'summary', 'recovery'], 'lifecycle report');
   if (value['schemaVersion'] !== LIFECYCLE_REPORT_SCHEMA_VERSION) {
     throw invalid('lifecycle report schemaVersion must be 1');
   }
@@ -229,9 +246,57 @@ export function parseLifecycleReport(value: unknown): LifecycleReport {
     if (!seen.has(operationId)) throw protocol('protocol.missing-outcome', `planned operation '${operationId}' has no outcome`);
   }
 
-  assertSummary(summary, outcomes, command['dryRun'] as boolean);
+  const receipts = value['recovery'] === undefined ? [] : parseRecoveryReceipts(value['recovery'], command['dryRun'] as boolean);
+  const historicalIds = new Set<string>();
+  for (const receipt of receipts) {
+    const id = receipt.original.operationId;
+    if (historicalIds.has(id) || planned.has(id)) throw contradiction('historical recovery operation identity is ambiguous');
+    historicalIds.add(id);
+  }
+  assertSummary(summary, outcomes, command['dryRun'] as boolean, receipts);
 
   return value as unknown as LifecycleReport;
+}
+
+function parseRecoveryReceipts(value: unknown, dryRun: boolean): LifecycleRecoveryReceipt[] {
+  if (!isObject(value)) throw invalid('recovery must be an object');
+  exactFields(value, ['schemaVersion', 'receipts'], 'recovery');
+  if (value['schemaVersion'] !== 1 || !Array.isArray(value['receipts'])) throw invalid('recovery requires schemaVersion 1 and receipts');
+  if (dryRun) throw contradiction('dry run cannot carry recovery receipts');
+  return value['receipts'].map(item => {
+    if (!isObject(item)) throw invalid('recovery receipt must be an object');
+    exactFields(item, ['original', 'status', 'settlement', 'finalJournalState', 'resourceState', 'activationState', 'mutationStarted', 'changed', 'readbackVerified', 'reason'], 'recovery receipt');
+    let original: RecoveryOperationProof;
+    try { original = parseRecoveryOperationProof(item['original']); }
+    catch (error) { throw invalid(`invalid recovery original: ${unknownErrorDiagnostic(error)}`); }
+    if (!oneOf(['completed', 'pending', 'not-attempted'], item['status'])
+      || !(item['settlement'] === null || oneOf(['not-attempted', 'commit', 'rollback'], item['settlement']))
+      || !oneOf(['pending', 'applying', 'applied', 'readback-verified', 'rollback', 'rolled-back', 'cleanup-pending', 'completed', 'failed', 'not-attempted'], item['finalJournalState'])
+      || !oneOf(LIFECYCLE_RESOURCE_STATES, item['resourceState']) || !oneOf(LIFECYCLE_ACTIVATION_STATES, item['activationState'])
+      || typeof item['mutationStarted'] !== 'boolean' || typeof item['changed'] !== 'boolean' || typeof item['readbackVerified'] !== 'boolean'
+      || !(item['reason'] === null || isObject(item['reason']))) throw invalid('recovery receipt contains invalid or missing fields');
+    if (item['reason'] !== null) assertReason(item['reason'] as Record<string, unknown>);
+    if (item['changed'] && !item['mutationStarted']) throw contradiction('changed recovery receipt requires mutationStarted');
+    if (item['status'] === 'completed') {
+      if (item['reason'] !== null || item['settlement'] === null) throw contradiction('completed recovery requires a successful settlement');
+      const expected = item['settlement'] === 'commit' ? 'completed' : item['settlement'] === 'rollback' ? 'rolled-back' : 'not-attempted';
+      if (item['finalJournalState'] !== expected) throw contradiction('completed recovery contradicts its final journal settlement');
+    } else if (item['reason'] === null) throw contradiction('uncompleted recovery requires a reason');
+    if (item['settlement'] === 'commit' || item['settlement'] === 'rollback') {
+      if (!original.sealed || !item['readbackVerified']) throw contradiction('verified recovery settlement requires sealed authority and readback');
+      if (item['status'] === 'pending' && item['finalJournalState'] !== 'cleanup-pending') throw contradiction('verified pending recovery must remain durably cleanup-pending');
+    }
+    if (item['status'] === 'not-attempted' && (item['settlement'] !== null || item['finalJournalState'] !== original.journalState
+      || item['mutationStarted'] || item['changed'] || item['readbackVerified'] || item['resourceState'] !== 'unknown' || item['activationState'] !== 'unknown')) {
+      throw contradiction('unattempted recovery cannot claim observations, settlement, or mutation');
+    }
+    if (item['settlement'] === 'not-attempted' && (original.sealed || original.journalState !== 'pending'
+      || item['status'] !== 'completed' || item['mutationStarted'] || item['changed'] || item['readbackVerified']
+      || item['resourceState'] !== 'unknown' || item['activationState'] !== 'unknown')) throw contradiction('accepted-intent settlement cannot claim native apply');
+    if (item['readbackVerified'] && (item['resourceState'] === 'unknown' || item['resourceState'] === 'potentially-changed'
+      || item['activationState'] === 'unknown')) throw contradiction('verified recovery cannot claim unknown native state');
+    return { ...item, original } as unknown as LifecycleRecoveryReceipt;
+  });
 }
 
 const PLAN_IDENTITY_FIELDS = [
@@ -445,7 +510,7 @@ function isKnownSafeReadbackState(resourceState: unknown, activationState: unkno
     (resourceState === 'absent' && activationState === 'inactive');
 }
 
-function assertSummary(summary: Record<string, unknown>, outcomes: readonly Record<string, unknown>[], dryRun: boolean): void {
+function assertSummary(summary: Record<string, unknown>, outcomes: readonly Record<string, unknown>[], dryRun: boolean, receipts: readonly LifecycleRecoveryReceipt[] = []): void {
   exactFields(summary, ['result', 'terminalPhase', 'mutationStarted', 'changed', 'failureCategory', 'reason', 'recoveryId', 'readbackId'], 'lifecycle summary');
   if (!oneOf(LIFECYCLE_COMMAND_RESULTS, summary['result']) || !oneOf(LIFECYCLE_TERMINAL_PHASES, summary['terminalPhase']) ||
       typeof summary['mutationStarted'] !== 'boolean' || typeof summary['changed'] !== 'boolean' ||
@@ -458,8 +523,8 @@ function assertSummary(summary: Record<string, unknown>, outcomes: readonly Reco
   if (reason !== null && (reason as Record<string, unknown>)['category'] !== summary['failureCategory']) {
     throw contradiction('summary failureCategory contradicts its reason');
   }
-  const nonSuccess = outcomes.some((outcome) => outcome['result'] !== 'succeeded');
-  const anyChanged = outcomes.some((outcome) => outcome['changed'] === true);
+  const nonSuccess = outcomes.some((outcome) => outcome['result'] !== 'succeeded') || receipts.some(row => row.status !== 'completed');
+  const anyChanged = outcomes.some((outcome) => outcome['changed'] === true) || receipts.some(row => row.changed);
   const potentiallyChanged = outcomes.some((outcome) => outcome['resourceState'] === 'potentially-changed');
   const earlyPhase = summary['terminalPhase'] === 'parse' || summary['terminalPhase'] === 'resolve' ||
     summary['terminalPhase'] === 'freeze' || summary['terminalPhase'] === 'preflight';
@@ -468,6 +533,8 @@ function assertSummary(summary: Record<string, unknown>, outcomes: readonly Reco
     isObject(outcome['reason']) && outcome['reason']['category'] === 'recovery');
   const recoveryRequiredOutcomes = recoveryOutcomes.filter((outcome) =>
     (outcome['reason'] as Record<string, unknown>)['code'] === 'recovery.required');
+  const pendingReceipts = receipts.filter(row => row.status === 'pending');
+  if (receipts.some(row => row.mutationStarted) && summary['mutationStarted'] !== true) throw contradiction('recovery mutation requires aggregate mutationStarted');
   const readbackOutcomes = outcomes.filter((outcome) =>
     isObject(outcome['reason']) && outcome['reason']['category'] === 'readback');
   const appliedDisablements = outcomes.filter((outcome) =>
@@ -497,11 +564,11 @@ function assertSummary(summary: Record<string, unknown>, outcomes: readonly Reco
   if (claimsRecoveryRequired && summary['mutationStarted'] !== true) {
     throw contradiction('recovery.required work requires mutationStarted=true');
   }
-  if (claimsRecoveryRequired && !recoveryRequiredOutcomes.some((outcome) =>
+  if (claimsRecoveryRequired && pendingReceipts.length === 0 && !recoveryRequiredOutcomes.some((outcome) =>
     outcome['result'] === 'pending' || outcome['resourceState'] === 'potentially-changed')) {
     throw contradiction('recovery.required work needs a pending or potentially changed recovery outcome');
   }
-  const recoveryRequired = pendingOutcomes.length > 0 || recoveryOutcomes.length > 0 ||
+  const recoveryRequired = pendingReceipts.length > 0 || pendingOutcomes.length > 0 || recoveryOutcomes.length > 0 ||
     (isObject(reason) && reason['category'] === 'recovery');
   if (recoveryRequired && summary['recoveryId'] === null) {
     throw contradiction('pending or recovery-required work needs a recoveryId');
@@ -509,10 +576,11 @@ function assertSummary(summary: Record<string, unknown>, outcomes: readonly Reco
   if (typeof summary['recoveryId'] === 'string' && !recoveryRequired) {
     throw contradiction('summary recoveryId requires pending or recovery-required work');
   }
-  if (recoveryRequired && ![...recoveryOutcomes, ...pendingOutcomes].some((outcome) => outcome['operationId'] === summary['recoveryId'])) {
+  if (recoveryRequired && !pendingReceipts.some(row => row.original.operationId === summary['recoveryId']) && ![...recoveryOutcomes, ...pendingOutcomes].some((outcome) => outcome['operationId'] === summary['recoveryId'])) {
     throw contradiction('summary recoveryId does not identify pending or recovery-required work');
   }
-  const readbackRequired = summary['terminalPhase'] === 'readback' || readbackOutcomes.length > 0 ||
+  const historicalReadback = receipts.some(row => row.original.operationId === summary['readbackId'] && row.readbackVerified);
+  const readbackRequired = historicalReadback || summary['terminalPhase'] === 'readback' || readbackOutcomes.length > 0 ||
     appliedDisablements.length > 0 || (isObject(reason) && reason['category'] === 'readback');
   if (readbackRequired && summary['readbackId'] === null) {
     throw contradiction('readback work needs a readbackId');
@@ -520,7 +588,7 @@ function assertSummary(summary: Record<string, unknown>, outcomes: readonly Reco
   if (typeof summary['readbackId'] === 'string' && !readbackRequired) {
     throw contradiction('summary readbackId requires readback work');
   }
-  if (readbackRequired && ![...readbackOutcomes, ...appliedDisablements].some((outcome) => outcome['operationId'] === summary['readbackId'])) {
+  if (readbackRequired && !historicalReadback && ![...readbackOutcomes, ...appliedDisablements].some((outcome) => outcome['operationId'] === summary['readbackId'])) {
     throw contradiction('summary readbackId does not identify readback work');
   }
   if (summary['result'] === 'converged' && (nonSuccess || summary['failureCategory'] !== null || reason !== null)) {

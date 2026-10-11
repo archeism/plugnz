@@ -89,6 +89,35 @@ function validReport(): LifecycleReport {
   };
 }
 
+test('versioned historical rollback accounts for change while current Desired remains unchanged', () => {
+  const report = validReport();
+  report.plan[0]!.action = 'unchanged';
+  report.outcomes[0]!.action = 'unchanged';
+  report.outcomes[0]!.changed = false;
+  report.recovery = { schemaVersion: 1, receipts: [{
+    original: { attemptId: 'historical-attempt', command: 'sync', operationId: 'historical-operation',
+      scope: scope(), package: 'addy', nativeId: 'addy@personal', action: 'disable-nonconforming',
+      route: 'managed', journalState: 'rollback', sealed: true },
+    status: 'completed', settlement: 'rollback', finalJournalState: 'rolled-back',
+    resourceState: 'retained', activationState: 'retained-prior', mutationStarted: true,
+    changed: true, readbackVerified: true, reason: null,
+  }] };
+  expect(parseLifecycleReport(report).summary.changed).toBe(true);
+  expect(parseLifecycleReport(report).outcomes[0]!.changed).toBe(false);
+  const negatives = [
+    { ...report, summary: { ...report.summary, changed: false } },
+    { ...report, recovery: { ...report.recovery, schemaVersion: 2 } },
+    { ...report, recovery: { ...report.recovery, receipts: [...report.recovery.receipts, ...report.recovery.receipts] } },
+    { ...report, recovery: { schemaVersion: 1, receipts: [{ ...report.recovery.receipts[0], status: 'pending' }] } },
+    { ...report, command: { ...report.command, dryRun: true } },
+  ];
+  for (const value of negatives) {
+    let rejected = false;
+    try { parseLifecycleReport(value); } catch { rejected = true; }
+    expect(rejected).toBe(true);
+  }
+});
+
 describe('lifecycle report contract', () => {
   test('pins schema version and orthogonal machine-readable fields', () => {
     expect({

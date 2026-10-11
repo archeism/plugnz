@@ -156,3 +156,24 @@ forged scope identity and incompatible command/action. Native handles remain
 private. Bun 1.4 focused inventory/proof/doctor-import checks: 9 passed, 55
 assertions; `bun run check` passed. This proves only the read-only proof slice,
 not report receipts, recovery accounting, or consumer receipt admission.
+
+## Published baseline proof (not a pin advancement)
+
+Root verified public 0.0.10 registry gitHead `62aed66`, tarball SHA256
+`1716db7d2bfcc7a6bb465f9620220885cf14699f0d9bf0e05b744b188373c4f5`, and
+registry-matching SHA512
+`opwN0SiUBExRc+VkpCL+PePPMmGGbL/IxCekIhOFbGTqnWkwJvq9DiCvfAJN//bgtflvkUJf7qOHbRnmeSjBDw==`.
+Artifact: `/tmp/plugnz-release-0010-proof.phFQfl/plugnz-0.0.10.tgz`.
+Extracted Node 22 syntax and publication CI passed. Root ran canonical Personal
+316 consumer acceptance with production pin unchanged at 0.0.9:
+
+```sh
+PERSONAL_TEST_PLUGNZ_BIN=/tmp/plugnz-release-0010-proof.phFQfl/package/dist/plugnz.mjs \
+PERSONAL_TEST_PLUGNZ_VERSION=0.0.10 \
+/tmp/plugnz-pr62-deps.0msIJO/node_modules/.bin/bun run check:plugin-lifecycle-producer
+```
+
+Result: 1 passed, 31 assertions, 0 failed, 13.36 seconds. This is actual published
+producer with fixture version/lock launchers, not every native adapter proof.
+The receipt contract requires a subsequent deliberate producer/consumer release;
+this evidence does not authorize advancing the intermediate fleet pin.
