@@ -10,7 +10,7 @@
  * materialized fixture home via `OPEN_PLUGIN_HOME`.
  */
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { runUpdate } from '../src/update';
@@ -924,11 +924,20 @@ describe('update · re-add from the recorded source', () => {
     await withHostEnvAsync('kimi', async (home) => {
       await withKimiNative(home, async () => {
       materializeInto(home, 'cursor');
+      rmSync(join(home, '.cursor', 'plugins', 'local', 'demo-plugin'), { recursive: true, force: true });
+      const savedCursor = process.env['OPEN_PLUGIN_CURSOR_BIN'];
+      const cursorBin = join(home, 'cursor-bin');
+      writeFileSync(cursorBin, '#!/bin/sh\nprintf \'%s\\n\' \'2.4.0\'\n');
+      chmodSync(cursorBin, 0o755);
+      process.env['OPEN_PLUGIN_CURSOR_BIN'] = cursorBin;
       const repo = join(home, 'src-repo');
       const sha = sourceRepo(repo, 'demo-plugin', { 'from-repo': { type: 'stdio', command: '/bin/echo' } });
-      // The materialized Cursor fixture is deliberately unowned. Adopt it
-      // through the public route before asking `update` to re-materialize it.
-      expect(await main(['add', repo, '--target', 'cursor', '--adopt-existing'])).toBe(0);
+      // The materialized Cursor fixture is deliberately unowned. A managed
+      // 2.4.0 probe admits the mcp plugin into an empty local slot.
+      let cursorAdded = 1;
+      try {
+      cursorAdded = await main(['add', repo, '--target', 'cursor', '--adopt-existing']);
+      expect(cursorAdded).toBe(0);
       writeLedger(home, [
         { host: 'kimi', id: 'demo-plugin', source: repo, sourceSha: sha },
         { host: 'cursor', id: 'demo-plugin', source: repo, sourceSha: sha },
@@ -939,6 +948,10 @@ describe('update · re-add from the recorded source', () => {
       expect(result.exitCode).toBe(0);
       expect(result.findings.filter((f) => f.mark === '✓').map((f) => f.host).sort()).toEqual(['cursor', 'kimi']);
       expect(readFileSync(join(home, '.cursor', 'plugins', 'local', 'demo-plugin', 'mcp.json'), 'utf8')).toContain('from-repo');
+      } finally {
+        if (savedCursor === undefined) delete process.env['OPEN_PLUGIN_CURSOR_BIN'];
+        else process.env['OPEN_PLUGIN_CURSOR_BIN'] = savedCursor;
+      }
       });
     });
   });

@@ -29,7 +29,7 @@ declare const TextDecoder: any;
 declare const Response: any;
 
 const MARKER = '.plgnz-install.json';
-type Ownership = { source: string; pluginId: string; fingerprint: string };
+type Ownership = { source: string; pluginId: string; fingerprint: string; scopeId?: string };
 type Registry = { version: 1; plugins: Array<Record<string, unknown>> };
 
 export const kimiWriter: HostWriter = {
@@ -60,7 +60,9 @@ export const kimiWriter: HostWriter = {
       const priorRow = prior.plugins.find(row => row.id === id);
       const marker = readOwnership(target);
       const markerHasExpectedIdentity = marker?.pluginId === ownedId || (plugin.marketplace !== undefined && marker?.pluginId === id);
-      if (marker !== null && (marker.source !== resolved.sourceUri || !markerHasExpectedIdentity)) throw new Error(`Kimi plugin ${id} belongs to another source; refusing to replace it`);
+      const lifecycleLocalSource = marker?.source.startsWith('local:') === true;
+      const differentSource = marker !== null && !lifecycleLocalSource && marker.source !== resolved.sourceUri;
+      if (marker !== null && (differentSource || !markerHasExpectedIdentity)) throw new Error(`Kimi plugin ${id} belongs to another source; refusing to replace it`);
       const same = existsSync(target) && sameTree(stage, target);
       if (existsSync(target) && marker === null && !same) {
         if (!opts?.adoptExisting) throw new Error(`Kimi managed plugin ${id} is unowned and differs from the staged representation; pass --adopt-existing to take ownership explicitly`);
@@ -240,7 +242,17 @@ function readSourceManifest(stage: string): Record<string, unknown> {
 }
 function parseJson(path: string, label: string): Record<string, unknown> { try { const raw: unknown = JSON.parse(readFileSync(path, 'utf8')); if (!isObject(raw)) throw new Error('must be an object'); return raw; } catch (error) { throw new Error(`invalid ${label}: ${path} (${(error as Error).message})`); } }
 function validateNativeIdentity(target: string, id: string): void { const file = join(target, 'kimi.plugin.json'); if (!existsSync(file) || parseJson(file, 'Kimi native manifest').name !== id) throw new Error(`unowned Kimi managed plugin has no matching native manifest: ${target}`); }
-function readOwnership(target: string): Ownership | null { const file = join(target, MARKER); const stat = lstatIfPresent(file); if (stat === undefined) return null; if (stat.isSymbolicLink()) throw new Error(`plgnz ownership marker is a symlink: ${file}`); if (!stat.isFile()) throw new Error(`plgnz ownership marker is not a file: ${file}`); const value = parseJson(file, 'plgnz ownership marker'); if (typeof value.source !== 'string' || typeof value.pluginId !== 'string' || typeof value.fingerprint !== 'string') throw new Error(`invalid plgnz ownership marker: ${file}`); return { source: value.source, pluginId: value.pluginId, fingerprint: value.fingerprint }; }
+function readOwnership(target: string): Ownership | null {
+  const file = join(target, MARKER);
+  const stat = lstatIfPresent(file);
+  if (stat === undefined) return null;
+  if (stat.isSymbolicLink()) throw new Error(`plgnz ownership marker is a symlink: ${file}`);
+  if (!stat.isFile()) throw new Error(`plgnz ownership marker is not a file: ${file}`);
+  const value = parseJson(file, 'plgnz ownership marker');
+  if (typeof value.source !== 'string' || typeof value.pluginId !== 'string' || typeof value.fingerprint !== 'string') throw new Error(`invalid plgnz ownership marker: ${file}`);
+  const scopeId = typeof value.scopeId === 'string' ? value.scopeId : undefined;
+  return { source: value.source, pluginId: value.pluginId, fingerprint: value.fingerprint, ...(scopeId === undefined ? {} : { scopeId }) };
+}
 function rewriteOwnership(target: string, ownership: Ownership): void {
   const marker = join(target, MARKER);
   const temporary = join(target, `.plgnz-ownership-${Date.now()}-${Math.random().toString(16).slice(2)}.json`);
@@ -400,6 +412,7 @@ export const kimiLifecycle: LifecycleHostDefinition = {
       source: projection.sourceLocator ?? `local:${projection.sourceRevision}`,
       pluginId: projection.nativeId,
       fingerprint: projection.sourceRevision,
+      scopeId: projection.scopeId,
     } satisfies Ownership));
     return ['kimi.staged-exact'];
   },
@@ -466,7 +479,12 @@ export const kimiLifecycle: LifecycleHostDefinition = {
       && prepared.handle.nativeId.startsWith(`${marker.pluginId}@`);
     if (existsSync(managed) && priorRow?.enabled === true && sameRoot(priorRow.root, managed) && sameTree(prepared.stagingRoot, managed)) {
       if (legacyMarker) {
-        rewriteOwnership(managed, { source: marker.source, pluginId: prepared.handle.nativeId, fingerprint: marker.fingerprint });
+        rewriteOwnership(managed, {
+          source: marker.source,
+          pluginId: prepared.handle.nativeId,
+          fingerprint: marker.fingerprint,
+          scopeId: prepared.handle.scopeId,
+        });
         return { receiptId: `kimi-apply:${prepared.handle.attemptId}:${prepared.handle.operationId}`, changed: true };
       }
       return { receiptId: `kimi-apply:${prepared.handle.attemptId}:${prepared.handle.operationId}`, changed: false };
@@ -594,7 +612,7 @@ function readKimiInstallations(): TargetInstallationData[] {
       nativeId: plugin.id,
       packageName: plugin.name,
       ownership: owned
-        ? { kind: 'owned', proof: 'created', scopeId: KIMI_SCOPE, proofId: `marker:${marker.pluginId}` }
+        ? { kind: 'owned', proof: 'created', scopeId: marker.scopeId ?? KIMI_SCOPE, proofId: `marker:${marker.pluginId}` }
         : { kind: 'unmanaged' },
       presence: 'present',
       enablement: enabled ? 'enabled' : 'disabled',

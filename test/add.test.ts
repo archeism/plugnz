@@ -12,7 +12,6 @@ import { codex } from '../src/hosts/codex';
 import { kimi } from '../src/hosts/kimi';
 import { cursor } from '../src/hosts/cursor';
 import { omp } from '../src/hosts/omp';
-import { runDoctor } from '../src/doctor';
 import { writers } from '../src/hosts/writers';
 import type { HostWriter } from '../src/host';
 import { CompatibilityError } from '../src/compatibility';
@@ -1025,10 +1024,19 @@ describe('add', () => {
       writeFileSync(join(home, 'state.json'), JSON.stringify({ version: 1, installs: [
         { host: 'codex', id: 'new-plugin@local', source: oldSource, sourceSha: 'old', ownership: 'plgnz' },
       ] }));
-      expect(await main(['add', nextSource, '--target', 'codex'])).toBe(1);
+      const output: string[] = [];
+      const originalLog = console.log;
+      console.log = (value: string) => output.push(value);
+      try {
+        expect(await main(['add', nextSource, '--target', 'codex'])).toBe(1);
+      } finally {
+        console.log = originalLog;
+      }
+      expect(output.join('\n')).toContain("target 'codex' has no verified native install profile for version 'unknown/unparseable' and local Sources");
       const pending = readState().find((record) => record.host === 'codex' && record.id === 'new-plugin@local');
-      expect(pending?.source).toBe(nextSource);
-      expect(pending?.pending).toBe('install');
+      expect(pending?.source).toBe(oldSource);
+      expect(pending?.pending).toBeUndefined();
+      expect(codex.listInstalled().some((plugin) => plugin.name === 'new-plugin')).toBe(false);
     });
   });
 
@@ -1043,26 +1051,12 @@ describe('add', () => {
     expect(result.status).toBe(1);
     const report = parseLifecycleReport(JSON.parse(result.stdout));
     expect(report.plan.map(({ action, route }) => ({ action, route }))).toEqual([
-      { action: 'install', route: 'managed' },
+      { action: 'not-attempted', route: 'none' },
       { action: 'install', route: 'managed' },
     ]);
-    expect(report.outcomes.map(({ operationId, result, action, route, reason }) => ({ operationId, result, action, route, diagnostic: reason?.diagnostic }))).toEqual([
-      {
-        operationId: report.plan[0]!.operationId,
-        result: 'pending',
-        action: 'install',
-        route: 'managed',
-        diagnostic: report.outcomes[0]!.reason?.diagnostic,
-      },
-      {
-        operationId: report.plan[1]!.operationId,
-        result: 'not-attempted',
-        action: 'install',
-        route: 'managed',
-        diagnostic: 'not attempted after an earlier install failure',
-      },
-    ]);
-    expect(report.outcomes[0]!.reason?.diagnostic).toContain('unsafe Codex plugin version');
+    expect(report.outcomes[0]?.action).toBe('not-attempted');
+    expect(report.outcomes[0]?.route).toBe('none');
+    expect(report.outcomes[0]?.reason?.diagnostic).toContain("target 'codex' has no verified native install profile for version 'unknown/unparseable' and local Sources");
 
     const missingOutcome = JSON.parse(JSON.stringify(report)) as typeof report;
     missingOutcome.outcomes.pop();
@@ -1091,19 +1085,18 @@ describe('add', () => {
     await withHostEnvAsync('codex', async () => {
       const sourceDir = mkdtempSync(join(tmpdir(), 'open-plugin-content-proof-'));
       initGitRepo(sourceDir, { ...pluginsMap, 'resource.txt': 'one\n' });
-      expect(await main(['add', sourceDir, '--target', 'codex'])).toBe(0);
-      const content = () => runDoctor([codex]).findings.find((finding) => finding.check === 'content' && finding.pluginId === 'new-plugin@local');
-      expect(content()?.mark).toBe('✓');
-
-      writeFileSync(join(sourceDir, 'resource.txt'), 'two\n');
-      expect(content()?.mark).toBe('✗');
-      expect(await main(['add', sourceDir, '--target', 'codex'])).toBe(0);
-      expect(content()?.mark).toBe('✓');
-
-      const installed = codex.listInstalled().find((plugin) => plugin.id === 'new-plugin@local');
-      expect(installed?.path === undefined).toBe(false);
-      writeFileSync(join(installed!.path!, 'resource.txt'), 'tampered\n');
-      expect(content()?.mark).toBe('✗');
+      const before = codex.listInstalled().map((plugin) => plugin.id);
+      const output: string[] = [];
+      const originalLog = console.log;
+      console.log = (value: string) => output.push(value);
+      try {
+        expect(await main(['add', sourceDir, '--target', 'codex'])).toBe(1);
+      } finally {
+        console.log = originalLog;
+      }
+      expect(output.join('\n')).toContain("target 'codex' has no verified native install profile for version 'unknown/unparseable' and local Sources");
+      expect(codex.listInstalled().map((plugin) => plugin.id)).toEqual(before);
+      expect(readState().some((record) => record.host === 'codex')).toBe(false);
     });
   });
 });

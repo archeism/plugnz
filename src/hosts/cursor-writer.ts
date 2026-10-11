@@ -70,7 +70,9 @@ export const cursorWriter: HostWriter = {
       writeOwnership(stage, { source: resolved.sourceUri, pluginId: ownershipId, fingerprint: plugin.contentFingerprint ?? '' });
 
       const marker = readOwnership(target);
-      if (marker !== null && (marker.source !== resolved.sourceUri || !matchesOwnership(marker.pluginId, id, ownershipId))) {
+      const lifecycleLocal = marker?.sourceType === 'local';
+      const differentSource = marker !== null && marker.source !== resolved.sourceUri && !lifecycleLocal;
+      if (marker !== null && (differentSource || !matchesOwnership(marker.pluginId, id, ownershipId))) {
         throw new Error(`Cursor local plugin ${id} belongs to another source; refusing to replace it`);
       }
       const identicalUnowned = existsSync(target) && marker === null && sameTree(stage, target);

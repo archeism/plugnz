@@ -12,6 +12,7 @@ import {
 } from '../src/state';
 import { writeLifecycleState, writeState } from '../src/state-write';
 import type { SourceBinding } from '../src/source-reference';
+import { cacheRoot } from '../src/paths';
 import { withLifecycleCliHarness } from './lifecycle-cli-harness';
 
 const now = '2026-10-09T02:00:00.000Z';
@@ -221,6 +222,7 @@ describe('state v2 public reader and writer', () => {
       installedFingerprint: 'installed-v2',
       ownership: 'plgnz',
       installedAt: earlier,
+      sourceDir: join(cacheRoot(), 'source-snapshots', 'source-generation-two', 'plugins/addy'),
     });
 
     expectThrow(() => writeLifecycleState(state, { globalPreflight: 'succeeded' }, file), 'stateGeneration must advance from 1 to 2');

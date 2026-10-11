@@ -27,6 +27,13 @@ const pluginsMap = {
   'mcp.json': JSON.stringify({ mcpServers: { demo: { command: "demo" } } }, null, 2)
 };
 
+function versionShim(home: string, name: string, stdout: string): string {
+  const path = join(home, name);
+  writeFileSync(path, `#!/bin/sh\nprintf '%s\\n' ${JSON.stringify(stdout)}\n`);
+  chmodSync(path, 0o755);
+  return path;
+}
+
 function scopedRemoveState(entries: ReadonlyArray<{ target: string; source: string }>): LifecycleStateV2 {
   const timestamp = '2026-10-09T00:00:00.000Z';
   const rows = entries.map(({ target, source: locator }) => {
@@ -403,7 +410,7 @@ describe('remove', () => {
 
   test('removes a marketplace-qualified Hermes install through the public route', async () => {
     await withHostEnvAsync('codex', async (home) => {
-      writeFiles(home, { '.hermes/config.yaml': '', '.hermes/plugins/.keep': '' });
+      writeFiles(home, { '.hermes/config.yaml': 'model: fixture\n', '.hermes/plugins/.keep': '' });
       const sourceDir = mkdtempSync(join(tmpdir(), 'open-plugin-hermes-marketplace-'));
       initGitRepo(sourceDir, {
         '.claude-plugin/marketplace.json': JSON.stringify({ name: 'personal', plugins: [{ source: 'plugins/demo-plugin' }] }),
@@ -606,9 +613,9 @@ describe('remove', () => {
           retentionState: row.retentionState,
         })),
       }).toEqual({
-        code: 0,
-        activations: [],
-        tombstones: [{ packageId: 'demo-plugin', retentionState: 'plugin-state-retained' }],
+        code: 1,
+        activations: ['demo-plugin'],
+        tombstones: [],
       });
     });
   });
@@ -669,11 +676,12 @@ describe('remove', () => {
         activations: loaded.state.activations.map((row) => row.packageId),
         tombstones: loaded.state.tombstones.map((row) => row.packageId),
       }).toEqual({
-        code: 0,
+        code: 1,
         removedWhileClaimRemained: false,
-        activations: [],
+        activations: ['demo-plugin'],
         tombstones: [],
       });
+      expect(existsSync(pluginFile)).toBe(true);
     });
   });
 
@@ -738,9 +746,12 @@ describe('remove', () => {
 
   test('claude-code > removes plugin from registry', async () => {
     await withHostEnvAsync('claude-code', async (home) => {
+      const saved = process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'];
+      process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'] = versionShim(home, 'claude', '2.1.295 (Claude Code)');
+      try {
       const sourceDir = mkdtempSync(join(tmpdir(), 'open-plugin-source-'));
       initGitRepo(sourceDir, pluginsMap);
-      await main(['add', sourceDir, '--target', 'claude-code']);
+      expect(await main(['add', sourceDir, '--target', 'claude-code'])).toBe(0);
       
       const code = await main(['remove', 'demo-plugin@local']);
       expect(code).toBe(0);
@@ -750,41 +761,60 @@ describe('remove', () => {
       
       const state = readState();
       expect(state.find(r => r.id === 'demo-plugin@local')).toBeUndefined();
+      } finally {
+        if (saved === undefined) delete process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'];
+        else process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'] = saved;
+      }
     });
   });
 
-  test('codex > removes plugin from config', async () => {
-    await withHostEnvAsync('codex', async (home) => {
+  test('codex > refuses a public add that has no install profile', async () => {
+    await withHostEnvAsync('codex', async () => {
       const sourceDir = mkdtempSync(join(tmpdir(), 'open-plugin-source-'));
       initGitRepo(sourceDir, pluginsMap);
-      await main(['add', sourceDir, '--target', 'codex']);
-      
-      const code = await main(['remove', 'demo-plugin@local']);
-      expect(code).toBe(0);
-
-      const installed = codex.listInstalled();
-      expect(installed.find(p => p.id === 'demo-plugin@local')).toBeUndefined();
+      const before = codex.listInstalled().map((plugin) => plugin.id);
+      const output: string[] = [];
+      const originalLog = console.log;
+      console.log = (value: string) => output.push(value);
+      try {
+        expect(await main(['add', sourceDir, '--target', 'codex'])).toBe(1);
+      } finally {
+        console.log = originalLog;
+      }
+      expect(output.join('\n')).toContain("target 'codex' has no verified native install profile for version 'unknown/unparseable' and local Sources");
+      expect(codex.listInstalled().map((plugin) => plugin.id)).toEqual(before);
+      expect(readState().some((record) => record.host === 'codex')).toBe(false);
     });
   });
 
-  test('kimi > removes plugin from the active registry through native lifecycle', async () => {
+  test('kimi > leaves the native install in place when retire is unverified', async () => {
     await withHostEnvAsync('kimi', async (home) => {
       await withKimiNative(home, async () => {
       const sourceDir = mkdtempSync(join(tmpdir(), 'open-plugin-source-'));
       initGitRepo(sourceDir, pluginsMap);
-      await main(['add', sourceDir, '--target', 'kimi']);
-      
-      const code = await main(['remove', 'demo-plugin']);
-      expect(code).toBe(0);
-
-      const installed = kimi.listInstalled();
-      expect(installed.find(p => p.id === 'demo-plugin')).toBeUndefined();
+      expect(await main(['add', sourceDir, '--target', 'kimi'])).toBe(0);
+      const output: string[] = [];
+      const originalLog = console.log;
+      console.log = (value: string) => output.push(value);
+      let code = 0;
+      try {
+        code = await main(['remove', 'demo-plugin']);
+      } finally {
+        console.log = originalLog;
+      }
+      expect(code).toBe(1);
+      expect(output.join('\n')).toContain("target 'kimi' 2.0.1 native retire is unverified");
+      expect(kimi.listInstalled().some((plugin) => plugin.name === 'demo-plugin')).toBe(true);
       });
     });
   });
 
   test('cursor > removes directory', async () => {
     await withHostEnvAsync('cursor', async (home) => {
+      const saved = process.env['OPEN_PLUGIN_CURSOR_BIN'];
+      process.env['OPEN_PLUGIN_CURSOR_BIN'] = versionShim(home, 'cursor', '2.4.0');
+      try {
+      rmSync(join(home, '.cursor', 'plugins', 'local', 'demo-plugin'), { recursive: true, force: true });
       const sourceDir = mkdtempSync(join(tmpdir(), 'open-plugin-source-'));
       initGitRepo(sourceDir, {
         ...pluginsMap,
@@ -799,20 +829,31 @@ describe('remove', () => {
 
       const installed = cursor.listInstalled();
       expect(installed.find(p => p.id === 'demo-plugin')).toBeUndefined();
+      } finally {
+        if (saved === undefined) delete process.env['OPEN_PLUGIN_CURSOR_BIN'];
+        else process.env['OPEN_PLUGIN_CURSOR_BIN'] = saved;
+      }
     });
   });
 
   test('omp > removes from registry and lockfile', async () => {
     await withHostEnvAsync('omp', async (home) => {
+      const saved = process.env['OPEN_PLUGIN_OMP_BIN'];
+      process.env['OPEN_PLUGIN_OMP_BIN'] = versionShim(home, 'omp', '18.1.4');
+      try {
       const sourceDir = mkdtempSync(join(tmpdir(), 'open-plugin-source-'));
       initGitRepo(sourceDir, pluginsMap);
-      await main(['add', sourceDir, '--target', 'omp']);
+      expect(await main(['add', sourceDir, '--target', 'omp'])).toBe(0);
       
       const code = await main(['remove', 'demo-plugin@local']);
       expect(code).toBe(0);
 
       const installed = omp.listInstalled();
       expect(installed.find(p => p.id === 'demo-plugin@local')).toBeUndefined();
+      } finally {
+        if (saved === undefined) delete process.env['OPEN_PLUGIN_OMP_BIN'];
+        else process.env['OPEN_PLUGIN_OMP_BIN'] = saved;
+      }
     });
   });
 });

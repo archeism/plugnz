@@ -45,9 +45,12 @@ export async function executeLifecycle(input: ExecuteLifecycleInput): Promise<Ex
       return finish(input.plan.report);
     case 'frozen':
       if (input.plan.requestedDryRun) {
-        for (const row of input.plan.operations) {
-          const host = input.hosts.find((candidate) => candidate.kinds.includes(row.operation.scope.target.kind));
-          host?.announceDryRun?.(row.operation);
+        // Cursor's install preview is an add progress line. Sync dry-run keeps stderr empty.
+        if (input.plan.report.command.name === 'add') {
+          for (const row of input.plan.operations) {
+            const host = input.hosts.find((candidate) => candidate.kinds.includes(row.operation.scope.target.kind));
+            host?.announceDryRun?.(row.operation);
+          }
         }
         return finish(input.plan.report);
       }
