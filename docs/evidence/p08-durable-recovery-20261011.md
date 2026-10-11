@@ -120,3 +120,35 @@ The failing probe and its output are retained in the same evidence directory
 | --- | --- |
 | `plugnz-b55-missing-sibling-recovery.test.ts` | `9df142f82bf7498b6eabb4a10e93f804a23c6908145304296578227c01caafb4` |
 | `plugnz-b55-missing-sibling-recovery.log` | `8f2b625286c6207c7f68d6903cba44a85a65206f8461e61ef478767e87fc8e25` |
+
+## Successful recovery accounting: confirmed remaining defect
+
+A subsequent isolated public CLI probe against frozen `9e294ac` recreates the
+exact disabled candidate of a pending disable journal, restores the ordinary
+Source Desired content and retries sync. Recovery changes native enablement from
+false to true; the fresh Desired plan is then unchanged and the CLI exits zero.
+Its report nevertheless claims `mutationStarted: false` and `changed: false`.
+The final probe fails its aggregate-change assertion (five assertions, 2.98
+seconds). This is a real reporting gap, not complete P08 acceptance. It uses a
+seeded exact candidate and fake native version/lock fixtures, not an actual
+SIGKILL or proof of every native runtime.
+
+Current report parsing rejects duplicate scope/package operations; Personal
+also requires one current Desired outcome per submitted pair. Historical
+recovery therefore cannot be truthfully accounted for by duplicating current
+outcomes, changing an unchanged action to claim a mutation, or treating an old
+settlement as current convergence. A separately validated, explicitly versioned
+recovery-receipt contract must retain original attempt/operation identity and
+contribute to aggregate mutation accounting while leaving current coverage exact.
+Changed-intent retry also needs this distinction. The read-only scope inventory
+currently exposes only the last attempt, whereas recovery scans all open
+journals; original receipts require public proof for nonlatest and journal-only
+operations too. No consumer-validation relaxation or capability exclusion is
+authorized by this finding.
+
+Retained artifacts in the same evidence directory:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `plugnz-9e-successful-recovery-accounting.test.ts` | `b6e7a131de3e8ea940c1512b64cbaf3c034acccd6bca5fc181c99304331eb6ba` |
+| `plugnz-9e-successful-recovery-accounting-04.log` | `93d50df9e1aa3c499bb119b5cd4b85109d682d49399a955d54f75e84001742d6` |
