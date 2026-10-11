@@ -495,6 +495,34 @@ describe('claude-code lifecycle route', () => {
   });
 });
 
+test('Claude fresh foreign catalog entry drift blocks before any native write', async () => {
+  await withClaude(async root => {
+    const initial = updateSnapshot(root, 'entry-first-write-proof', '1.0.0', 'c'.repeat(40), 'install');
+    const sourceRoot = initial.snapshotRoot;
+    mkdirSync(join(initial.packageRoot, '.claude-plugin'), { recursive: true });
+    writeFileSync(join(initial.packageRoot, '.claude-plugin/plugin.json'), '{"name":"demo","version":"1.0.0","skills":"./skills/"}');
+    const catalogFile = join(sourceRoot, '.claude-plugin/marketplace.json');
+    mkdirSync(join(sourceRoot, '.claude-plugin'), { recursive: true });
+    const document = { name: 'market', owner: { name: 'foreign' }, plugins: [{ name: 'demo', source: './packages/demo', metadata: { exact: 'first' } }] };
+    writeFileSync(catalogFile, JSON.stringify(document));
+    mkdirSync(join(root, 'plugins'), { recursive: true });
+    writeFileSync(join(root, 'plugins/known_marketplaces.json'), JSON.stringify({ market: { source: { source: 'directory', path: sourceRoot }, installLocation: sourceRoot, autoUpdate: false } }));
+    const scope = createDeploymentScopeIdentity({ kind: 'local', locator: sourceRoot }, claudeTarget);
+    const packageFingerprint = fingerprintTree(initial.packageRoot);
+    const snapshot = createFrozenPackageSnapshot({ ...initial, scopeId: scope.id, sourceType: 'local', nativeGit: undefined, snapshotFingerprint: fingerprintTree(sourceRoot), packageFingerprint, inventory: { ...initial.inventory, package: { ...initial.inventory.package, fingerprint: packageFingerprint } } });
+    const host = createClaudeCodeLifecycleHost();
+    const planned = await plan(host, snapshot);
+    document.plugins[0]!.metadata.exact = 'changed';
+    writeFileSync(catalogFile, JSON.stringify(document));
+    const before = fingerprintTree(root);
+    await expect(host.apply(planned.prepared)).rejects.toThrow('selected foreign catalog entry changed');
+    expect(fingerprintTree(root)).toBe(before);
+    expect(existsSync(join(root, 'plugins/installed_plugins.json'))).toBe(false);
+    expect(existsSync(join(root, 'plugins/cache'))).toBe(false);
+    expect(existsSync(join(root, 'settings.json'))).toBe(false);
+  });
+});
+
 test('Claude foreign catalog binds the whole selected entry but not unrelated marketplace metadata', async () => {
   await withClaude(async root => {
     const initial = updateSnapshot(root, 'entry-readback-proof', '1.0.0', 'c'.repeat(40), 'install');
