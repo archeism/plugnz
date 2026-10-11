@@ -8,6 +8,7 @@ import { fingerprintTree } from './fingerprint';
 import { inventoryPackageSemantics } from './semantic-inventory';
 import { readLifecycleState, type ActivationRecord, type LifecycleAttemptRecord, type PendingPhase } from './state';
 import { writeLifecycleState } from './state-write';
+import { parseSerializedLifecycleOperation } from './lifecycle-operation-record';
 
 /** Pin the recorded active bytes offline, using the same sealed mutation SPI as update. */
 export async function runOfflineLifecyclePin(host: HostWriter, plugin: InstalledPlugin, dryRun: boolean): Promise<PinOutcome> {
@@ -63,13 +64,14 @@ export async function runOfflineLifecyclePin(host: HostWriter, plugin: Installed
     preparation = await adapter.applyLifecycleDirectives(preparation);
     preparation = await adapter.applyPins(preparation);
     const sealed = await adapter.sealActivation(preparation); preparation = sealed; handle = sealed.handle;
+    attempt.journal[0]!.sealedOperation = parseSerializedLifecycleOperation(JSON.parse(JSON.stringify(handle)));
     attempt.phase = 'applying'; attempt.mutationStarted = true; attempt.journal[0]!.state = 'applying'; pending('applying');
     applying = true;
     await adapter.apply(sealed);
     const observation = await adapter.readback(handle);
     adapter.verify(handle, observation);
     if (observation.installedFingerprint === null || handle.projectedFingerprint === null) throw new Error('pin readback lacks exact installed/projected fingerprint');
-    attempt.phase = 'finalizing'; attempt.journal[0]!.state = 'readback-verified';
+    attempt.phase = 'finalizing'; attempt.journal[0]!.state = 'readback-verified'; attempt.journal[0]!.settlement = 'commit';
     const pinnedActivation: ActivationRecord = { ...activation, route: { kind: handle.route, evidenceKey: { kind: 'capability-profile', key: handle.evidenceId } }, fingerprints: { ...activation.fingerprints, projected: handle.projectedFingerprint, installed: observation.installedFingerprint }, pins: [...new Set([...activation.pins, ...pins.map(pin => pin.server)])].sort(), readbackState: 'verified', readbackAt: now, updatedAt: now };
     persist(pinnedActivation); committed = true;
     try { await adapter.cleanup(handle, 'verified-commit'); }
@@ -86,7 +88,7 @@ export async function runOfflineLifecyclePin(host: HostWriter, plugin: Installed
           try { pending('rollback'); } catch (writeError) { journalError = writeError; }
           await adapter.rollback(handle); adapter.verifyRollback(handle, await adapter.readback(handle));
           if (journalError !== undefined) throw new Error(`rollback verified but its durable receipt is blocked: ${(journalError as Error).message}`);
-          attempt.phase = 'finalizing'; attempt.journal[0]!.state = 'cleanup-pending';
+          attempt.phase = 'finalizing'; attempt.journal[0]!.state = 'cleanup-pending'; attempt.journal[0]!.settlement = 'rollback';
           persist({ ...activation, pending: { operation: 'update', phase: 'cleanup', attemptId, startedAt: now } });
           await adapter.cleanup(handle, 'verified-rollback');
           attempt.phase = 'failed'; attempt.journal[0]!.state = 'rolled-back'; persist(activation);

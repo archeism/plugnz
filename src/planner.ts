@@ -114,6 +114,9 @@ export interface PlanLifecycleInput {
   /** Original add argument. Carries fetch credentials that must not enter the manifest. */
   readonly transportSource?: string;
   readonly removalSelection?: readonly { readonly scopeId: string; readonly packageId: string; readonly nativeId: string }[];
+  /** Private recovery preflight; never execute this plan before pending journals settle. */
+  readonly recoveryPreflight?: boolean;
+  readonly retainedSources?: Map<string, FrozenSource>;
 }
 
 type FrozenOperation = Extract<LifecyclePlan, { kind: 'frozen' }>['operations'][number];
@@ -162,9 +165,10 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
   if (duplicate !== null) return zeroWrite(command, input.dryRun, duplicate);
 
   const prepared: Prepared[] = [];
-  const transportCache = new Map<string, FrozenSource>();
+  const transportCache = input.retainedSources ?? new Map<string, FrozenSource>();
+  const planningState = input.recoveryPreflight ? { ...loaded.state, activations: loaded.state.activations.map(row => { const { pending: _pending, ...kept } = row; return kept; }) } : loaded.state;
   for (const entry of input.manifest.entries) {
-    const result = await prepareEntry(entry, input.hosts, loaded.state, command, input.transportSource, transportCache);
+    const result = await prepareEntry(entry, input.hosts, planningState, command, input.transportSource, transportCache);
     if (result.kind === 'defect') return zeroWrite(command, input.dryRun, result.reason, result.terminalPhase);
     if (input.removalSelection !== undefined) {
       if (command !== 'remove' || result.kind !== 'retire-source') {
@@ -183,6 +187,14 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
   }
 
   const attemptId = lifecycleAttemptId(loaded.state.stateGeneration, prepared.map((item) => item.identity));
+  const recovering = input.recoveryPreflight && loaded.state.attempts.some(attempt => attempt.journal.some(row =>
+    prepared.some(item => item.scope.id === row.scopeId) && ['pending', 'applying', 'applied', 'readback-verified', 'rollback', 'cleanup-pending'].includes(row.state)));
+  if (recovering) {
+    // Transitional native inventory cannot be classified as fresh Desired.
+    // Every entry has resolved/frozen above; recovery settles before replanning.
+    const scopes: PlannedScope[] = prepared.map(item => ({ scope: item.scope, target: item.observation?.target ?? (item.kind === 'sync' ? item.entry.target : item.recorded.target), selectorMode: item.kind === 'retire-source' ? 'retired' : item.entry.selectors === undefined ? 'all' : 'explicit', desired: null, prune: 'blocked', ...(item.kind === 'retire-source' && item.retirementPackages !== undefined ? { retirementPackages: item.retirementPackages } : {}) }));
+    return frozenPlan(input, command, attemptId, scopes, [], prepared, loaded.state);
+  }
   const scopes: PlannedScope[] = [];
   const operations: FrozenOperation[] = [];
   for (const item of prepared) {

@@ -98,7 +98,10 @@ test('disable readback failure restores enablement and durably blocks until roll
     rmSync(fault);
     const retry = harness.run(['sync', source, '--target', 'dcode', '--json'], { env });
     expect(retry.exitCode).toBe(1);
-    expect(parseLifecycleReport(JSON.parse(retry.stdout)).summary.reason!.diagnostic).toContain('requires recovery');
+    const retried = parseLifecycleReport(JSON.parse(retry.stdout));
+    expect(retried.outcomes[0]!.reason!.category).toBe('capability');
+    expect(retried.outcomes[0]!.activationState).toBe('inactive');
+    expect(JSON.parse(bytesToText(retry.state.after!)).activations[0].pending).toBeUndefined();
   });
 }, 20_000);
 

@@ -45,6 +45,11 @@ history. Its top level is:
   entry for the same package and native identity. Pending operations use the
   same mutating action vocabulary as the journal: `install`, `update`,
   `route-migrate`, `disable-nonconforming`, `retire-orphan`, or `remove`.
+  Before applying, new journals persist a strictly parsed `sealedOperation`
+  containing native prior/expected readback and the operation-owned rollback
+  reference. Optional `settlement: commit|rollback` is a verified durable
+  receipt; it distinguishes cleanup of an accepted activation from cleanup
+  after restoration of the prior activation.
 - A tombstone retains only lifecycle proof and history: identities, route and
   evidence, verified ownership/adoption proof, fingerprints, pins, retention
   state, and timestamps. The schema has no field for credentials,
@@ -122,6 +127,20 @@ The pending operation must equal the matching journal action. Terminal and
 non-mutating journal states cannot remain pending. Cleanup is a phase, explicit
 adoption is ownership proof within `route-migrate`, and reversible safety
 containment is the explicit `disable-nonconforming` mutation.
+
+Same-verb retries scan journals, including installs with no Activation and
+retirements whose Activation was already replaced by a tombstone. All requested
+Sources resolve and freeze before recovery writes. Recovery compares live native
+state with the sealed prior/candidate under an adapter-proven native CAS fence,
+settles rollback or committed cleanup durably, then replans using those retained
+frozen inputs. A verified receipt is saved before deleting rollback artifacts.
+Dcode 0.1.83 implements this fence using its native filelock. Other adapters,
+older journals without a sealed operation, changed native state, and cross-verb
+retries remain loud, non-convergent refusals with proof/artifacts retained.
+Cross-verb diagnostics name the original command, attempt and scope to resume.
+Doctor remains reader-only: structural journal parsing imports no writer or
+lifecycle runtime. Public restart proofs are in `test/recovery-public.test.ts`
+and `test/dcode-sync-public.test.ts`; they do not establish other hosts' recovery.
 
 Attempt commands also close the journal vocabulary. `sync` permits every plan
 action except manual `remove`; `retire-source` permits only `retire-orphan`;

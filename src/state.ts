@@ -706,7 +706,12 @@ function validateJournal(value: unknown, label: string): JournalEntryRecord {
     const operation = parseSerializedLifecycleOperation(rec['sealedOperation']);
     if (operation.operationId !== rec['operationId'] || operation.scopeId !== rec['scopeId'] || operation.packageName !== rec['packageId'] || operation.nativeId !== rec['nativeId'] || operation.action !== rec['action']) invalid(`${label} sealed operation does not match journal identity`);
   }
-  if (rec['settlement'] !== undefined) oneOf(rec['settlement'], ['commit', 'rollback'], `${label}.settlement`);
+  if (rec['settlement'] !== undefined) {
+    oneOf(rec['settlement'], ['commit', 'rollback'], `${label}.settlement`);
+    if (rec['sealedOperation'] === undefined || !['readback-verified', 'cleanup-pending', 'completed', 'rolled-back'].includes(String(rec['state']))) invalid(`${label} settlement requires a sealed, verified receipt`);
+    if (rec['settlement'] === 'rollback' && !['cleanup-pending', 'rolled-back'].includes(String(rec['state']))) invalid(`${label} rollback settlement contradicts journal state`);
+    if (rec['settlement'] === 'commit' && rec['state'] === 'rolled-back') invalid(`${label} committed settlement cannot be rolled back`);
+  }
   optionalTimestamp(rec['startedAt'], `${label}.startedAt`);
   optionalTimestamp(rec['updatedAt'], `${label}.updatedAt`);
   return value as JournalEntryRecord;

@@ -769,7 +769,16 @@ class Ledger {
   markRolledBack(plan: FrozenPlan, operation: LifecyclePlanOperation): void {
     this.adoptMovedGeneration();
     if (operation.action === 'disable-nonconforming') this.clearDisablePending(operation, true);
+    this.clearPending(operation);
     this.replaceAttempt(plan, (attempt) => this.journaled(attempt, operation.operationId, 'rolled-back', 'failed', true));
+  }
+
+  markRollbackVerified(plan: FrozenPlan, operation: LifecyclePlanOperation): void {
+    this.adoptMovedGeneration();
+    this.state = { ...this.state, activations: this.state.activations.map(row =>
+      row.scopeId === operation.scope.id && row.packageId === operation.package
+        ? { ...row, pending: { operation: operation.action as NonNullable<typeof row.pending>['operation'], phase: 'cleanup', attemptId: plan.attemptId, startedAt: this.now }, readbackState: 'verified' } : row) };
+    this.replaceAttempt(plan, attempt => ({ ...this.journaled(attempt, operation.operationId, 'cleanup-pending', 'finalizing', true), journal: attempt.journal.map(row => row.operationId === operation.operationId ? { ...row, state: 'cleanup-pending', settlement: 'rollback', updatedAt: this.now } : row) }));
   }
 
   confirmDisable(plan: FrozenPlan, operation: LifecyclePlanOperation): void {
@@ -1092,7 +1101,7 @@ async function recoverApplied(
       diagnostic = `; rollback verification failed: ${unknownErrorDiagnostic(error)}`;
     }
     try {
-      if (verified) ledger.markRolledBack(plan, operation);
+      if (verified) ledger.markRollbackVerified(plan, operation);
       else ledger.markRollbackRequired(plan, operation);
     } catch (error) {
       // Never delete the only recovery snapshots if the durable receipt failed.
@@ -1100,8 +1109,8 @@ async function recoverApplied(
       diagnostic += `; recovery ledger could not be persisted: ${unknownErrorDiagnostic(error)}`;
     }
     if (verified) {
-      try { await host.adapter.cleanup(handle, 'verified-rollback'); }
-      catch {}
+      try { await host.adapter.cleanup(handle, 'verified-rollback'); ledger.markRolledBack(plan, operation); }
+      catch (error) { verified = false; diagnostic += `; rollback cleanup remains pending: ${unknownErrorDiagnostic(error)}`; }
     }
   } finally {
     // Live locks must not outlive this process, even when the ledger itself is

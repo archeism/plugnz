@@ -164,6 +164,13 @@ test('dcode pin keeps accurate recovery pending when verified rollback cleanup f
     expect(ledger.activations[0].pending.phase).toBe('cleanup');
     expect(ledger.attempts.at(-1).phase).toBe('finalizing');
     expect(ledger.attempts.at(-1).journal[0].state).toBe('cleanup-pending');
+    const pendingAttempt = ledger.attempts.at(-1).id;
+    expect(ledger.attempts.at(-1).journal[0].settlement).toBe('rollback');
+    spawnSync('chmod', ['-R', 'u+w', operationsRoot]);
+    expect(run(['update', 'demo@local', '--target', 'dcode']).status).toBe(0);
+    const resumed = JSON.parse(readFileSync(join(home, 'state.json'), 'utf8'));
+    expect(resumed.activations[0].pending).toBeUndefined();
+    expect(resumed.attempts.find((attempt: { id: string }) => attempt.id === pendingAttempt).journal[0].state).toBe('rolled-back');
   } finally {
     if (existsSync(operationsRoot)) spawnSync('chmod', ['-R', 'u+w', operationsRoot]);
     rmSync(root, { recursive: true, force: true });
@@ -362,5 +369,13 @@ test('killing the public CLI at cache rename leaves only a complete candidate or
       expect(stopped).toBe(true);
       expect(candidate === undefined).toBe(false);
     } finally { watcher.close(); }
+    const interrupted = JSON.parse(readFileSync(join(home, 'state.json'), 'utf8')).attempts.at(-1);
+    expect(interrupted.journal[0].state).toBe('applying');
+    const resumed = spawnSync(cliExecutable, args, { env, cwd: root, encoding: 'utf8' });
+    expect(resumed.status).toBe(0);
+    const recovered = JSON.parse(readFileSync(join(home, 'state.json'), 'utf8'));
+    expect(recovered.attempts.find((attempt: { id: string }) => attempt.id === interrupted.id).journal[0].state).toBe('rolled-back');
+    expect(readFileSync(join(JSON.parse(readFileSync(registry, 'utf8')).plugins['demo@local'][0].installPath, 'skills/demo/SKILL.md'), 'utf8')).toBe(nextSkill);
+    expect(readdirSync(join(native, 'plugins/cache/plgnz-operations')).length).toBe(0);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
