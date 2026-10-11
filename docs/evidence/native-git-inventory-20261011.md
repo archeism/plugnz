@@ -334,3 +334,12 @@ Node artifact; direct planner tests remained Bun 1.4.0. Artifact SHA256
 `efe017a6fb28c84a7d2f762d2ed875f0494bf962cc3c2cfe31f3eeaf2d4cebf2`;
 log `/tmp/plugnz-kimi-same-physical-node22.log`, SHA256
 `0eee0af2c7cc8a8eb0ad9d048c7582631eea6352548072b6976480b4814059f5`.
+
+The exact corrected frozen `d3da1d5` full gate passed: 752 pass / 5 existing skips /
+0 fail / 5191 assertions, 757 tests across 70 files, 491.76 seconds. Typecheck
+passed; runner explicitly reported `test_status=0 check_status=0`. Retained log
+`/tmp/plugnz-d3da-combined-full.log`, SHA256
+`f78baaf954030d71d127405acf59587200fc7e2087be9bb13fcb209330372495`.
+Both independent scoped review axes approved the correction. This preserves the
+existing same-physical Kimi repair and the historical ZCode zero-write floor,
+not the still-required durable two-ID delivery or fresh released-native proof.
