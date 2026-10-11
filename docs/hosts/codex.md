@@ -6,6 +6,17 @@ Codex activates `local` ahead of every version; otherwise its store compares sem
 
 Each plgnz-created version root contains `.plgnz-install.json` with its source identity, native plugin id, and content fingerprint. An exact re-add compares staged bytes before leaving that root untouched; changed bytes from the same source refresh the same version. A foreign root is adopted only when its bytes match the staged representation excluding that marker. Different foreign roots, winning foreign versions, different owned source identities, and symlinked managed slots are refused. Activation keeps the old root as a filesystem-rename backup until config enable succeeds. Removal deletes only marked versions for the requested native id; it removes an otherwise-empty plugin table or disables a table with user fields.
 
+Lifecycle-created markers additionally retain the canonical deployment `scopeId`,
+`sourceType`, immutable `sourceRevision`, and observed `route`. Local lifecycle
+source identity is stable by canonical scope, not by the mutable content hash.
+Native inventory reads these fields rather than inventing a different scope, and
+readback obtains the installed route from the marker, including after rollback.
+The Managed install/update/retire profile remains version-gated and retains its
+existing per-component capability limits. `test/codex-sync-public.test.ts` proves
+the public CLI bootstrap, changed-byte update, canonical ownership, and offline
+retirement against the documented native store with an isolated version boundary;
+it is not proof of a real native marketplace-upgrade invocation.
+
 Measured 2026-09-16 on this machine (`~/.codex`). Reader: `src/hosts/codex.ts`.
 
 ## Store

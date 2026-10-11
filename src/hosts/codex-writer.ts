@@ -241,7 +241,17 @@ function validVersionSegment(value: string): boolean {
   return value === 'local' || /^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u.test(value);
 }
 
-function readOwnership(dir: string): { source: string; pluginId: string; fingerprint: string } | null {
+interface CodexOwnership {
+  source: string;
+  pluginId: string;
+  fingerprint: string;
+  scopeId?: string;
+  sourceType?: 'local' | 'git';
+  sourceRevision?: string;
+  route?: 'native' | 'managed';
+}
+
+function readOwnership(dir: string): CodexOwnership | null {
   const file = join(dir, OWNERSHIP);
   if (!existsSync(file)) return null;
   try {
@@ -249,7 +259,15 @@ function readOwnership(dir: string): { source: string; pluginId: string; fingerp
     if (typeof value !== 'object' || value === null) throw new Error('marker must be an object');
     const record = value as Record<string, unknown>;
     if (typeof record['source'] !== 'string' || typeof record['pluginId'] !== 'string' || typeof record['fingerprint'] !== 'string') throw new Error('marker fields are invalid');
-    return { source: record['source'], pluginId: record['pluginId'], fingerprint: record['fingerprint'] };
+    const marker: CodexOwnership = { source: record['source'], pluginId: record['pluginId'], fingerprint: record['fingerprint'] };
+    if (['scopeId', 'sourceType', 'sourceRevision', 'route'].some(key => record[key] !== undefined)) {
+      if (typeof record['scopeId'] !== 'string' || record['scopeId'].length === 0
+        || (record['sourceType'] !== 'local' && record['sourceType'] !== 'git')
+        || typeof record['sourceRevision'] !== 'string' || record['sourceRevision'].length === 0
+        || (record['route'] !== 'native' && record['route'] !== 'managed')) throw new Error('lifecycle marker fields are invalid');
+      return { ...marker, scopeId: record['scopeId'], sourceType: record['sourceType'], sourceRevision: record['sourceRevision'], route: record['route'] };
+    }
+    return marker;
   } catch (error) {
     throw new Error(`invalid plgnz ownership marker: ${file} (${(error as Error).message})`);
   }
@@ -457,7 +475,7 @@ const MANAGED_SEMANTICS = [...UPDATE_SEMANTICS, 'retirement', 'retention-safety'
 
 const codexEvidenceProfiles: readonly CapabilityEvidenceProfile[] = [
   codexRouteProfile('native', ['update'], UPDATE_SEMANTICS, ['docs/research/native-plugin-update-capabilities-2026-10-09.md']),
-  codexRouteProfile('managed', ['update', 'retire'], MANAGED_SEMANTICS, [
+  codexRouteProfile('managed', ['install', 'update', 'retire'], MANAGED_SEMANTICS, [
     'docs/hosts/codex.md',
     'docs/adr/0004-retain-plugin-state-on-removal.md',
   ]),
@@ -548,11 +566,15 @@ function stageCodexActivation(request: Parameters<LifecycleHostDefinition['stage
   if (!validVersionSegment(version)) throw new Error(`unsafe Codex plugin version: ${version}`);
   ensureNativeManifest(stagingRoot, request.snapshot.packageName, version);
   validateStage(stagingRoot);
-  const source = request.snapshot.nativeGit?.locator ?? request.snapshot.immutableRevision;
+  const source = request.snapshot.nativeGit?.locator ?? `scope:${request.snapshot.scopeId}`;
   writeFileSync(join(stagingRoot, OWNERSHIP), JSON.stringify({
     source,
     pluginId: request.snapshot.nativeId,
     fingerprint: request.snapshot.packageFingerprint,
+    scopeId: request.snapshot.scopeId,
+    sourceType: request.snapshot.sourceType,
+    sourceRevision: request.snapshot.immutableRevision,
+    route: request.selection.route,
   }));
   return { stagingId, stagingRoot };
 }
@@ -730,9 +752,8 @@ function restampNativeUpgrade(prepared: PreparedActivationMutation): void {
     if (ownedPrior === null) continue;
     assertManagedPath(codexHome(), path);
     writeFileSync(join(path, OWNERSHIP), JSON.stringify({
-      source: ownedPrior.source,
+      ...ownedPrior,
       pluginId: nativeId,
-      fingerprint: ownedPrior.fingerprint,
     }));
   }
 }
@@ -740,7 +761,7 @@ function restampNativeUpgrade(prepared: PreparedActivationMutation): void {
 function priorInstallMarker(
   prepared: PreparedActivationMutation,
   nativeId: string,
-): { source: string; pluginId: string; fingerprint: string } | null {
+): CodexOwnership | null {
   const bundle = rollbackBundle(prepared.handle.attemptId, prepared.handle.operationId);
   const manifestPath = join(bundle, 'manifest.json');
   if (!existsSync(manifestPath)) return null;
@@ -806,17 +827,18 @@ function readInstall(identity: {
       ...shared,
       route: identity.route ?? 'none',
       presence: 'absent',
-      enablement: plugin?.enabled === false ? 'disabled' : 'unknown',
+      enablement: plugin?.enabled === true ? 'enabled' : 'disabled',
       activation: 'inactive',
       installedFingerprint: null,
       contentRoots: [],
     };
   }
   const installedFingerprint = fingerprintTree(plugin.path);
-  const owned = readOwnership(plugin.path)?.pluginId === identity.nativeId;
+  const marker = readOwnership(plugin.path);
+  const owned = marker?.pluginId === identity.nativeId;
   return {
     ...shared,
-    route: identity.route ?? (owned ? 'managed' : 'none'),
+    route: owned && marker.route !== undefined ? marker.route : identity.route ?? (owned ? 'managed' : 'none'),
     presence: 'present',
     enablement: plugin.enabled ? 'enabled' : 'disabled',
     activation: plugin.enabled ? 'active' : 'inactive',
@@ -1118,7 +1140,7 @@ function parseRollbackVersions(value: unknown): string[] {
 function installationRecord(plugin: InstalledPlugin): TargetInstallationData {
   const owned = plugin.path === undefined ? null : readOwnership(plugin.path);
   const ownership = owned?.pluginId === plugin.id
-    ? { kind: 'owned' as const, proof: 'created' as const, scopeId: `codex:${plugin.id}`, proofId: `marker:${plugin.id}` }
+    ? { kind: 'owned' as const, proof: 'created' as const, scopeId: owned.scopeId ?? `codex:${plugin.id}`, proofId: `marker:${plugin.id}` }
     : { kind: 'unmanaged' as const };
   if (plugin.path === undefined) {
     return {
@@ -1144,7 +1166,8 @@ function installationRecord(plugin: InstalledPlugin): TargetInstallationData {
     activation: plugin.enabled ? 'active' : 'inactive',
     installedFingerprint,
     installedVersion: plugin.version ?? null,
-    source: null,
+    source: owned?.pluginId === plugin.id && owned.sourceType !== undefined && owned.sourceRevision !== undefined
+      ? { type: owned.sourceType, immutableRevision: owned.sourceRevision, locator: owned.sourceType === 'git' ? owned.source : null } : null,
     contentRoots: [{ label: 'plugin', path: plugin.path, fingerprint: installedFingerprint }],
   };
 }
