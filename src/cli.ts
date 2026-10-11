@@ -938,6 +938,7 @@ async function runWriterAdd(
   })));
   const outcomes: LifecycleOperationOutcome[] = [];
   let mutationStarted = false;
+  let summaryPhase: LifecycleTerminalPhase | undefined;
   for (let index = 0; index < captured.length; index++) {
     const pair = captured[index]!;
     const operation = plan[index]!;
@@ -994,6 +995,7 @@ async function runWriterAdd(
       }));
       break;
     }
+    let installedFingerprint: string;
     try {
       const installed = pair.writer.listInstalled();
       const marketplace = pair.plugin.marketplace ?? 'local';
@@ -1001,32 +1003,46 @@ async function runWriterAdd(
         && (plugin.marketplace === marketplace || (marketplace === 'local' && plugin.marketplace === undefined))
         && plugin.enabled !== false);
       if (match?.path === undefined) throw new LifecycleCommandError(reason('readback', 'readback.mismatch', `native install readback is missing ${nativeId}`));
-      const installedFingerprint = fingerprintInstallation(match);
-      const finalized: InstallRecord = {
-        ...pending,
-        id: nativeId,
-        source: resolved.sourceUri,
-        sourceSha: resolved.sha,
-        installedAt: new Date().toISOString(),
-        sourceDir: pair.plugin.sourceDir ?? pair.plugin.dir,
-        installedFingerprint,
-        ...(pair.plugin.contentFingerprint === undefined ? {} : { fingerprint: pair.plugin.contentFingerprint }),
-      };
-      delete finalized.pending;
-      const finalizedState = state.map((record) => record === pending ? finalized : record);
-      writeInstallLedger(finalizedState, finalized, resolved.snapshot.binding);
-      state = finalizedState;
-      outcomes.push(outcomeFor(operation, { result: 'succeeded', changed }));
+      installedFingerprint = fingerprintInstallation(match);
     } catch (error) {
-      const failure = reasonForError(error);
+      const failure = error instanceof LifecycleCommandError && error.lifecycleReason.category === 'readback'
+        ? error.lifecycleReason
+        : reason('readback', 'readback.failed', unknownErrorDiagnostic(error));
       outcomes.push(outcomeFor(operation, {
-        result: failure.category === 'recovery' || failure.category === 'readback' ? 'pending' : 'failed',
+        result: 'pending',
         changed,
         resourceState: 'potentially-changed',
-        reason: failure.category === 'readback' ? failure : reason('recovery', 'recovery.required', failure.diagnostic),
+        reason: failure,
       }));
       break;
     }
+    const finalized: InstallRecord = {
+      ...pending,
+      id: nativeId,
+      source: resolved.sourceUri,
+      sourceSha: resolved.sha,
+      installedAt: new Date().toISOString(),
+      sourceDir: pair.plugin.sourceDir ?? pair.plugin.dir,
+      installedFingerprint,
+      ...(pair.plugin.contentFingerprint === undefined ? {} : { fingerprint: pair.plugin.contentFingerprint }),
+    };
+    delete finalized.pending;
+    const finalizedState = state.map((record) => record === pending ? finalized : record);
+    try {
+      writeInstallLedger(finalizedState, finalized, resolved.snapshot.binding);
+    } catch (error) {
+      summaryPhase = 'finalize';
+      outcomes.push(outcomeFor(operation, {
+        result: 'pending',
+        changed,
+        resourceState: 'present',
+        activationState: 'active-conforming',
+        reason: reason('recovery', 'recovery.required', unknownErrorDiagnostic(error)),
+      }));
+      break;
+    }
+    state = finalizedState;
+    outcomes.push(outcomeFor(operation, { result: 'succeeded', changed }));
   }
   const reported = new Set(outcomes.map((outcome) => outcome.operationId));
   for (const operation of plan) {
@@ -1039,7 +1055,7 @@ async function runWriterAdd(
   }
   const failure = outcomes.find((outcome) => outcome.result !== 'succeeded')?.reason ?? null;
   return reportFor('add', flags.dryRun, plan, outcomes, {
-    terminalPhase: failure === null ? undefined : failure.category === 'readback' ? 'readback' : mutationStarted ? 'apply' : 'preflight',
+    terminalPhase: failure === null ? undefined : summaryPhase ?? (failure.category === 'readback' ? 'readback' : mutationStarted ? 'apply' : 'preflight'),
     mutationStarted,
     reason: failure,
     sourceSnapshots,
