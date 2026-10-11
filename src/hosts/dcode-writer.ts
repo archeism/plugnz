@@ -199,7 +199,8 @@ const dcodeDefinition: LifecycleHostDefinition = {
     if (existsSync(stagingRoot)) throw new Error('dcode preparation stage already exists');
     mkdirSync(stagingRoot, { recursive: true });
     const manifest = declaredManifest(request.snapshot.packageRoot, request.snapshot.packageName);
-    stagePlugin(request.snapshot.packageRoot, stagingRoot, request.snapshot.packageName, manifest.version);
+    try { stagePlugin(request.snapshot.packageRoot, stagingRoot, request.snapshot.packageName, manifest.version); }
+    catch (error) { rmSync(dir, { recursive: true, force: true }); throw error; }
     return { stagingRoot, stagingId: `${request.snapshot.attemptId}:${request.snapshot.operationId}` };
   },
   applyLifecycleDirectives: async projection => {

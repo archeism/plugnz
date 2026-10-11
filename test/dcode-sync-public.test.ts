@@ -111,6 +111,65 @@ test('dcode pin cannot fabricate ownership for an unrecorded native install', ()
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+test('dcode pin stage failure clears zero-mutation intent and permits a clean retry', () => {
+  const root = mkdtempSync(join(tmpdir(), 'plgnz-dcode-pin-stage-'));
+  const home = join(root, 'home'), native = join(home, '.deepagents'), source = join(root, 'source');
+  try {
+    mkdirSync(native, { recursive: true });
+    writeFiles(source, { 'plugin.json': '{"name":"demo","version":"1.0.0"}', '.mcp.json': '{"mcpServers":{"demo":{"command":"node"}}}' });
+    const binary = join(root, 'dcode'); writeFileSync(binary, '#!/bin/sh\nprintf "deepagents-code 0.1.83\\n"\n'); chmodSync(binary, 0o755);
+    const env = { ...process.env, HOME: home, OPEN_PLUGIN_HOME: home, OPEN_PLUGIN_DCODE_ROOT: native, OPEN_PLUGIN_DCODE_BIN: binary, OPEN_PLUGIN_DCODE_PYTHON_BIN: fakeDcodeLockInterpreter(root) };
+    const run = (...args: string[]) => spawnSync(cliExecutable, [cliPath, ...args, '--json'], { env, cwd: root, encoding: 'utf8' });
+    expect(run('sync', source, '--target', 'dcode').status).toBe(0);
+    const registryFile = join(native, '.state/installed_plugins.json'), registry = readFileSync(registryFile, 'utf8');
+    const priorSlot = JSON.parse(registry).plugins['demo@local'][0].installPath;
+    const bytes = readFileSync(join(priorSlot, '.mcp.json'), 'utf8');
+    const operationsRoot = join(native, 'plugins/cache/plgnz-operations');
+    rmSync(operationsRoot, { recursive: true }); writeFileSync(operationsRoot, 'deliberate stage obstruction');
+    const failed = run('pin', '--target', 'dcode');
+    expect(failed.status).toBe(1);
+    expect(readFileSync(registryFile, 'utf8')).toBe(registry);
+    expect(readFileSync(join(priorSlot, '.mcp.json'), 'utf8')).toBe(bytes);
+    const ledger = JSON.parse(readFileSync(join(home, 'state.json'), 'utf8'));
+    expect(ledger.activations[0].pending).toBeUndefined();
+    expect(ledger.attempts.at(-1).phase).toBe('failed');
+    expect(ledger.attempts.at(-1).mutationStarted).toBe(false);
+    rmSync(operationsRoot);
+    expect(run('pin', '--target', 'dcode').status).toBe(0);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('dcode pin keeps accurate recovery pending when verified rollback cleanup fails', () => {
+  const root = mkdtempSync(join(tmpdir(), 'plgnz-dcode-pin-cleanup-'));
+  const home = join(root, 'home'), native = join(home, '.deepagents'), source = join(root, 'source');
+  const operationsRoot = join(native, 'plugins/cache/plgnz-operations');
+  try {
+    mkdirSync(native, { recursive: true });
+    writeFiles(source, { 'plugin.json': '{"name":"demo","version":"1.0.0"}', '.mcp.json': '{"mcpServers":{"demo":{"command":"node"}}}' });
+    const binary = join(root, 'dcode'), denied = join(root, 'dcode-denied');
+    writeFileSync(binary, '#!/bin/sh\nprintf "deepagents-code 0.1.83\\n"\n'); chmodSync(binary, 0o755);
+    writeFileSync(denied, '#!/bin/sh\nif find "$OPEN_PLUGIN_DCODE_ROOT/plugins/cache/plgnz-operations" -name stage -type d | read stage; then find "$OPEN_PLUGIN_DCODE_ROOT/plugins/cache/plgnz-operations" -type d -exec chmod a-w {} +; fi\nprintf "deepagents-code 0.1.83\\n"\n'); chmodSync(denied, 0o755);
+    const env = { ...process.env, HOME: home, OPEN_PLUGIN_HOME: home, OPEN_PLUGIN_DCODE_ROOT: native, OPEN_PLUGIN_DCODE_BIN: binary, OPEN_PLUGIN_DCODE_PYTHON_BIN: fakeDcodeLockInterpreter(root) };
+    const run = (args: string[], selected = binary) => spawnSync(cliExecutable, [cliPath, ...args, '--json'], { env: { ...env, OPEN_PLUGIN_DCODE_BIN: selected }, cwd: root, encoding: 'utf8' });
+    expect(run(['sync', source, '--target', 'dcode']).status).toBe(0);
+    const registryFile = join(native, '.state/installed_plugins.json'), priorRegistry = readFileSync(registryFile, 'utf8');
+    const priorSlot = JSON.parse(priorRegistry).plugins['demo@local'][0].installPath;
+    const bytes = readFileSync(join(priorSlot, '.mcp.json'), 'utf8');
+    const result = run(['pin', '--target', 'dcode'], denied);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('recovery remains pending');
+    expect(readFileSync(registryFile, 'utf8')).toBe(priorRegistry);
+    expect(readFileSync(join(priorSlot, '.mcp.json'), 'utf8')).toBe(bytes);
+    const ledger = JSON.parse(readFileSync(join(home, 'state.json'), 'utf8'));
+    expect(ledger.activations[0].pending.phase).toBe('rollback');
+    expect(ledger.attempts.at(-1).phase).toBe('recovery-required');
+    expect(ledger.attempts.at(-1).journal[0].state).toBe('rollback');
+  } finally {
+    if (existsSync(operationsRoot)) spawnSync('chmod', ['-R', 'u+w', operationsRoot]);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('dcode authoritative sync installs, updates and retires without losing writable data', () => {
   const root = mkdtempSync(join(tmpdir(), 'plgnz-dcode-sync-'));
   const home = join(root, 'home'), source = join(root, 'source'), native = join(home, '.deepagents');

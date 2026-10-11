@@ -29,7 +29,7 @@ export async function runOfflineLifecyclePin(host: HostWriter, plugin: Installed
   const operationId = `${attemptId}:${plugin.id}`;
   let handle: DurableLifecycleOperation | undefined;
   let preparation: StagedProjection | DirectivesAppliedProjection | PinsAppliedProjection | PreparedActivationMutation | undefined;
-  let applying = false, committed = false;
+  let accepted = false, applying = false, committed = false;
   const attempt: LifecycleAttemptRecord = { id: attemptId, command: 'update', phase: 'accepted', mutationStarted: false, scopeIds: [scope.id], journal: [{ operationId, scopeId: scope.id, packageId: activation.packageId, nativeId: activation.nativeId, action: 'update', state: 'pending', route: activation.route, startedAt: now, updatedAt: now }], startedAt: now, updatedAt: now };
   const persist = (nextActivation: ActivationRecord): void => {
     if (readLifecycleState().state.stateGeneration !== state.stateGeneration) throw new Error('pin ledger changed concurrently; refusing stale commit');
@@ -57,6 +57,7 @@ export async function runOfflineLifecyclePin(host: HostWriter, plugin: Installed
     if (selection.route !== 'managed') throw new Error('offline lifecycle pin requires a frozen Managed projection');
     if (dryRun) return preview;
     pending('accepted');
+    accepted = true;
     preparation = await adapter.stageActivation({ selection, snapshot, pins });
     preparation = await adapter.applyLifecycleDirectives(preparation);
     preparation = await adapter.applyPins(preparation);
@@ -81,16 +82,16 @@ export async function runOfflineLifecyclePin(host: HostWriter, plugin: Installed
         attempt.phase = 'recovery-required'; attempt.journal[0]!.state = 'rollback'; pending('rollback');
         try {
           await adapter.rollback(handle); adapter.verifyRollback(handle, await adapter.readback(handle));
-          attempt.phase = 'failed'; attempt.journal[0]!.state = 'rolled-back'; persist(activation);
           await adapter.cleanup(handle, 'verified-rollback');
+          attempt.phase = 'failed'; attempt.journal[0]!.state = 'rolled-back'; persist(activation);
         } catch (recoveryError) { await adapter.releaseRecovery(handle); throw new Error(`pin failed: ${(error as Error).message}; recovery remains pending: ${(recoveryError as Error).message}`); }
       } else {
-        attempt.phase = 'failed'; attempt.journal[0]!.state = 'failed'; attempt.mutationStarted = false; persist(activation);
+        attempt.phase = 'failed'; attempt.journal[0]!.state = 'not-attempted'; attempt.mutationStarted = false; persist(activation);
         await adapter.cleanup(handle, 'aborted-preparation');
       }
-    } else if (!committed && preparation !== undefined) {
-      await adapter.cleanup(preparation, 'aborted-preparation');
-      attempt.phase = 'failed'; attempt.journal[0]!.state = 'failed'; persist(activation);
+    } else if (!committed && accepted) {
+      try { if (preparation !== undefined) await adapter.cleanup(preparation, 'aborted-preparation'); }
+      finally { attempt.phase = 'failed'; attempt.journal[0]!.state = 'not-attempted'; persist(activation); }
     }
     throw error;
   } finally {
