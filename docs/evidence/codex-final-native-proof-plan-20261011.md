@@ -5,6 +5,29 @@ same-version refresh but did not produce the required public native-exit failure
 Its raw stores, failed attempts and archives remain retained. This plan does not
 reinterpret that failed gate or enable another capability.
 
+## Preparation checkpoints
+
+The two independent proof-oracle reviews rejected `3ef856a`: a changed `.git`
+tree did not prove checkout advancement, aggregate report flags did not prove a
+durably settled journal, and positive resource/reported revision checks were
+missing. Correction `0486c9e` records actual post-native HEAD before any foreign
+injection, requires the exact V3 commit in both failure arms, correlates the fresh
+sealed journal and rollback settlement, checks retained versus cleaned artifacts,
+and asserts reported revision and exact fixture resource bytes. This correction
+is frozen for re-review; syntax checks are not native acceptance.
+
+A fresh nonpersistent measurement-only Sandbox, `plugnz-codex-final-3ef856a`, was
+created in the authorized team/project. Before native package installation or
+proof uploads, whole `sudo du -skx /` was **2,248,828 KiB** and physical `df -Pk /`
+used **3,585,208 KiB**. Actual default Node is **24.21.0**, not the earlier proof's
+24.14.0. This launch freezes the actual version; it does not claim parity across
+unexecuted Node versions. The native package and both proof homes have not yet
+been installed or run at this checkpoint.
+
+The candidate artifact was rebuilt from the frozen production tree in this
+worktree and reproduced the exact `d82ecd…` hash below. Another worktree's mutable
+`dist/` is not the artifact authority for this trial.
+
 ## Frozen inputs and isolation
 
 - Producer code: `53e40bbdfd58692f05f18742e7f2ea8df5681ffd`; packed artifact SHA256
