@@ -161,3 +161,24 @@ cherry-picked as a fix for these failures. A correct frozen-runtime full gate
 must pin `/tmp/plugnz-pr62-deps.0msIJO/node_modules/.bin` first in PATH for
 both the runner and children. The native 2.1.275/2.1.295 proof above used its
 separately pinned native binaries and artifact and is unaffected.
+
+The next full gate pinned that PATH and verified `command -v bun` and
+`bun --version` as Bun 1.4.0 for runner and child shebangs. Session `89997`
+finished exit 1: **700 passes, 6 skips, 1 failure**, 4,575 assertions across
+the same 707 tests / 63 files, 256.65 s wall, peak RSS 216,840 KiB. YAML's
+version contract and projected-command/user-only-skill installation passed.
+Only the unchanged ZCode failed-update rollback case reached its implicit
+5-second deadline (5,008.25 ms). Pinned typecheck `10587` finished exit 0.
+Full raw log `issue35-host-profile-30ac366-bun14-full.log` in the same durable
+evidence directory, SHA256
+`3a8d2d67e235c0900d409b2f488ccefddc6539f9ec9e2f7f3bfaadca3e5ed8d8`.
+
+After preserving that terminal failure, the exact unchanged test was run with
+`bun test test/zcode-cli-activation.test.ts --test-name-pattern 'a failed
+update rolls back to the previous activation' --timeout 30000`, under the
+same pinned PATH. Session `4928` finished exit 0: one pass, one assertion,
+case duration **5,592.10 ms**, 5.78 s wall, peak RSS 71,600 KiB. Raw log
+`issue35-host-profile-zcode-rollback-diagnostic.log`, SHA256
+`72efd7b3c3245018ec2451b4c04650eaea7e5c35ae04bec64612c27eeaf6fca3`.
+This is measured evidence for proposing a test-local explicit deadline;
+no source/assertion/production timeout change or passing full gate is implied.
