@@ -8,7 +8,10 @@ import { captureSurfaces, treeDigest } from './codex-preserved-native-surfaces.m
 const [arm, revision] = process.argv.slice(2);
 assert(['inactive', 'sparse', 'malformed'].includes(arm));
 assert.match(revision, /^[a-f0-9]{40}$/);
-const base = '/vercel/sandbox/proof/codex-native-b029c54-01';
+const base = process.env.PLGNZ_PROOF_BASE ?? '/vercel/sandbox/proof/codex-native-b029c54-01';
+assert.match(base, /^\/vercel\/sandbox\/proof\/codex-native-b029c54-[a-z0-9-]+$/);
+const source = process.env.PLGNZ_PROOF_SOURCE ?? 'https://github.com/archeism/plugnz.git#proof/codex-b029c54-source-20261011';
+assert.match(source, /^https:\/\/github\.com\/archeism\/plugnz\.git#proof\/codex-b029c54-source-20261011(?:-[a-z0-9-]+)?$/);
 const root = join(base, arm), home = join(root, 'home'), codexHome = join(home, '.codex');
 const file = join(codexHome, 'config.toml');
 let config = readFileSync(file, 'utf8');
@@ -36,7 +39,7 @@ const olderBefore = treeDigest(join(slot, '0.0.9'));
 const noteBefore = treeDigest(join(slot, 'user-note.json'));
 const wrapper = join(base, 'codex-preserved-native-boundary.mjs'); chmodSync(wrapper, 0o755);
 const result = spawnSync(process.execPath, [join(base, 'plugnz-candidate.mjs'), 'sync',
-  'https://github.com/archeism/plugnz.git#proof/codex-b029c54-source-20261011',
+  source,
   ...(arm === 'malformed' ? ['--target', 'cursor'] : []), '--target', 'codex', '--json'], {
   env: { ...process.env, HOME: home, CODEX_HOME: codexHome, OPEN_PLUGIN_HOME: home,
     OPEN_PLUGIN_CODEX_HOME: codexHome, OPEN_PLUGIN_CODEX_BIN: wrapper, PLGNZ_PROOF_ROOT: root },

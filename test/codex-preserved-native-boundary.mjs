@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { captureSurfaces } from './codex-preserved-native-surfaces.mjs';
 
 const root = process.env.PLGNZ_PROOF_ROOT;
-assert(root?.startsWith('/vercel/sandbox/proof/codex-native-b029c54-01/'));
+assert.match(root ?? '', /^\/vercel\/sandbox\/proof\/codex-native-b029c54-[a-z0-9-]+\/(?:rollback|foreign|cache|inactive|sparse|malformed)$/);
 const native = '/vercel/sandbox/native/codex-0162/node_modules/.bin/codex';
 const args = process.argv.slice(2);
 appendFileSync(join(root, 'native-calls.jsonl'), `${JSON.stringify(args)}\n`);

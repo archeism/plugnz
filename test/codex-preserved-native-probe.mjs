@@ -11,11 +11,13 @@ const resumeDiscovery = phase === 'bootstrap' && process.argv[5] === 'resume-dis
 assert(['bootstrap', 'refresh', 'native-exit', 'foreign-checkout', 'foreign-cache'].includes(phase));
 assert(['rollback', 'foreign', 'cache', 'inactive', 'sparse', 'malformed'].includes(name));
 assert(/^[a-f0-9]{40}$/.test(revision));
-const base = '/vercel/sandbox/proof/codex-native-b029c54-01';
+const base = process.env.PLGNZ_PROOF_BASE ?? '/vercel/sandbox/proof/codex-native-b029c54-01';
+assert.match(base, /^\/vercel\/sandbox\/proof\/codex-native-b029c54-[a-z0-9-]+$/);
 const root = join(base, name), home = join(root, 'home'), codexHome = join(home, '.codex');
 const native = '/vercel/sandbox/native/codex-0162/node_modules/.bin/codex';
 const artifact = join(base, 'plugnz-candidate.mjs');
-const source = 'https://github.com/archeism/plugnz.git#proof/codex-b029c54-source-20261011';
+const source = process.env.PLGNZ_PROOF_SOURCE ?? 'https://github.com/archeism/plugnz.git#proof/codex-b029c54-source-20261011';
+assert.match(source, /^https:\/\/github\.com\/archeism\/plugnz\.git#proof\/codex-b029c54-source-20261011(?:-[a-z0-9-]+)?$/);
 const sha = value => createHash('sha256').update(value).digest('hex');
 assert.equal(sha(readFileSync(artifact)), 'c72c6e9674c454bc6a54e68c0b89f8670a2017fd54c9d76131234d619fafd606');
 const caps = readFileSync('/proc/self/status', 'utf8').split('\n').filter(line => /^Cap(Inh|Prm|Eff|Bnd|Amb):/.test(line));
