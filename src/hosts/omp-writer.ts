@@ -464,6 +464,8 @@ function installationOf(plugin: InstalledPlugin): TargetInstallationData {
     presence: 'present',
     enablement: enabled ? 'enabled' : 'disabled',
     activation: enabled ? 'active' : 'inactive',
+    ...(owner?.scopeId !== undefined && owner.pluginId === plugin.id && path === resolve(managedPackageDir(plugin.id))
+      && linkPointsTo(managedLink(plugin.id), path) ? { observedRoute: 'managed' as const } : {}),
     installedFingerprint: digest,
     installedVersion: plugin.version ?? null,
     source: sourceOf(owner),

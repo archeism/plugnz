@@ -51,6 +51,17 @@ describe('lifecycle executor', () => {
         expect(state.attempts.at(-1)!.journal[0]!.action).toBe('route-migrate');
         expect(state.attempts.at(-1)!.journal[0]!.state).toBe('completed');
         expect(readFileSync(data, 'utf8')).toBe('user data\n');
+        if (route === 'native') {
+          fake.nativeProjection = { kind: 'requires-managed', reasonId: 'fixture-policy' };
+          fake.omitObservedRoute = true;
+          const before = fake.hostMutationState();
+          const unknownPrior = expectFrozen(await plan());
+          expect(unknownPrior.operations[0]!.operation.action).toBe('retain-prior');
+          expect(unknownPrior.operations[0]!.reason?.code).toBe('capability.unverified');
+          expect((await executeLifecycle({ plan: unknownPrior, hosts: [planner], now })).exitCode).toBe(1);
+          expect(fake.hostMutationState()).toEqual(before);
+          fake.omitObservedRoute = false;
+        }
       }
     });
   });

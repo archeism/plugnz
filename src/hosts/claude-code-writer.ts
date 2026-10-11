@@ -976,6 +976,7 @@ function observeClaudeInstallations(): TargetInstallationData[] {
     const sha = row['gitCommitSha'];
     const revision = typeof sha === 'string' && /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(sha) ? sha : undefined;
     const locator = marker === null ? undefined : gitLocator(marker.source);
+    const observedRoute = marker?.pluginId === id && marker.scopeId !== undefined ? observedOwnedRoute(installPath) : undefined;
     const on = enabledPlugins[id] === true;
     const at = id.indexOf('@');
     installations.push({
@@ -992,6 +993,7 @@ function observeClaudeInstallations(): TargetInstallationData[] {
       presence: 'present',
       enablement: on ? 'enabled' : 'disabled',
       activation: on ? 'active' : 'inactive',
+      ...(observedRoute !== undefined ? { observedRoute } : {}),
       installedFingerprint: digest,
       installedVersion: typeof row['version'] === 'string' ? row['version'] : null,
       source: revision !== undefined && locator !== undefined
@@ -1110,6 +1112,16 @@ function installedRoute(installPath: string): SelectedLifecycleRoute {
     return 'managed';
   }
   return 'managed';
+}
+
+function observedOwnedRoute(installPath: string): SelectedLifecycleRoute | undefined {
+  const file = join(installPath, '.plgnz-lifecycle.json');
+  if (!existsSync(file)) return undefined;
+  const value: unknown = JSON.parse(readFileSync(file, 'utf8'));
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('Claude owned lifecycle receipt is malformed');
+  const route = (value as Record<string, unknown>)['route'];
+  if (route !== 'managed' && route !== 'native') throw new Error('Claude owned lifecycle receipt route is invalid');
+  return route;
 }
 
 function retained(path: string): LifecycleReadbackData['retention']['pluginData'] {

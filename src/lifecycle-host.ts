@@ -57,6 +57,8 @@ export interface TargetInstallationData {
   readonly presence: 'present' | 'absent';
   readonly enablement: 'enabled' | 'disabled' | 'unknown';
   readonly activation: 'active' | 'inactive' | 'nonconforming' | 'unknown';
+  /** Independently observed owned representation/receipt, never copied from the ledger. */
+  readonly observedRoute?: SelectedLifecycleRoute;
   readonly installedFingerprint: string | null;
   readonly installedVersion: string | null;
   readonly source: {

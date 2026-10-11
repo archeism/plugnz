@@ -1278,6 +1278,8 @@ function normalizeInstallation(input: TargetInstallationData): TargetInstallatio
   stable(input.nativeId, 'target inventory native id');
   if (input.packageName !== null) stable(input.packageName, 'target inventory package name');
   if (input.installedVersion !== null) stable(input.installedVersion, 'target installed version');
+  if (input.observedRoute !== undefined && (input.observedRoute !== 'native' && input.observedRoute !== 'managed')) invariant('observed installed route is invalid');
+  if (input.observedRoute !== undefined && (input.presence !== 'present' || input.ownership.kind !== 'owned')) invariant('observed installed route requires present owned native content');
   const source = input.source === null ? null : normalizeInstalledSource(input.source);
   const contentRoots = normalizeContentRoots(input.contentRoots, input.presence === 'present');
   if (input.presence === 'present') {

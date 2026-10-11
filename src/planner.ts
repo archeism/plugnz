@@ -477,6 +477,10 @@ async function classifyDesired(
   const installation = item.observation.installations.find((row) => row.nativeId === nativeId);
   const collision = foreignOwnership(item.observation, nativeId, item.scope.id, item.entry.target);
   if (collision !== null) return defect(collision);
+  const recordedRoute = activation?.route.kind === 'managed' || activation?.route.kind === 'native' ? activation.route.kind : null;
+  if (recordedRoute !== null && installation?.observedRoute !== undefined && installation.observedRoute !== recordedRoute) {
+    return defect(createLifecycleReason('internal', 'internal.invariant', `recorded route '${recordedRoute}' contradicts observed owned route '${installation.observedRoute}' for '${nativeId}'`));
+  }
   if (installation?.presence === 'present' && installation.ownership.kind === 'unmanaged' && !selected.adoptionRequested) {
     return defect(createLifecycleReason(
       'internal',
@@ -512,7 +516,10 @@ async function classifyDesired(
     }
     return classified(operationId, 'desired-pair', item.scope, snapshotId, selected.plugin.name, nativeId, 'not-attempted', 'none', decision.reason);
   }
-  const recordedRoute = activation?.route.kind === 'managed' || activation?.route.kind === 'native' ? activation.route.kind : null;
+  if (recordedRoute !== null && recordedRoute !== decision.route && installation?.observedRoute === undefined) {
+    return classified(operationId, 'desired-pair', item.scope, snapshotId, selected.plugin.name, nativeId, 'retain-prior', recordedRoute,
+      createLifecycleReason('capability', 'capability.unverified', 'route migration has no independently observed prior route', 'migration-prior-route'));
+  }
   const matchingBytes = !decision.provenanceRepair && sameBytes(activation, installation, selected.plugin)
     && installation?.activation === 'active' && installation.enablement === 'enabled';
   const action = chosenAction(replacing, recordedRoute, decision.route, matchingBytes, reapplyMatchingUpdate);

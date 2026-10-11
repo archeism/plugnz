@@ -649,6 +649,7 @@ const hermesLifecycleDefinition: LifecycleHostDefinition = {
         presence: 'present' as const,
         enablement: plugin.enabled === true ? 'enabled' as const : 'disabled' as const,
         activation: plugin.enabled === true ? 'active' as const : 'inactive' as const,
+        ...(marker?.pluginId === plugin.id && marker.scopeId !== undefined ? { observedRoute: 'managed' as const } : {}),
         installedFingerprint: atomicFingerprint(packageDir, companion),
         installedVersion: plugin.version ?? null,
         source: sourceIdentity(marker),

@@ -305,7 +305,7 @@ describe('lifecycle planner', () => {
     const scopeId = createDeploymentScopeIdentity(source, target).id;
     const betaInstalled = host.fake.seedActivation({ nativeId: 'beta', scopeId, packageName: 'beta', sourceType: 'local', sourceLocator: null });
     const gammaInstalled = host.fake.seedActivation({ nativeId: 'gamma', scopeId, packageName: 'gamma', sourceType: 'local', sourceLocator: null });
-    host.fake.seedActivation({ nativeId: 'delta', scopeId, packageName: 'delta', sourceType: 'local', sourceLocator: null });
+    host.fake.seedActivation({ nativeId: 'delta', scopeId, packageName: 'delta', sourceType: 'local', sourceLocator: null, route: 'native' });
     await withHome(home, async () => {
       writeAuthoritative(collection.source, 'codex', 'alpha', 'alpha', [
         ownedActivation({

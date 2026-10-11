@@ -117,6 +117,7 @@ function observeDcodeTarget(target: LifecycleTargetIdentity): TargetInstallation
       ownership: owned ? { kind: 'owned', proof: body.proof === 'adopted' ? 'adopted' : 'created', scopeId: typeof body.scopeId === 'string' ? body.scopeId : 'dcode:default', proofId: `dcode-marker:${nativeId}` } : { kind: 'unmanaged' },
       presence: present ? 'present' : 'absent', enablement: enabled[nativeId] === true ? 'enabled' : 'disabled',
       activation: enabled[nativeId] === true && present ? 'active' : 'inactive',
+      ...(owned && present && dirname(path) === join(dcodeCacheRoot(), 'plgnz') ? { observedRoute: 'managed' as const } : {}),
       installedFingerprint: fingerprint, installedVersion: present ? declaredManifest(path, nativeId.split('@')[0]!).version : null,
       source: owned ? { type: body.sourceType === 'git' ? 'git' : 'local', immutableRevision: marker.kind === 'current' ? marker.sourceRevision : marker.fingerprint, locator: body.sourceType === 'git' && marker.source !== `local:${String(body.scopeId)}` ? marker.source : null } : null,
       contentRoots: fingerprint === null ? [] : [{ label: 'managed', path, fingerprint }],

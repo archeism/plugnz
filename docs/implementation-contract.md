@@ -14,6 +14,18 @@ Mutation `--json` writes only the schema-v1 `LifecycleReport` envelope to stdout
 
 On a dry run, `action` is prospective but `resourceState` and `activationState` describe the native inventory actually observed during preflight. A successful install preview can therefore report `absent`/`inactive`; a retirement preview can report `present`/`active-conforming`. Preview success means the operation is admissible, not that deployment has happened. Applied success still requires verified terminal state. Absent resources cannot report active activation, and previews never report mutation or potentially changed resources. `test/dryrun-observations.test.ts` proves the public CLI distinction used by Personal status.
 
+Migration preflight also requires an independently observed prior route. The
+writer SPI's optional `TargetInstallationData.observedRoute` comes from the
+owned native representation or validated lifecycle receipt, never a copied
+ledger route. The observation factory rejects this claim for absent/unmanaged
+content. Unknown prior routes retain the prior with a loud `unverified` outcome;
+a known native/ledger route contradiction is a global zero-write internal
+defect, including dry-run. Execution repeats the check on fresh inventory and
+still verifies the captured prior and rollback/readback before mutation.
+`test/lifecycle-public-commands.test.ts` proves a ledger-only Cursor Native
+claim cannot stage or update even an otherwise independent sibling; the SPI
+migration test proves unknown prior route cannot become a selectable migration.
+
 Operation result answers whether the Desired operation converged, not whether a protective containment step ran. `retain-prior` and `disable-nonconforming` therefore remain failed pair outcomes with their exact structured reason; resource, activation, and changed fields separately show the retained prior activation or successful reversible disablement. This preserves pair-local diagnostics and prevents containment from serializing as a successful install.
 
 Applied reversible disablement uses the host lifecycle SPI, verifies inactive enablement, preserves prior bytes and Source metadata, and does not advance `lastConverged`. Its original capability reason survives successful containment. A precondition refusal never rolls back another writer's bytes; a started mutation that fails uses its sealed rollback handle even if no receipt returned. Unverified disable rollback records a pending `disable-nonconforming` intent and blocks further scope planning. Live recovery resources are released separately from retained durable rollback artifacts. Public Bun and packed-Node proofs live in `test/disable-public.test.ts` and `test/precondition-public.test.ts`.

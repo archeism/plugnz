@@ -414,6 +414,7 @@ function installationFor(native: ReturnType<typeof readZcodeNativeRecords>[numbe
     presence: 'present',
     enablement: enabled ? 'enabled' : 'disabled',
     activation: enabled ? 'active' : 'inactive',
+    ...(owned ? { observedRoute: 'native' as const } : {}),
     installedFingerprint: digest,
     installedVersion: native.version,
     source: owned

@@ -1302,6 +1302,7 @@ function installationRecord(plugin: InstalledPlugin): TargetInstallationData {
     activation: plugin.enabled ? 'active' : 'inactive',
     installedFingerprint,
     installedVersion: plugin.version ?? null,
+    ...(owned?.pluginId === plugin.id && owned.scopeId !== undefined && owned.route !== undefined ? { observedRoute: owned.route } : {}),
     source: owned?.pluginId === plugin.id && owned.sourceType !== undefined && owned.sourceRevision !== undefined
       ? { type: owned.sourceType, immutableRevision: owned.sourceRevision, locator: owned.sourceType === 'git' && owned.source !== `scope:${owned.scopeId}` ? owned.source : null } : null,
     contentRoots: [{ label: 'plugin', path: plugin.path, fingerprint: installedFingerprint }],

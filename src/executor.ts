@@ -327,11 +327,17 @@ async function prepareActivation(
   }
   const target = lifecycleTarget(plan, operation);
   const observation = await host.adapter.observeTarget(target);
+  const observedPrior = observation.installations.find(row => row.nativeId === nativeId);
+  const recordedRoute = recorded?.route.kind === 'managed' || recorded?.route.kind === 'native' ? recorded.route.kind : null;
+  if (recordedRoute !== null && observedPrior?.observedRoute !== undefined && observedPrior.observedRoute !== recordedRoute) {
+    return refused(createLifecycleReason('internal', 'internal.invariant', 'recorded route contradicts fresh observed owned route'));
+  }
   if (action === 'route-migrate') {
-    const prior = observation.installations.find(row => row.nativeId === nativeId);
+    const prior = observedPrior;
     if (recorded === undefined || prior?.ownership.kind !== 'owned' || prior.ownership.scopeId !== operation.scope.id
       || prior.presence !== 'present' || prior.installedFingerprint === null || prior.installedFingerprint === undefined
       || prior.source?.immutableRevision !== recorded.sourceRevision || prior.source?.type !== operation.scope.source.kind
+      || prior.observedRoute !== recordedRoute
       || (operation.scope.source.kind === 'git' && prior.source?.locator !== operation.scope.source.locator)) {
       return refused(createLifecycleReason('internal', 'internal.invariant', 'route migration has no native ownership/source/installed-byte proof for its recorded prior'));
     }

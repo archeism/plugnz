@@ -617,6 +617,7 @@ function readKimiInstallations(): TargetInstallationData[] {
       presence: 'present',
       enablement: enabled ? 'enabled' : 'disabled',
       activation: enabled ? 'active' : 'inactive',
+      ...(owned && resolve(plugin.path) === resolve(managedPluginPath(plugin.name)) ? { observedRoute: 'managed' as const } : {}),
       installedFingerprint: digest,
       installedVersion: null,
       source: owned ? { type: 'local', immutableRevision: marker.fingerprint, locator: null } : null,

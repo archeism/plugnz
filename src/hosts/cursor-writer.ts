@@ -713,10 +713,12 @@ function readLocalInstallation(entry: string, dir: string): TargetInventoryData[
       contentRoots: [{ label: 'local', path: resolve(dir), fingerprint: digest }],
     };
   }
+  const ownership = ownershipOf(entry, marker);
   return {
     nativeId: entry,
     packageName: manifest.name,
-    ownership: ownershipOf(entry, marker),
+    ownership,
+    ...(ownership.kind === 'owned' ? { observedRoute: 'managed' as const } : {}),
     presence: 'present',
     enablement: 'enabled',
     activation: 'active',
