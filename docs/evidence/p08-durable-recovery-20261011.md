@@ -172,3 +172,19 @@ unmodified full suite on the corrected frozen tree remains required before main.
 | --- | --- |
 | `plugnz-3f6-integration-full-timeout.log` | `04886a6c64d9112d4af3498ae8e0337a6e0571ee7f053c6ee8f4b2fe1b46b72c` |
 | `plugnz-3f6-zcode-isolated.log` | `88a698ad077550780e69b6f44a13cf167a9665abe58dab0cc1f8c1042de9f0a3` |
+
+The next frozen tree, `3f18c2f`, passed both ZCode cases but its full suite
+terminated with 668 passes, five skips, one failure and one subsequent error
+(4413 assertions, 214.51 seconds). The dcode cache-rename SIGKILL test hit its
+default five-second deadline; Bun killed its active CLI, and the test's
+continuation subsequently observed a null subprocess status. The exact test
+passed isolated without an override: 12 assertions, 3.81 seconds. Its explicit
+deadline is now 30 seconds, matching other multi-process recovery tests. Focused
+recheck passed all 12 assertions in 4.06 seconds; typecheck passed. Native process
+timeouts, crash injection and assertions are unchanged; another frozen full gate
+is required, not inferred from the focused success.
+
+| Retained log | SHA-256 |
+| --- | --- |
+| `plugnz-3f18-integration-full-timeout.log` | `31494c011f75cebd97f6614030321ae59f858f37dd04773197e10face7527d6d` |
+| `plugnz-3f18-dcode-kill-isolated.log` | `2ef65add1a4d4dec93a6f2210ec6002d8526948d3eda23ab7f2e9268bb86e9b4` |
