@@ -138,6 +138,8 @@ export interface CliRunResult {
 export interface RunOptions {
   /** Boundary controls such as fake native binary paths. Isolation paths are locked. */
   env?: Record<string, string>;
+  /** Bound process termination proofs so a retained native child cannot hang the test runner. */
+  timeoutMs?: number;
 }
 
 export interface LifecycleCliHarness {
@@ -262,6 +264,7 @@ class LifecycleCliHarnessImpl implements LifecycleCliHarness {
     const result = spawnSync(cliExecutable, [cli, ...args], {
       cwd: repoRoot,
       encoding: 'utf8',
+      ...(options.timeoutMs === undefined ? {} : { timeout: options.timeoutMs }),
       env: { ...this.isolatedEnv(), ...options.env },
     });
     const storesAfter = this.storeSnapshots();

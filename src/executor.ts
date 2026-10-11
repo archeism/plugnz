@@ -1063,21 +1063,39 @@ async function recoverApplied(
   handle: Parameters<PlannerHost['adapter']['rollback']>[0],
   reason: LifecycleReason,
 ): Promise<OperationStep> {
+  let verified = false;
+  let diagnostic = '';
   try {
-    await host.adapter.rollback(handle);
-    const observation = await host.adapter.readback(handle);
-    host.adapter.verifyRollback(handle, observation);
-  } catch {
-    ledger.markRollbackRequired(plan, operation);
+    try {
+      await host.adapter.rollback(handle);
+      const observation = await host.adapter.readback(handle);
+      host.adapter.verifyRollback(handle, observation);
+      verified = true;
+    } catch (error) {
+      diagnostic = `; rollback verification failed: ${unknownErrorDiagnostic(error)}`;
+    }
+    try {
+      if (verified) ledger.markRolledBack(plan, operation);
+      else ledger.markRollbackRequired(plan, operation);
+    } catch (error) {
+      // Never delete the only recovery snapshots if the durable receipt failed.
+      verified = false;
+      diagnostic += `; recovery ledger could not be persisted: ${unknownErrorDiagnostic(error)}`;
+    }
+    if (verified) {
+      try { await host.adapter.cleanup(handle, 'verified-rollback'); }
+      catch {}
+    }
+  } finally {
+    // Live locks must not outlive this process, even when the ledger itself is
+    // malformed/unwritable. releaseRecovery retains all recovery artifacts.
     try { await host.adapter.releaseRecovery(handle); }
-    catch (error) { return pendingRecovery(operation, `; recovery resources could not be released: ${unknownErrorDiagnostic(error)}`); }
-    return pendingRecovery(operation);
+    catch (error) {
+      verified = false;
+      diagnostic += `; recovery resources could not be released: ${unknownErrorDiagnostic(error)}`;
+    }
   }
-  ledger.markRolledBack(plan, operation);
-  try {
-    await host.adapter.cleanup(handle, 'verified-rollback');
-  } catch {}
-  return reportedRollback(operation, reason);
+  return verified ? reportedRollback(operation, reason) : pendingRecovery(operation, `; original failure: ${reason.diagnostic}${diagnostic}`);
 }
 
 async function abortPreparation(
