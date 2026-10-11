@@ -1,6 +1,6 @@
 # Hermes
 
-Hermes Agent at source revision `c0d7294` loads portable Agent Plugins from
+Hermes Agent at evidenced source revisions `c0d7294` and `dce1e9b` loads portable Agent Plugins from
 `$HERMES_HOME/plugins/<name>/plugin.json`. Portable packages are native and
 opt-in: `plugins.enabled` activates a package and `plugins.disabled` overrides
 it (`hermes_cli/plugins_cmd.py`).
@@ -34,3 +34,29 @@ Hermes's effective `$HERMES_HOME/config.yaml` already resolves to that same
 file (including an existing symlink; a separate hardlink alias is refused); otherwise the adapter fails
 before mutation. Config writes preserve the native config symlink and the
 target file's mode.
+
+## Runtime admission
+
+A profile config is not runtime evidence. Managed lifecycle admission requires
+the selected `hermes` executable (`OPEN_PLUGIN_HERMES_BIN` overrides discovery)
+to report its install directory through `--version`, then a read-only Git probe
+of that exact directory must identify an evidenced, clean tracked revision.
+The current exact revisions are
+`c0d7294769a38c17ceae51d8f7995e66e1dcae27` and
+`dce1e9b37581dd62e480a9064dc04a709c2940d3`.
+Unknown revisions, locally modified tracked source, missing executables,
+non-Git installs, or an unparseable source identity report
+`capability.unverified` before native or lifecycle-ledger mutation. This means
+unverified, not proven incompatible; no compatible interval is fabricated.
+Untracked files are not part of the tracked-revision cleanliness assertion.
+
+The version subprocess uses a fresh temporary HOME/HERMES_HOME/XDG profile;
+source identification disables optional Git locks and lazy object fetching.
+The banner's upstream hash is not the executing revision and is never used for
+admission. The install-directory output is defined in the official pinned
+[startup source](https://github.com/NousResearch/hermes-agent/blob/dce1e9b37581dd62e480a9064dc04a709c2940d3/hermes_cli/_startup_fast.py).
+Exact evidence is retained in
+[the original loader probe](../evidence/hermes-native-loader-c0d7294-20260923.json)
+and [the newer isolated loader/CLI probe](../evidence/hermes-native-loader-dce1e9b-20261011.json).
+These prove native discovery, policy exclusion and interactive input queuing,
+not a model turn, gateway injection, or Hermes-native update/rollback support.

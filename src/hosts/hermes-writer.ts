@@ -7,8 +7,6 @@ import { projectPluginForHermes } from '../conversion';
 import { fingerprintTree } from '../fingerprint';
 import type { AddOptions, HostWriter, InstalledPlugin, PinOptions, PinOutcome } from '../host';
 import {
-  HERMES_PORTABLE_SURFACE,
-  HERMES_PORTABLE_SURFACE_PROBE,
   decideHermesNativeUpdate,
   hermesCommandCompanionId,
   hermesNativeUpdateProof,
@@ -32,7 +30,7 @@ import { hermesConfigPath, hermesRoot } from '../paths';
 import { CryptoHasher } from '../runtime';
 import type { PluginSource, ResolvedSource } from '../source';
 import { PACKAGE_SEMANTICS, type PackageSemantic } from '../semantic-inventory';
-import { hermes, hermesInstanceIdentity, hermesPluginsDir, listHermesInstance } from './hermes';
+import { hermes, hermesInstanceIdentity, hermesPluginsDir, hermesProvenManagedRevisions, listHermesInstance, observeHermesRevision } from './hermes';
 import { pinPluginMcpFiles } from '../mcp-write';
 
 import { yamlParse, yamlStringify } from '../yaml';
@@ -254,20 +252,22 @@ const HERMES_SUPPORTED = new Set<PackageSemantic>([
   'retirement', 'retention-safety', 'readback', 'rollback', 'activation-reload', 'reversible-disable',
 ]);
 
-const hermesManagedProfile = createCapabilityEvidenceProfile({
+const hermesManagedProfiles = hermesProvenManagedRevisions.map(detectedVersion => createCapabilityEvidenceProfile({
   host: 'hermes',
-  detectedVersion: HERMES_PORTABLE_SURFACE,
+  detectedVersion,
   sourceTypes: ['local', 'git'],
   operations: ['install', 'update', 'disable', 'retire'],
   route: 'managed',
   operationStatus: 'supported',
   semantics: Object.fromEntries(PACKAGE_SEMANTICS.map(semantic => [semantic, HERMES_SUPPORTED.has(semantic) ? 'supported' : 'unsupported'])) as Record<PackageSemantic, 'supported' | 'unsupported'>,
   evidence: [
-    'docs/evidence/hermes-native-loader-c0d7294-20260923.json',
+    detectedVersion === 'c0d7294769a38c17ceae51d8f7995e66e1dcae27'
+      ? 'docs/evidence/hermes-native-loader-c0d7294-20260923.json'
+      : 'docs/evidence/hermes-native-loader-dce1e9b-20261011.json',
     'docs/hosts/hermes.md',
     'docs/research/native-plugin-update-capabilities-2026-10-09.md',
   ],
-});
+}));
 
 type HermesStore = { readonly root: string; readonly configPath: string; readonly pluginsDir: string };
 type Marker = Ownership & { sourceType?: 'local' | 'git'; sourceRevision?: string; sourceLocator?: string | null; scopeId?: string };
@@ -610,7 +610,7 @@ function markerBody(input: { nativeId: string; fingerprint: string; sourceType: 
 
 const hermesLifecycleDefinition: LifecycleHostDefinition = {
   id: 'hermes',
-  evidenceProfiles: [hermesManagedProfile],
+  evidenceProfiles: hermesManagedProfiles,
   async probeVersion(target) {
     try {
       const store = storeFor(target);
@@ -622,7 +622,7 @@ const hermesLifecycleDefinition: LifecycleHostDefinition = {
         try { parsed = yamlParse(text); } catch { return { kind: 'unparseable' }; }
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { kind: 'unparseable' };
       }
-      return { kind: 'detected', version: HERMES_PORTABLE_SURFACE, probeId: HERMES_PORTABLE_SURFACE_PROBE };
+      return observeHermesRevision();
     } catch { return { kind: 'unknown' }; }
   },
   async observeTarget(target) {

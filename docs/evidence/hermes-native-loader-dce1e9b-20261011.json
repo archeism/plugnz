@@ -1,0 +1,49 @@
+{
+  "date": "2026-10-11",
+  "scope": "Exact official-source isolated native loader and CLI runtime admission; no model turn or real profile deployment. This probe used only scratch source, interpreter, dependencies and temporary HOME/profile stores.",
+  "hermes_source": {
+    "path": "/tmp/plugnz-hermes-source-proof",
+    "repository": "https://github.com/NousResearch/hermes-agent",
+    "revision": "dce1e9b37581dd62e480a9064dc04a709c2940d3",
+    "tracked_status": "clean",
+    "method": "depth-one filtered official clone with sparse checkout; editable install with --no-deps into fresh Python 3.13.14 venv"
+  },
+  "adapter_candidate": {
+    "branch": "fix/evidence-backed-host-profiles",
+    "base_revision": "4c4bbe3",
+    "prior_checkpoints": ["ee10e1f", "77a9a5e"]
+  },
+  "command": "HERMES_SOURCE_ROOT=/tmp/plugnz-hermes-source-proof HERMES_PROBE_EVIDENCE_PATH=/tmp/plugnz-hermes-source-proof/probe-evidence.json bun test test/hermes-native-loader.test.ts test/host-profile-admission-public.test.ts",
+  "runtime_version_stdout": "Hermes Agent vgit.dce1e9b (2026.9.24) · stable · local dce1e9b37581\nInstall directory: /tmp/plugnz-hermes-source-proof\nInstall method: git\nPython: 3.13.14\nOpenAI SDK: Not installed\nUp to date\n",
+  "raw_loader_evidence": "/tmp/plugnz-hermes-source-proof/probe-evidence.json",
+  "isolation": {
+    "home_and_hermes_home": "fresh temporary directories for each probe",
+    "loader_python": "/tmp/plugnz-hermes-source-proof/.venv/bin/python",
+    "public_cli_hermes": "/tmp/plugnz-hermes-source-proof/.venv/bin/hermes",
+    "dependency_policy": "only dependencies needed for the actual loader and CLI queue imported; no installed-runtime dependencies reused",
+    "disk_budget_allocated_bytes": 419430400,
+    "measured_source_and_worktree_mib": 241
+  },
+  "acceptance": {
+    "native_discover_and_load": true,
+    "ordinary_skill_registered": true,
+    "ordinary_skill_catalog_prompt_section_registered": true,
+    "user_only_skill_excluded_from_ordinary_discovery": true,
+    "namespaced_commands_registered": ["native-proof:manual", "native-proof:run"],
+    "successful_handlers_return_none": true,
+    "pending_input_received_exact_prompt": true,
+    "arguments_and_positional_placeholders_expanded_once": true,
+    "raw_argument_containing_dollar_one_preserved": true,
+    "actual_runtime_public_cli_dry_run_admitted": true,
+    "public_unknown_or_dirty_revision_refused_without_native_or_ledger_mutation": true,
+    "config_only_refused_without_native_or_ledger_mutation": true,
+    "model_turn_started": false
+  },
+  "result": { "passed": 6, "failed": 0, "assertions": 40 },
+  "limitations": [
+    "No full model execution or gateway injection was claimed.",
+    "Fresh Vercel native-route acceptance remains a separate gate.",
+    "Tracked-clean status does not attest ignored or untracked runtime files.",
+    "Before this isolated proof, an attempted ls-tree of the installed partial clone may have populated its Git object cache; cache delta is unknown. No installed working-tree/profile changes were made, and no later installed-checkout Git probes were used."
+  ]
+}

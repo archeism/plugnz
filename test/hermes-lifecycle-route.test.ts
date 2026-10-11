@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -16,6 +16,11 @@ import {
 } from '../src/lifecycle-runtime';
 import { inventoryPackageSemantics } from '../src/semantic-inventory';
 import type { PersistedTargetIdentity } from '../src/target-identity';
+import { HERMES_FIXTURE_REVISION, hermesRuntimeFixture } from './hermes-runtime-fixture';
+
+let restoreRuntime: () => void;
+beforeEach(() => { restoreRuntime = hermesRuntimeFixture(); });
+afterEach(() => { restoreRuntime(); });
 
 const PACKAGE = 'demo-plugin';
 const VERSION = '1.2.0';
@@ -188,7 +193,7 @@ describe('Hermes managed lifecycle route', () => {
       });
 
       expect(workInstall.decision.route).toBe('managed');
-      expect(workInstall.decision.detectedVersion).toBe('portable-surface');
+      expect(workInstall.decision.detectedVersion).toBe(HERMES_FIXTURE_REVISION);
       expect(workInstall.nativeProjection.kind).toBe('requires-managed');
       expect(workInstall.nativeProjection.kind === 'requires-managed' ? workInstall.nativeProjection.reasonId : undefined).toBe('pinned-sha');
       expect(personalInstall.decision.route).toBe('managed');
@@ -377,7 +382,7 @@ describe('Hermes managed lifecycle route', () => {
     await hermesLifecycle.cleanup(prepared.handle, 'verified-commit');
   });
 
-  test('treats a Hermes config mapping as a portable surface and refuses a non-mapping', async () => {
+  test('binds a valid Hermes config to the executable revision and refuses a non-mapping', async () => {
     const sandbox = realpathSync(mkdtempSync(join(tmpdir(), 'plgnz-hermes-surface-')));
     homes.push(sandbox);
     const root = join(sandbox, 'work');
@@ -385,8 +390,8 @@ describe('Hermes managed lifecycle route', () => {
     const target = targetFor('work', root);
     const detected = await hermesLifecycle.probeVersion(target);
     expect(detected.kind).toBe('detected');
-    expect(detected.kind === 'detected' ? detected.version : '').toBe('portable-surface');
-    expect(detected.kind === 'detected' ? detected.probeId : '').toBe('hermes-portable-surface');
+    expect(detected.kind === 'detected' ? detected.version : '').toBe(HERMES_FIXTURE_REVISION);
+    expect(detected.kind === 'detected' ? detected.probeId : '').toBe(`hermes-cli-git-${HERMES_FIXTURE_REVISION}`);
     writeFileSync(join(root, 'config.yaml'), 'hello\n');
     const refused = await hermesLifecycle.probeVersion(target);
     expect(refused.kind).toBe('unparseable');

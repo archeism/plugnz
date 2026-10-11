@@ -1,11 +1,13 @@
 import { expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { hermesWriter } from '../src/hosts/hermes-writer';
 import type { PluginSource, ResolvedSource } from '../src/source';
 import { writeFiles } from './util';
+import { withLifecycleCliHarness } from './lifecycle-cli-harness';
+import { parseLifecycleReport } from '../src/lifecycle-report';
 
 const hermesSource = process.env.HERMES_SOURCE_ROOT;
 const conditionalTest = test as typeof test & { if(condition: boolean): typeof test };
@@ -73,6 +75,8 @@ print(json.dumps({
     });
     if (result.status !== 0) throw new Error(`Hermes native probe failed: ${result.stderr}`);
     const evidence = JSON.parse(result.stdout.trim()) as { result: unknown; queued: string; manual_result: unknown; manual_queued: string; commands: string[]; skills: string[]; sections: string[] };
+    const evidencePath = process.env.HERMES_PROBE_EVIDENCE_PATH;
+    if (evidencePath !== undefined) writeFileSync(evidencePath, JSON.stringify({ stdout: result.stdout, stderr: result.stderr, status: result.status }, null, 2));
     expect(evidence.result).toBe(null);
     expect(evidence.queued).toContain('queued "alpha beta" "literal $1" first=alpha beta second=literal $1');
     expect(evidence.skills.some(name => name.endsWith(':ordinary'))).toBe(true);
@@ -87,4 +91,21 @@ print(json.dumps({
     if (savedConfig === undefined) delete process.env.OPEN_PLUGIN_HERMES_CONFIG_PATH; else process.env.OPEN_PLUGIN_HERMES_CONFIG_PATH = savedConfig;
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+conditionalTest.if(hermesSource !== undefined)('public CLI admits the exact isolated Hermes executable and source revision', async () => {
+  await withLifecycleCliHarness(harness => {
+    harness.writeHome({ '.hermes/config.yaml': 'model: preserved\n' });
+    const source = harness.source('hermes-real-admission', {
+      'plugin.json': '{"name":"demo","version":"1.0.0"}\n',
+      'skills/demo/SKILL.md': '---\nname: demo\ndescription: demo\n---\nDemo.\n',
+    });
+    const result = harness.run(['add', source, '--target', 'hermes', '--dry-run', '--json'], {
+      env: { OPEN_PLUGIN_HERMES_BIN: join(hermesSource!, '.venv', 'bin', 'hermes') },
+    });
+    const report = parseLifecycleReport(JSON.parse(result.stdout));
+    expect({ code: result.exitCode, reason: report.outcomes[0]?.reason }).toEqual({ code: 0, reason: null });
+    expect(result.stores.hermes.after).toEqual(result.stores.hermes.before);
+    expect(result.state.after).toEqual(result.state.before);
+  });
 });
