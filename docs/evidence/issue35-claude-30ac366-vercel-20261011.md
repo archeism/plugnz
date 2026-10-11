@@ -182,3 +182,13 @@ case duration **5,592.10 ms**, 5.78 s wall, peak RSS 71,600 KiB. Raw log
 `72efd7b3c3245018ec2451b4c04650eaea7e5c35ae04bec64612c27eeaf6fca3`.
 This is measured evidence for proposing a test-local explicit deadline;
 no source/assertion/production timeout change or passing full gate is implied.
+
+The parent approved one exact test-local `20_000` deadline for that measured
+ZCode rollback case. Its body, assertions and all production code remain
+unchanged; no other test deadline changed. The focused gate without a CLI
+timeout override passed (one test / one assertion), 5.06 s wall, peak RSS
+71,592 KiB; pinned typecheck finished exit 0. Raw focused log
+`issue35-host-profile-zcode-rollback-explicit-budget.log`, SHA256
+`fb3f370e9e8f11c0a2f635edeff2619b815489810f3fbf08434d4c06dbaaa634`.
+This frozen test-only increment awaits independent review and a fresh full
+gate; neither earlier failed full attempt is replaced or relabeled.
