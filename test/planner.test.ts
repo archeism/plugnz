@@ -172,8 +172,8 @@ describe('lifecycle planner', () => {
       expect(journalOf(plan, 'alpha')).toEqual({ kind: 'required', action: 'retain-prior', mutation: false, readback: false });
       const retained = plan.report.outcomes.find((row) => row.package === 'alpha');
       expect(retained?.result).toBe('failed');
-      expect(retained?.resourceState).toBe('retained');
-      expect(retained?.activationState).toBe('retained-prior');
+      expect(retained?.resourceState).toBe('present');
+      expect(retained?.activationState).toBe('active-nonconforming');
       expect(retained?.changed).toBe(false);
       expect(plan.operations.some((row) => row.operation.action === 'retire-orphan')).toBe(false);
       expect(plan.scopes[0]?.prune).toBe('blocked');
@@ -211,7 +211,7 @@ describe('lifecycle planner', () => {
       expect(journalOf(plan, 'alpha')).toEqual({ kind: 'required', action: 'disable-nonconforming', mutation: true, readback: true });
       const contained = plan.report.outcomes.find((row) => row.package === 'alpha');
       expect(contained?.result).toBe('failed');
-      expect(contained?.resourceState).toBe('retained');
+      expect(contained?.resourceState).toBe('present');
       expect(contained?.activationState).toBe('active-nonconforming');
       expect(contained?.changed).toBe(false);
       expect(plan.operations.some((row) => row.operation.action === 'retire-orphan')).toBe(false);

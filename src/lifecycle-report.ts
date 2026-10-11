@@ -380,13 +380,13 @@ function assertOutcome(
       (outcome['route'] !== 'none' || outcome['changed'] !== false || outcome['result'] === 'succeeded' || outcome['result'] === 'pending')) {
     throw contradiction(`preflight refusal '${outcome['operationId']}' must be a non-successful, non-mutating no-route action`);
   }
-  if (outcome['action'] === 'not-attempted' &&
+  if (!dryRun && outcome['action'] === 'not-attempted' &&
       (outcome['resourceState'] !== 'unknown' || outcome['activationState'] !== 'unknown')) {
     throw contradiction(`preflight refusal '${outcome['operationId']}' cannot claim a terminal resource or activation state`);
   }
   const containment = outcome['action'] === 'retain-prior' || outcome['action'] === 'disable-nonconforming';
   const appliedDisablement = outcome['action'] === 'disable-nonconforming' && outcome['changed'] === true;
-  if (containment) {
+  if (containment && !dryRun) {
     const expectedResourceState = 'retained';
     const expectedActivationState = outcome['action'] === 'retain-prior'
       ? 'retained-prior'
@@ -417,7 +417,12 @@ function assertOutcome(
     const terminalStateMatches = outcome['coverage'] === 'retirement'
       ? outcome['resourceState'] === 'absent' && outcome['activationState'] === 'inactive'
       : outcome['resourceState'] === 'present' && outcome['activationState'] === 'active-conforming';
-    if (!terminalStateMatches) throw contradiction(`successful outcome '${outcome['operationId']}' contradicts its terminal resource or activation state`);
+    if (!dryRun && !terminalStateMatches) throw contradiction(`successful outcome '${outcome['operationId']}' contradicts its terminal resource or activation state`);
+  }
+  if (dryRun && (outcome['resourceState'] === 'potentially-changed'
+    || (outcome['resourceState'] === 'absent' && outcome['activationState'] !== 'inactive')
+    || (outcome['resourceState'] === 'unknown' && outcome['activationState'] !== 'unknown'))) {
+    throw contradiction(`dry-run outcome '${outcome['operationId']}' contradicts its observed resource or activation state`);
   }
   if (outcome['result'] === 'not-attempted' && outcome['resourceState'] === 'potentially-changed') {
     throw contradiction(`not-attempted outcome '${outcome['operationId']}' cannot be potentially changed`);

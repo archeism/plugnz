@@ -172,7 +172,7 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
     scopes.push(planned.scope);
     operations.push(...planned.operations);
   }
-  return frozenPlan(input, command, attemptId, scopes, operations, prepared);
+  return frozenPlan(input, command, attemptId, scopes, operations, prepared, loaded.state);
 }
 
 async function prepareEntry(
@@ -457,7 +457,8 @@ async function classifyDesired(
     return classified(operationId, 'desired-pair', item.scope, snapshotId, selected.plugin.name, nativeId, 'not-attempted', 'none', decision.reason);
   }
   const recordedRoute = activation?.route.kind === 'managed' || activation?.route.kind === 'native' ? activation.route.kind : null;
-  const matchingBytes = sameBytes(activation, installation, selected.plugin);
+  const matchingBytes = sameBytes(activation, installation, selected.plugin)
+    && installation?.activation === 'active' && installation.enablement === 'enabled';
   const action = chosenAction(replacing, recordedRoute, decision.route, matchingBytes, reapplyMatchingUpdate);
   // One intent may be replanned after a verified rollback. The state ledger retains
   // every attempt, so a new attempt must not reuse that attempt's journal identity.
@@ -781,6 +782,7 @@ function frozenPlan(
   scopes: readonly PlannedScope[],
   operations: readonly FrozenOperation[],
   prepared: readonly Prepared[],
+  state: LifecycleStateV2,
 ): LifecyclePlan {
   const snapshots: LifecycleSourceSnapshotContext[] = [];
   const frozenSources = new Map<string, FrozenSource>();
@@ -793,7 +795,10 @@ function frozenPlan(
     snapshots.push({ id, reference: item.frozen.snapshot });
     frozenSources.set(id, item.frozen);
   }
-  const outcomes = operations.map((row) => outcomeFor(row));
+  const outcomes = operations.map((row) => {
+    const outcome = outcomeFor(row);
+    return input.dryRun ? { ...outcome, ...observedStates(row.operation, prepared, state) } : outcome;
+  });
   const failed = outcomes.filter((outcome) => outcome.result !== 'succeeded');
   const converged = failed.length === 0;
   const failureCategory = converged ? null : failed[0]?.reason?.category ?? 'internal';
@@ -823,6 +828,27 @@ function frozenPlan(
     operations,
     ...(input.transportSource === undefined ? {} : { transportSource: input.transportSource }),
   };
+}
+
+/** A preview plans future work, but reports only the state actually observed. */
+function observedStates(
+  operation: LifecyclePlanOperation,
+  prepared: readonly Prepared[],
+  state: LifecycleStateV2,
+): Pick<LifecycleReport['outcomes'][number], 'resourceState' | 'activationState'> {
+  const item = prepared.find((candidate) => candidate.scope.id === operation.scope.id);
+  if (item?.observation === null || item === undefined) return { resourceState: 'unknown', activationState: 'unknown' };
+  const installation = item.observation.installations.find((row) => row.nativeId === operation.nativeId);
+  if (installation === undefined || installation.presence === 'absent') return { resourceState: 'absent', activationState: 'inactive' };
+  if (installation.enablement === 'disabled' || installation.activation === 'inactive') return { resourceState: 'present', activationState: 'inactive' };
+  if (installation.enablement === 'unknown' || installation.activation === 'unknown') return { resourceState: 'present', activationState: 'unknown' };
+  if (installation.activation === 'nonconforming') return { resourceState: 'present', activationState: 'active-nonconforming' };
+  const activation = findActivation(state, operation.scope.id, operation.package, operation.nativeId ?? '');
+  const plugin = item.kind === 'sync' ? item.selected.find((selected) => selected.plugin.name === operation.package)?.plugin : undefined;
+  const conforming = operation.coverage === 'retirement'
+    ? activation?.fingerprints.installed === installation.installedFingerprint
+    : plugin !== undefined && sameBytes(activation, installation, plugin);
+  return { resourceState: 'present', activationState: conforming ? 'active-conforming' : 'active-nonconforming' };
 }
 
 function outcomeFor(row: FrozenOperation): LifecycleReport['outcomes'][number] {

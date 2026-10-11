@@ -172,8 +172,8 @@ describe('public lifecycle commands', () => {
           action: 'install',
           route: 'managed',
           result: 'succeeded',
-          resourceState: 'present',
-          activationState: 'active-conforming',
+          resourceState: 'absent',
+          activationState: 'inactive',
           changed: false,
         }],
         summary: {
