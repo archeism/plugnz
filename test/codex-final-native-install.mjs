@@ -6,8 +6,9 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSy
 import { join } from 'node:path';
 const base = '/vercel/sandbox/codex-final-proof';
 const tools = '/vercel/sandbox/native-tools';
-assert(!existsSync(base) && !existsSync(tools), 'fresh measurement-only Sandbox required');
-mkdirSync(base, { recursive: true });
+const verifyInstalled = process.argv[2] === 'verify-installed';
+if (verifyInstalled) assert(existsSync(join(base, 'baseline-disk.json')) && existsSync(join(tools, 'package-lock.json')));
+else { assert(!existsSync(base) && !existsSync(tools), 'fresh measurement-only Sandbox required'); mkdirSync(base, { recursive: true }); }
 const run = (command, args) => {
   const result = spawnSync(command, args, { encoding: 'utf8', timeout: 120_000, maxBuffer: 4 * 1024 * 1024 });
   assert.equal(result.status, 0, `${command}: ${result.stdout}\n${result.stderr}`); return result.stdout;
@@ -18,19 +19,23 @@ const disk = () => {
   assert(Number.isSafeInteger(usedKiB) && usedKiB > 0 && usedKiB <= 4.25 * 1024 * 1024);
   return { usedKiB, raw };
 };
-const baseline = disk();
-writeFileSync(join(base, 'baseline-disk.json'), JSON.stringify(baseline, null, 2));
-const result = spawnSync('npm', ['install', '--prefix', tools, '--ignore-scripts', '--no-audit', '--no-fund', '--registry=https://registry.npmjs.org', '@openai/codex@0.162.0'], { encoding: 'utf8', timeout: 120_000, maxBuffer: 4 * 1024 * 1024 });
-writeFileSync(join(base, 'official-install-streams.json'), JSON.stringify({ status: result.status, signal: result.signal, error: result.error?.message, stdout: result.stdout, stderr: result.stderr }, null, 2));
-assert.equal(result.status, 0, result.stderr);
+const baseline = verifyInstalled ? JSON.parse(readFileSync(join(base, 'baseline-disk.json'), 'utf8')) : disk();
+if (!verifyInstalled) {
+  writeFileSync(join(base, 'baseline-disk.json'), JSON.stringify(baseline, null, 2));
+  const result = spawnSync('npm', ['install', '--prefix', tools, '--ignore-scripts', '--no-audit', '--no-fund', '--registry=https://registry.npmjs.org', '@openai/codex@0.162.0'], { encoding: 'utf8', timeout: 120_000, maxBuffer: 4 * 1024 * 1024 });
+  writeFileSync(join(base, 'official-install-streams.json'), JSON.stringify({ status: result.status, signal: result.signal, error: result.error?.message, stdout: result.stdout, stderr: result.stderr }, null, 2));
+  assert.equal(result.status, 0, result.stderr);
+}
 const lock = JSON.parse(readFileSync(join(tools, 'package-lock.json'), 'utf8'));
 const supplierMetadata = [];
 for (const [path, entry] of Object.entries(lock.packages)) {
   if (!path || !existsSync(join(tools, path))) continue;
   assert(path.startsWith('node_modules/@openai/codex'), `unexpected dependency: ${path}`);
-  const name = path.slice('node_modules/'.length);
+  const installed = JSON.parse(readFileSync(join(tools, path, 'package.json'), 'utf8'));
+  const name = entry.name ?? path.slice('node_modules/'.length);
+  assert.equal(installed.name, name); assert.equal(installed.version, entry.version);
   const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}/${entry.version}`);
-  assert(response.ok);
+  assert(response.ok, `official metadata ${name}@${entry.version}: ${response.status}`);
   const metadata = await response.json();
   supplierMetadata.push(metadata);
   writeFileSync(join(base, 'official-supplier-metadata.json'), JSON.stringify(supplierMetadata, null, 2));
