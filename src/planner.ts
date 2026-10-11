@@ -79,6 +79,8 @@ export type LifecyclePlan =
         readonly selectorMode: 'all' | 'explicit' | 'retired';
         readonly desired: DesiredGenerationRecord | null;
         readonly prune: 'planned' | 'blocked';
+        /** Manual package removal leaves the recorded Source authority unchanged. */
+        readonly retirementPackages?: readonly string[];
       }[];
       readonly operations: readonly {
         readonly operation: LifecyclePlanOperation;
@@ -109,6 +111,7 @@ export interface PlanLifecycleInput {
   readonly command?: 'add' | 'update' | 'remove';
   /** Original add argument. Carries fetch credentials that must not enter the manifest. */
   readonly transportSource?: string;
+  readonly removalSelection?: readonly { readonly scopeId: string; readonly packageId: string; readonly nativeId: string }[];
 }
 
 type FrozenOperation = Extract<LifecyclePlan, { kind: 'frozen' }>['operations'][number];
@@ -136,6 +139,7 @@ type PreparedRetire = {
   readonly observation: TargetInventoryObservation | null;
   readonly scope: DeploymentScopeIdentity;
   readonly identity: readonly string[];
+  readonly retirementPackages?: readonly string[];
 };
 
 type Prepared = PreparedSync | PreparedRetire;
@@ -160,7 +164,18 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
   for (const entry of input.manifest.entries) {
     const result = await prepareEntry(entry, input.hosts, loaded.state, command, input.transportSource, transportCache);
     if (result.kind === 'defect') return zeroWrite(command, input.dryRun, result.reason, result.terminalPhase);
-    prepared.push(result);
+    if (input.removalSelection !== undefined) {
+      if (command !== 'remove' || result.kind !== 'retire-source') {
+        return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.invariant', 'package retirement selection is valid only for manual removal'));
+      }
+      const selected = input.removalSelection.filter((row) => row.scopeId === result.scope.id);
+      if (selected.length === 0 || selected.some((row) => !loaded.state.activations.some((activation) =>
+        activation.scopeId === row.scopeId && activation.packageId === row.packageId && activation.nativeId === row.nativeId))) {
+        return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.invariant', 'manual removal selection no longer matches recorded ownership'));
+      }
+      const retirementPackages = selected.map((row) => row.packageId).sort();
+      prepared.push({ ...result, retirementPackages, identity: ['remove-packages', result.scope.id, ...retirementPackages] });
+    } else prepared.push(result);
   }
 
   const attemptId = lifecycleAttemptId(loaded.state.stateGeneration, prepared.map((item) => item.identity));
@@ -525,7 +540,8 @@ async function planRetire(
   state: LifecycleStateV2,
 ): Promise<{ readonly kind: 'planned'; readonly scope: PlannedScope; readonly operations: readonly FrozenOperation[] } | Defect> {
   const activations = state.activations
-    .filter((activation) => activation.scopeId === item.recorded.id)
+    .filter((activation) => activation.scopeId === item.recorded.id
+      && (item.retirementPackages === undefined || item.retirementPackages.includes(activation.packageId)))
     .sort((left, right) => left.packageId < right.packageId ? -1 : left.packageId > right.packageId ? 1 : 0);
   const operations: FrozenOperation[] = [];
   for (const activation of activations) {
@@ -561,6 +577,7 @@ async function planRetire(
       scope: item.scope,
       selectorMode: 'retired',
       desired: null,
+      ...(item.retirementPackages === undefined ? {} : { retirementPackages: item.retirementPackages }),
       prune: operations.length > 0 && operations.every((row) => row.operation.action === 'retire-orphan') ? 'planned' : 'blocked',
     },
     operations,
@@ -1210,7 +1227,9 @@ export function lifecycleAttemptIdForPlannedScopes(
   stateGeneration: number,
   scopes: readonly PlannedAttemptScope[],
 ): string {
-  return lifecycleAttemptId(stateGeneration, scopes.map((planned) => plannedAttemptIdentity(
+  return lifecycleAttemptId(stateGeneration, scopes.map((planned) => planned.retirementPackages !== undefined
+    ? ['remove-packages', planned.scope.id, ...planned.retirementPackages]
+    : plannedAttemptIdentity(
     planned.scope.id,
     planned.desired?.sourceFingerprint,
     planned.desired?.packages.map((pkg) => pkg.packageId),
@@ -1222,6 +1241,7 @@ type PlannedAttemptScope = {
   readonly scope: { readonly id: string };
   readonly selectorMode: 'all' | 'explicit' | 'retired';
   readonly desired: { readonly sourceFingerprint: string; readonly packages: readonly { readonly packageId: string }[] } | null;
+  readonly retirementPackages?: readonly string[];
 };
 
 function plannedAttemptIdentity(

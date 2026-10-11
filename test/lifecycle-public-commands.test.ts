@@ -5,8 +5,45 @@ import { bytesToText, snapshotTree, textToBytes, withLifecycleCliHarness, type F
 import { createDeploymentScopeIdentity } from '../src/deployment-scope';
 import { parseLifecycleReport } from '../src/lifecycle-report';
 import { fingerprintTree } from '../src/fingerprint';
+import { fakeDcodeLockInterpreter } from './dcode-fake-lock';
 
 describe('public lifecycle commands', () => {
+  test('manual removal retires only the selected package offline and preserves sibling scope authority', async () => {
+    await withLifecycleCliHarness((harness) => {
+      harness.writeHome({ '.cursor/.keep': '' });
+      const source = harness.source('selective-remove', {
+        'demo/plugin.json': '{"name":"demo","version":"1.0.0"}\n',
+        'demo/payload.txt': 'selected\n',
+        'sibling/plugin.json': '{"name":"sibling","version":"1.0.0"}\n',
+        'sibling/payload.txt': 'keep exactly\n',
+      });
+      const cursor = harness.fakeNative('cursor', versionSteps(64));
+      const env = { OPEN_PLUGIN_CURSOR_BIN: cursor.path };
+      const installed = harness.run(['sync', source, '--target', 'cursor', '--json'], { env });
+      expect(installed.exitCode).toBe(0);
+      const prior = JSON.parse(bytesToText(installed.state.after!));
+      const sibling = snapshotTree(join(harness.storePath('cursor'), 'plugins/local/sibling'));
+      harness.writeHome({ '.cursor/plugins/retained/demo/data/keep.txt': 'user data' });
+      rmSync(source, { recursive: true });
+      const dry = harness.run(['remove', 'demo', '--target', 'cursor', '--dry-run', '--json'], { env });
+      expect(dry.exitCode).toBe(0);
+      expect(dry.state.after).toEqual(dry.state.before);
+      expect(parseLifecycleReport(JSON.parse(dry.stdout)).plan.map((row) => row.package)).toEqual(['demo']);
+      const removed = harness.run(['remove', 'demo', '--target', 'cursor', '--json'], { env });
+      const report = parseLifecycleReport(JSON.parse(removed.stdout));
+      expect(removed.exitCode).toBe(0);
+      expect(report.outcomes.map((row) => ({ package: row.package, action: row.action, result: row.result }))).toEqual([
+        { package: 'demo', action: 'retire-orphan', result: 'succeeded' },
+      ]);
+      const state = JSON.parse(bytesToText(removed.state.after!));
+      expect(state.scopes).toEqual(prior.scopes);
+      expect(state.activations.map((row: { packageId: string }) => row.packageId)).toEqual(['sibling']);
+      expect(state.tombstones.some((row: { packageId: string }) => row.packageId === 'demo')).toBe(true);
+      expect(snapshotTree(join(harness.storePath('cursor'), 'plugins/local/sibling'))).toEqual(sibling);
+      expect(readFileSync(join(harness.storePath('cursor'), 'plugins/retained/demo/data/keep.txt'), 'utf8')).toBe('user data');
+      expect(existsSync(join(harness.storePath('cursor'), 'plugins/local/demo'))).toBe(false);
+    });
+  });
   test('a retired package can re-enroll from identical bytes and retire again without journal collisions', async () => {
     await withLifecycleCliHarness((harness) => {
       harness.writeHome({ '.cursor/.keep': '' });
@@ -2184,7 +2221,8 @@ describe('public lifecycle commands', () => {
         args: ['--version'],
         stdout: 'deepagents-code 0.1.83\n',
       })));
-      const env = { OPEN_PLUGIN_CURSOR_BIN: cursor.path, OPEN_PLUGIN_DCODE_BIN: dcode.path };
+      const env = { OPEN_PLUGIN_CURSOR_BIN: cursor.path, OPEN_PLUGIN_DCODE_BIN: dcode.path,
+        OPEN_PLUGIN_DCODE_PYTHON_BIN: fakeDcodeLockInterpreter(harness.home) };
       const planned = harness.run(['add', source, '--target', 'cursor', '--json'], { env });
       const plannedState = JSON.parse(bytesToText(planned.state.after ?? [])) as { version?: number };
       expect(planned.exitCode).toBe(0);
@@ -2232,7 +2270,7 @@ describe('public lifecycle commands', () => {
     });
   });
 
-  test('add --target dcode after a planner install records a plgnz legacy claim and remove leaves the planner install', async () => {
+  test('add --target dcode records verified ownership and remove leaves the sibling host install', async () => {
     await withLifecycleCliHarness((harness) => {
       harness.writeHome({ '.cursor/.keep': '', '.deepagents/.keep': '' });
       const source = harness.source('dcode-legacy-claim', {
@@ -2244,7 +2282,8 @@ describe('public lifecycle commands', () => {
         args: ['--version'],
         stdout: 'deepagents-code 0.1.83\n',
       })));
-      const env = { OPEN_PLUGIN_CURSOR_BIN: cursor.path, OPEN_PLUGIN_DCODE_BIN: dcode.path };
+      const env = { OPEN_PLUGIN_CURSOR_BIN: cursor.path, OPEN_PLUGIN_DCODE_BIN: dcode.path,
+        OPEN_PLUGIN_DCODE_PYTHON_BIN: fakeDcodeLockInterpreter(harness.home) };
       const planned = harness.run(['add', source, '--target', 'cursor', '--json'], { env });
       expect(planned.exitCode).toBe(0);
 
@@ -2258,11 +2297,11 @@ describe('public lifecycle commands', () => {
       expect({
         exitCode: added.exitCode,
         stderr: added.stderr,
-        ownership: claim?.ownership ?? null,
+        ownership: claim?.ownership?.kind ?? null,
       }).toEqual({
         exitCode: 0,
         stderr: '',
-        ownership: { kind: 'legacy-claim', prior: 'plgnz' },
+        ownership: 'created',
       });
 
       const removed = harness.run(['remove', 'demo@local', '--target', 'dcode', '--json'], { env });

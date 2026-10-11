@@ -740,6 +740,7 @@ class Ledger {
     if (scope.id !== operation.scope.id) return scope;
     if (scope.authority !== 'authoritative') return scope;
     const planned = plan.scopes.find((row) => row.scope.id === scope.id);
+    if (planned?.retirementPackages !== undefined) return scope;
     if (planned?.selectorMode === 'retired') {
       const { desired: _desired, lastConverged: _converged, ...kept } = scope;
       return {

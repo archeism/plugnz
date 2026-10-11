@@ -1161,16 +1161,11 @@ async function runRecordedLifecycleRemove(
     const writer = selected.find((candidate) => candidate.id === scope.target.kind);
     const alias = writer?.persistedNativeIdMayAlias?.(activation.nativeId, target) === true;
     if (target !== activation.packageId && target !== activation.nativeId && !alias) return [];
-    return [{ scope }];
+    return [{ scope, activation }];
   });
   if (matches.length === 0 || matches.some((match) => !plannerKinds.has(match.scope.target.kind))) return null;
   const byScope = new Map<string, LifecycleStateV2['scopes'][number]>();
   for (const match of matches) byScope.set(match.scope.id, match.scope);
-  for (const scopeId of byScope.keys()) {
-    const inScope = state.activations.filter((activation) => activation.scopeId === scopeId).length;
-    const selectedInScope = matches.filter((match) => match.scope.id === scopeId).length;
-    if (inScope !== selectedInScope) return null;
-  }
   const perHost = new Map<string, number>();
   for (const match of matches) {
     const count = (perHost.get(match.scope.target.kind) ?? 0) + 1;
@@ -1207,6 +1202,9 @@ async function runRecordedLifecycleRemove(
     hosts: createLifecyclePlannerHosts(),
     now: new Date().toISOString(),
     command: 'remove',
+    removalSelection: matches.map(({ activation }) => ({
+      scopeId: activation.scopeId, packageId: activation.packageId, nativeId: activation.nativeId,
+    })),
   });
   return executed.report;
 }
