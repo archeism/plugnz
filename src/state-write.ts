@@ -11,6 +11,7 @@ import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import { createDeploymentScopeIdentity } from './deployment-scope';
 import { stateFile } from './paths';
 import { CryptoHasher } from './runtime';
+import { assertLegacyAdoptionHistoryTransition } from './legacy-adoption-record';
 import type { SourceBinding } from './source-reference';
 import {
   readLifecycleState,
@@ -107,6 +108,7 @@ export function writeLifecycleState(
   if (state.stateGeneration !== expectedGeneration) {
     throw new Error(`stateGeneration must advance from ${previous.state.stateGeneration} to ${expectedGeneration}`);
   }
+  assertLegacyAdoptionHistoryTransition(previous.state, state);
   atomicWrite(file, JSON.stringify(state, null, 2));
 }
 

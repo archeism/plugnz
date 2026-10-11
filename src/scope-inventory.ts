@@ -1,5 +1,6 @@
 import type { SourceBinding } from './source-reference';
 import { projectLegacyRecordProofs, type LegacyRecordProof } from './legacy-adoption-proof';
+import type { AdoptionRecord } from './legacy-adoption-record';
 import { isOpenLifecycleJournalState, parseOpenLifecycleJournals, projectRecoveryOperationProof, type OpenLifecycleJournals } from './recovery-proof';
 import type {
   ActivationRecord,
@@ -30,7 +31,7 @@ export interface ScopeInventoryRow {
   readonly tombstones: readonly TombstoneRecord[];
   readonly attempt: LifecycleAttemptRecord | null;
   readonly openJournals?: OpenLifecycleJournals;
-  readonly adoptionHistory?: { readonly schemaVersion: 1; readonly legacyRecords: readonly LegacyRecordProof[]; readonly records: readonly never[] };
+  readonly adoptionHistory?: { readonly schemaVersion: 1; readonly legacyRecords: readonly LegacyRecordProof[]; readonly records: readonly AdoptionRecord[] };
 }
 
 export interface ScopeInventory {
@@ -65,7 +66,8 @@ export function projectScopeInventory(state: LifecycleStateV2, query: ScopeInven
 
 function legacyHistoryFor(scope: DeploymentScopeRecord, state: LifecycleStateV2): Pick<ScopeInventoryRow, 'adoptionHistory'> {
   const legacyRecords = projectLegacyRecordProofs(state, scope);
-  return legacyRecords.length === 0 ? {} : { adoptionHistory: { schemaVersion: 1, legacyRecords, records: [] } };
+  const records = state.legacyAdoptions?.records.filter(record => record.legacy.original.scope.id === scope.id) ?? [];
+  return legacyRecords.length === 0 && records.length === 0 ? {} : { adoptionHistory: { schemaVersion: 1, legacyRecords, records } };
 }
 
 function openJournalsFor(scope: DeploymentScopeRecord, state: LifecycleStateV2): { openJournals?: OpenLifecycleJournals } {

@@ -1,5 +1,5 @@
 /** Reader-only shape validation. Runtime branding/semantic proof stays in lifecycle-runtime. */
-import type { DurableLifecycleOperation } from './lifecycle-host';
+import type { DurableLifecycleOperation, LifecycleReadbackData } from './lifecycle-host';
 import { parsePersistedTargetIdentity } from './target-identity';
 export type SerializedLifecycleOperation = { [Key in keyof DurableLifecycleOperation as Key extends string ? Key : never]: DurableLifecycleOperation[Key] };
 const FIELDS = ['schemaVersion', 'adapterId', 'target', 'targetObservationId', 'operationId', 'attemptId', 'scopeId', 'packageName', 'nativeId', 'sourceType', 'sourceRevision', 'sourceLocator', 'packageVersion', 'action', 'route', 'detectedVersion', 'versionProbeId', 'evidenceId', 'mutationGroupId', 'mutationInvocationOperationId', 'artifactId', 'projectedFingerprint', 'affectedNativeIds', 'affectedOperationIds', 'prior', 'expected', 'rollbackReference'];
@@ -38,6 +38,11 @@ function readback(value: unknown): void {
     const resource = object(retention[field]); exact(resource, ['state', 'fingerprint']);
     choice(resource.state, ['present', 'absent', 'missing', 'not-observed']); digest(resource.fingerprint);
   }
+}
+/** Reader-safe reuse for exact public adoption seal/commit projections. */
+export function parseLifecycleReadbackData(value: unknown): LifecycleReadbackData {
+  readback(value);
+  return value as LifecycleReadbackData;
 }
 function object(value: unknown): Record<string, unknown> { if (!value || typeof value !== 'object' || Array.isArray(value)) invalid('expected object'); return value as Record<string, unknown>; }
 function exact(row: Record<string, unknown>, fields: string[]): void { if (Object.keys(row).some(key => !fields.includes(key)) || fields.some(key => !(key in row))) invalid('operation fields do not match schema'); }

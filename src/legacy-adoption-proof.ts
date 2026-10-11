@@ -68,6 +68,8 @@ export function projectLegacyRecordProofs(state: LifecycleStateV2, scope: Deploy
   return state.attempts.flatMap(attempt => {
     if (attempt.command !== 'legacy-recovery') return [];
     return attempt.journal.filter(row => row.scopeId === scope.id && ['pending', 'applying', 'applied', 'readback-verified', 'rollback', 'cleanup-pending'].includes(row.state)).map(row => {
+      const retained = state.legacyAdoptions?.records.find(record => record.legacy.original.attemptId === attempt.id && record.legacy.original.operationId === row.operationId);
+      if (retained !== undefined) return parseLegacyRecordProof(retained.legacy);
       const activations = state.activations.filter(activation => activation.scopeId === scope.id
         && activation.packageId === row.packageId && activation.nativeId === row.nativeId
         && activation.pending?.attemptId === attempt.id);

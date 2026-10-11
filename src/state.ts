@@ -19,6 +19,7 @@ import {
 
 import { CryptoHasher } from './runtime';
 import { parseSerializedLifecycleOperation, type SerializedLifecycleOperation } from './lifecycle-operation-record';
+import { parseLegacyAdoptions, type LegacyAdoptions } from './legacy-adoption-record';
 
 export type { PersistedTargetIdentity } from './target-identity';
 
@@ -182,6 +183,7 @@ export interface LifecycleStateV2 {
   activations: ActivationRecord[];
   attempts: LifecycleAttemptRecord[];
   tombstones: TombstoneRecord[];
+  legacyAdoptions?: LegacyAdoptions;
 }
 
 export interface LoadedLifecycleState {
@@ -253,7 +255,7 @@ export function validateLifecycleState(value: unknown): LifecycleStateV2 {
 
 function validateLifecycleStateDocument(value: unknown, minimumStateGeneration: 0 | 1): LifecycleStateV2 {
   const root = asObject(value, 'root');
-  exactFields(root, ['version', 'stateGeneration', 'scopes', 'activations', 'attempts', 'tombstones'], 'root');
+  exactFields(root, ['version', 'stateGeneration', 'scopes', 'activations', 'attempts', 'tombstones', 'legacyAdoptions'], 'root');
   if (root['version'] !== 2) throw new Error(`Unsupported state.json version: ${String(root['version'])}`);
   safeInteger(root['stateGeneration'], 'stateGeneration', minimumStateGeneration);
   const scopes = array(root['scopes'], 'scopes').map((item, index) => validateScope(item, `scopes[${index}]`));
@@ -299,6 +301,7 @@ function validateLifecycleStateDocument(value: unknown, minimumStateGeneration: 
   }
   unique(operationIds, 'journal operation id');
   for (const tombstone of tombstones) if (!scopeIds.has(tombstone.scopeId)) invalid(`tombstone '${tombstone.id}' references unknown scope '${tombstone.scopeId}'`);
+  if (root['legacyAdoptions'] !== undefined) parseLegacyAdoptions(root['legacyAdoptions'], value as LifecycleStateV2);
   return value as LifecycleStateV2;
 }
 
