@@ -114,3 +114,69 @@ Independent review and fresh actual Claude loader discovery, same-version
 refresh, and retirement/readback remain open gates. Local fixture success is
 not a claim that those native gates passed. Skills are unchanged; this is a
 product correction, not a claimed skill-method improvement.
+
+## Independent-review corrections after `c0256e1`
+
+Independent reviewers reproduced three false-green boundaries: an owned
+selected catalog entry with `strict:false` and `skills` overrides was not
+repaired; catalog-only/registration-only repairs reported `changed:false`;
+and foreign member proof projected both sides, synthesizing a missing native
+command declaration instead of comparing the actual foreign runtime input.
+The official selected-entry component merge/conflict contract is documented
+in [Claude marketplace strict mode](https://code.claude.com/docs/en/plugin-marketplaces#strict-mode).
+
+Four authentic public CLI regressions were committed RED at `84f371b` against
+the `c0256e1` product: **8 passed, 4 failed**, 68 assertions, 16.61 seconds
+wall time, 105,880 KiB maximum RSS. The retained log is
+`issue35-claude-c025-review-red.log`, SHA-256
+`d7ebb7cad0628a39b6307fdc7fc7e87e05777e1c85d00e3f2d7bab2c27d9c7c2`.
+
+The correction binds the complete selected catalog entry, not the shared
+marketplace document. Owned entries must equal the minimal generated entry;
+compatible foreign entries retain display/opaque metadata but cannot supply
+conflicting component declarations or an unproven dependency graph. Their
+complete entry digest is captured in both the precondition and readback.
+A supplemental regression changes selected opaque metadata after activation
+and proves verification fails, while unrelated marketplace metadata and a
+foreign sibling remain outside the selected binding. `strict:false` without
+component overrides and a boolean `defaultEnabled:false` remain supported:
+the explicit enabled setting takes precedence.
+
+Foreign payload proof now projects only the incoming Source and compares it
+with an unmodified copy of the actual native member, excluding only the two
+explicit root-level plugnz private markers. Missing actual native command
+declarations and conflicting foreign catalog entries hard-block before native
+or ledger writes. Mutation receipts compare the actual selected catalog,
+registration, registry, and enablement slices as well as cache bytes, so an
+unchanged cache cannot hide a catalog-only repair.
+
+The first packed gate retained a transport deadline failure: 50 passed,
+1 failed, 284 assertions; one pre-existing multi-command case took 5.411
+seconds against Bun's default 5-second deadline. Its raw log
+`issue35-claude-review-fixed-packed.log` is retained with SHA-256
+`252a54e63207fd473b43d0a0fdda407f91548e12670403d5ec7630eec7c40e9a`.
+Public cases now have an explicit bounded 20-second subprocess transport
+budget; no assertions were removed or made conditional.
+
+Final checks use the same five-file command above:
+
+- Native Bun: **52 passed, 286 assertions**, 26.93 seconds wall time,
+  127,336 KiB maximum RSS. Log `issue35-claude-review-fixed-packed-retry2.log`
+  (historical filename; this run has no packed environment variable), SHA-256
+  `7d7535b14cadd16efc7ef3cab02459c7bdd81f7be22abece9769bdb49fedc6c2`.
+- Packed Node (`OPEN_PLUGIN_TEST_PACKED_NODE=node`): **52 passed,
+  286 assertions**, 23.44 seconds wall time, 127,424 KiB maximum RSS.
+  Log `issue35-claude-review-fixed-packed-final.log`, SHA-256
+  `b26e8b16a2974758c71dee7a2a3cdc85fdbbc1a03de8423cbc47df94752c9dd7`.
+- Typecheck, build, and whitespace checks passed. Artifact SHA-256:
+  `0e2d8bc72941874563116c7cea30ff15e88f1ae7382a655ca457ae1e8dfb66fa`.
+
+Frozen source SHA-256 receipts: writer
+`cdf74ed3b36e5ac9fc537a92bb5f2335e68d25104dc57b4fe934e84b9d8b86d7`,
+public test `c2c0c9184c3b68d063f9d3e0ad032e61108883e27502e5677d2f1baee043f5fe`,
+route test `e299a713fa08908ee2ffc70cc848433e74ae544501f98b219c568e2eb0568d20`.
+Producer and RED worktrees allocate 24,748 and 3,948 KiB respectively;
+the shared durable evidence directory allocates 22,408 KiB. No additional
+Sandbox or real native installation was used for this correction. Independent
+re-review and fresh actual native-loader acceptance remain required before
+integration; the local gates do not replace them. Skills remain unchanged.

@@ -7,6 +7,7 @@ import type { FrozenPackageSnapshot, LifecycleHostAdapter, TargetInstallationDat
 import { createFrozenPackageSnapshot, createLifecyclePlanCoverage, createRecordedOwnedActivation, createResolvedLifecyclePins } from '../src/lifecycle-runtime';
 import type { PackageSemanticInventory } from '../src/semantic-inventory';
 import { createClaudeCodeLifecycleHost, type ClaudeNativeRemoteUpdateContract } from '../src/hosts/claude-code-writer';
+import { createDeploymentScopeIdentity } from '../src/deployment-scope';
 
 const claudeTarget = { kind: 'claude-code', instance: 'default' } as const;
 const locator = 'https://github.com/example/plugins.git';
@@ -494,6 +495,40 @@ describe('claude-code lifecycle route', () => {
   });
 });
 
+test('Claude foreign catalog binds the whole selected entry but not unrelated marketplace metadata', async () => {
+  await withClaude(async root => {
+    const initial = updateSnapshot(root, 'entry-readback-proof', '1.0.0', 'c'.repeat(40), 'install');
+    const sourceRoot = initial.snapshotRoot;
+    mkdirSync(join(initial.packageRoot, '.claude-plugin'), { recursive: true });
+    writeFileSync(join(initial.packageRoot, '.claude-plugin/plugin.json'), '{"name":"demo","version":"1.0.0","skills":"./skills/"}');
+    const catalogFile = join(sourceRoot, '.claude-plugin/marketplace.json');
+    mkdirSync(join(sourceRoot, '.claude-plugin'), { recursive: true });
+    writeFileSync(catalogFile, JSON.stringify({ name: 'market', owner: { name: 'foreign' }, plugins: [{ name: 'demo', source: './packages/demo', metadata: { exact: 'first' } }] }));
+    mkdirSync(join(root, 'plugins'), { recursive: true });
+    writeFileSync(join(root, 'plugins/known_marketplaces.json'), JSON.stringify({ market: { source: { source: 'directory', path: sourceRoot }, installLocation: sourceRoot, autoUpdate: false } }));
+    const scope = createDeploymentScopeIdentity({ kind: 'local', locator: sourceRoot }, claudeTarget);
+    const packageFingerprint = fingerprintTree(initial.packageRoot);
+    const snapshot = createFrozenPackageSnapshot({ ...initial, scopeId: scope.id, sourceType: 'local', nativeGit: undefined, snapshotFingerprint: fingerprintTree(sourceRoot), packageFingerprint, inventory: { ...initial.inventory, package: { ...initial.inventory.package, fingerprint: packageFingerprint } } });
+    const host = createClaudeCodeLifecycleHost();
+    const installed = await activate(host, snapshot);
+    host.verify(installed.handle, await host.readback(installed.handle));
+
+    const document = JSON.parse(readFileSync(catalogFile, 'utf8'));
+    document.plugins.push({ name: 'foreign', source: './unrelated', metadata: { retained: true } });
+    document.description = 'foreign marketplace description';
+    writeFileSync(catalogFile, JSON.stringify(document));
+    host.verify(installed.handle, await host.readback(installed.handle));
+
+    document.plugins[0].metadata.exact = 'changed';
+    writeFileSync(catalogFile, JSON.stringify(document));
+    const observed = await host.readback(installed.handle);
+    expect(observed.activation).toBe('active');
+    let rejected = false;
+    try { host.verify(installed.handle, observed); } catch { rejected = true; }
+    expect(rejected).toBe(true);
+  });
+});
+
 function seedMarketplace(root: string, autoUpdate: boolean): void {
   const catalog = join(root, 'plugins/marketplaces/.plgnz-market');
   mkdirSync(join(catalog, '.claude-plugin'), { recursive: true });
@@ -545,14 +580,14 @@ async function decideActivation(host: LifecycleHostAdapter, snapshot: FrozenPack
     packageName: snapshot.packageName,
     nativeId: snapshot.nativeId,
     version,
-    sourceType: 'git',
+    sourceType: snapshot.sourceType,
     targetObservation: observed,
     nativeScope: await host.observeNativeMutationScope({
       targetObservation: observed,
       operation,
       packageName: snapshot.packageName,
       nativeId: snapshot.nativeId,
-      sourceType: 'git',
+      sourceType: snapshot.sourceType,
     }),
     nativeProjection: projection,
     planCoverage: createLifecyclePlanCoverage(observed, [{

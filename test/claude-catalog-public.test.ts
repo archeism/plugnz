@@ -1,8 +1,12 @@
-import { expect, test } from 'bun:test';
+import { expect, test as bunTest } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { snapshotTree, withLifecycleCliHarness } from './lifecycle-cli-harness';
 import { parseLifecycleReport } from '../src/lifecycle-report';
+
+// Each case launches multiple public CLI subprocesses. The packed workflow measured
+// 5.411s with unchanged assertions under load; use a bounded 20s transport budget.
+const test = (name: string, run: () => Promise<void>): void => bunTest(name, run, 20_000);
 
 function plugin(name: string, body = 'first'): Record<string, string> {
   return {
@@ -163,7 +167,7 @@ test('public Claude preserves a byte-identical native catalog only when its dire
     harness.fakeNative('claude', Array.from({ length: 60 }, () => ({ args: ['--version'], stdout: '2.1.295 (Claude Code)\n' })));
     const files = plugin('demo');
     const source = harness.source('already-native-catalog', {
-      '.claude-plugin/marketplace.json': '{"name":"native","owner":{"name":"foreign"},"plugins":[{"name":"demo","source":"./plugins/demo"}]}',
+      '.claude-plugin/marketplace.json': '{"name":"native","owner":{"name":"foreign"},"plugins":[{"name":"demo","source":"./plugins/demo","strict":false,"defaultEnabled":false,"description":"Retained display metadata","metadata":{"foreign":true}}]}',
       ...Object.fromEntries(Object.entries(files).map(([path, bytes]) => [`plugins/demo/${path}`, bytes])),
       'plugins/demo/.claude-plugin/plugin.json': '{"name":"demo","version":"1.0.0","skills":"./skills/","commands":["./.claude/commands/check.md"]}',
     });

@@ -781,6 +781,9 @@ function claudeCodeLifecycleDefinition(contracts: readonly ClaudeNativeRemoteUpd
           contentRoots: [
             { label: 'plugin', path: installPath, fingerprint: projectedFingerprint },
             { label: 'catalog-plugin', path: nativeCatalog ?? lifecycleCatalogCopy(projection.nativeId), fingerprint: nativeCatalog === null ? projectedFingerprint : fingerprintTree(nativeCatalog) },
+            ...(nativeCatalog === null
+              ? [{ label: 'selected-catalog-entry', path: join(lifecycleCatalogRoot(projection.nativeId), '.claude-plugin', 'marketplace.json'), fingerprint: catalogEntryFingerprint(ownedLifecycleCatalogEntry(projection.nativeId)) }]
+              : lifecycleCatalogEntryObservation(projection.nativeId)),
           ],
         },
         rollbackReference: captureRollback(projection.attemptId, projection.operationId, projection.nativeId),
@@ -1163,7 +1166,7 @@ function lifecycleCatalogCopy(nativeId: string): string {
 }
 
 /** Resolve one native catalog member without adopting or modifying its catalog. */
-function registeredLifecycleCatalogMember(nativeId: string): { root: string; member: string } | null {
+function registeredLifecycleCatalogMember(nativeId: string): { root: string; member: string; entry: Record<string, unknown> } | null {
   const market = marketplaceName(nativeId);
   if (market === undefined) return null;
   const entry = readMarketplaces(join(pluginsDir(), 'known_marketplaces.json'))[market];
@@ -1177,7 +1180,7 @@ function registeredLifecycleCatalogMember(nativeId: string): { root: string; mem
   if (!containedPath(root, member) || root === member || !existsSync(member)) return null;
   assertCatalogPath(root, member);
   assertNoSymlinks(member);
-  return { root, member };
+  return { root, member, entry: selected[0] };
 }
 
 function matchingForeignLifecycleCatalog(nativeId: string, scopeId: string, target: LifecycleReadbackData['target'], packageRoot: string, version: string): string | null {
@@ -1185,11 +1188,14 @@ function matchingForeignLifecycleCatalog(nativeId: string, scopeId: string, targ
   if (catalog === null || catalog.root === lifecycleCatalogRoot(nativeId)) return null;
   // The canonical Source scope is the binding proof; matching names or matching bytes alone never grant ownership.
   if (createDeploymentScopeIdentity({ kind: 'local', locator: catalog.root }, target).id !== scopeId) return null;
+  if (!foreignLifecycleEntryEquivalent(catalog.entry)) return null;
   if (!existsSync(join(catalog.member, '.claude-plugin', 'plugin.json'))) return null;
   const proof = mkdtempSync(join(tmpdir(), 'plgnz-claude-native-member-'));
   try {
     stagePlugin(packageRoot, join(proof, 'incoming'), nativeId.slice(0, nativeId.indexOf('@')), version);
-    stagePlugin(catalog.member, join(proof, 'native'), nativeId.slice(0, nativeId.indexOf('@')), version);
+    // The foreign catalog is the runtime input, not an input to our projector.
+    // Synthesizing its missing native declarations would prove a different plugin.
+    cpSync(catalog.member, join(proof, 'native'), { recursive: true });
     for (const path of [join(proof, 'incoming'), join(proof, 'native')]) {
       rmSync(join(path, '.plgnz-lifecycle.json'), { force: true });
       rmSync(join(path, OWNERSHIP), { force: true });
@@ -1212,6 +1218,41 @@ function catalogEntries(document: Record<string, unknown> | null): unknown[] {
 
 function isCatalogMember(entry: unknown, nativeId: string): boolean {
   return isRecord(entry) && entry['name'] === nativeId.slice(0, nativeId.indexOf('@'));
+}
+
+function ownedLifecycleCatalogEntry(nativeId: string): Record<string, string> {
+  const name = nativeId.slice(0, nativeId.indexOf('@'));
+  return { name, source: `./plugins/${name}` };
+}
+
+/** Whole selected-entry binding, not the shared manifest: even future/opaque keys cannot drift unnoticed. */
+function catalogEntryFingerprint(entry: unknown): string {
+  const canonical = (value: unknown): string => Array.isArray(value)
+    ? `[${value.map(canonical).join(',')}]`
+    : isRecord(value)
+      ? `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`
+      : JSON.stringify(value);
+  const hash = new CryptoHasher('sha256'); hash.update(canonical(entry)); return hash.digest('hex');
+}
+
+/** With plugin.json present, these six fields change/conflict with the native component manifest.
+ * Official contract: docs/en/plugins/marketplace-reference#strict-mode.
+ * Display/opaque entry metadata is retained; it is still bound by the complete entry digest.
+ */
+function foreignLifecycleEntryEquivalent(entry: Record<string, unknown>): boolean {
+  if (['commands', 'agents', 'skills', 'hooks', 'outputStyles', 'themes'].some(key => Object.hasOwn(entry, key))) return false;
+  if (entry['strict'] !== undefined && typeof entry['strict'] !== 'boolean') return false;
+  if (entry['dependencies'] !== undefined && (!Array.isArray(entry['dependencies']) || entry['dependencies'].length !== 0)) return false;
+  // Activation writes an explicit enabledPlugins=true; this setting outranks the entry default.
+  if (entry['defaultEnabled'] !== undefined && typeof entry['defaultEnabled'] !== 'boolean') return false;
+  return true;
+}
+
+function lifecycleCatalogEntryObservation(nativeId: string): LifecycleReadbackData['contentRoots'] {
+  const root = registeredLifecycleCatalogMember(nativeId)?.root ?? lifecycleCatalogRoot(nativeId);
+  const document = lifecycleCatalogDocument(root, marketplaceName(nativeId)!);
+  const entries = catalogEntries(document).filter(entry => isCatalogMember(entry, nativeId));
+  return entries.length === 1 ? [{ label: 'selected-catalog-entry', path: join(root, '.claude-plugin', 'marketplace.json'), fingerprint: catalogEntryFingerprint(entries[0]) }] : [];
 }
 
 /** Read-only global plan preflight, repeated at apply to close the plan/apply window. */
@@ -1257,7 +1298,7 @@ function installLifecycleCatalog(nativeId: string, scopeId: string, stagingRoot:
   mkdirSync(dirname(copy), { recursive: true });
   cpSync(stagingRoot, copy, { recursive: true });
   mkdirSync(join(root, '.claude-plugin'), { recursive: true });
-  writeFileSync(join(root, '.claude-plugin', 'marketplace.json'), JSON.stringify({ ...document, plugins: [...catalogEntries(document).filter(entry => !isCatalogMember(entry, nativeId)), { name: nativeId.slice(0, nativeId.indexOf('@')), source: `./plugins/${nativeId.slice(0, nativeId.indexOf('@'))}` }] }));
+  writeFileSync(join(root, '.claude-plugin', 'marketplace.json'), JSON.stringify({ ...document, plugins: [...catalogEntries(document).filter(entry => !isCatalogMember(entry, nativeId)), ownedLifecycleCatalogEntry(nativeId)] }));
   writeFileSync(join(root, OWNERSHIP), JSON.stringify({ source: 'plgnz-wrapper', pluginId: `marketplace@${market}`, fingerprint: '' }));
   const file = join(pluginsDir(), 'known_marketplaces.json');
   const known = readMarketplaces(file);
@@ -1278,7 +1319,7 @@ function lifecycleCatalogConforms(nativeId: string, installPath: string, target:
   const known = readMarketplaces(join(pluginsDir(), 'known_marketplaces.json'))[market];
   if (!isRecord(known) || !isRecord(known['source']) || known['source']['source'] !== 'directory' || known['source']['path'] !== lifecycleCatalogRoot(nativeId) || known['installLocation'] !== lifecycleCatalogRoot(nativeId)) return false;
   const entries = catalogEntries(lifecycleCatalogDocument(lifecycleCatalogRoot(nativeId), market)).filter(entry => isCatalogMember(entry, nativeId));
-  if (entries.length !== 1 || !isRecord(entries[0]) || entries[0]['source'] !== `./plugins/${nativeId.slice(0, nativeId.indexOf('@'))}`) return false;
+  if (entries.length !== 1 || catalogEntryFingerprint(entries[0]) !== catalogEntryFingerprint(ownedLifecycleCatalogEntry(nativeId))) return false;
   const copy = lifecycleCatalogCopy(nativeId);
   if (!existsSync(copy)) return false;
   assertManagedPath(copy);
@@ -1289,7 +1330,7 @@ function lifecycleCatalogConforms(nativeId: string, installPath: string, target:
 
 function lifecycleContentRoots(nativeId: string, installPath: string, digest: string): LifecycleReadbackData['contentRoots'] {
   const copy = registeredLifecycleCatalogMember(nativeId)?.member ?? lifecycleCatalogCopy(nativeId);
-  return [{ label: 'plugin', path: installPath, fingerprint: digest }, ...(existsSync(copy) ? [{ label: 'catalog-plugin', path: copy, fingerprint: fingerprintTree(copy) }] : [])];
+  return [{ label: 'plugin', path: installPath, fingerprint: digest }, ...(existsSync(copy) ? [{ label: 'catalog-plugin', path: copy, fingerprint: fingerprintTree(copy) }] : []), ...lifecycleCatalogEntryObservation(nativeId)];
 }
 
 function retireLifecycleCatalog(nativeId: string, scopeId: string): void {
@@ -1433,6 +1474,7 @@ function mutateInstall(handle: DurableLifecycleOperation, stagingRoot: string): 
   if (handle.projectedFingerprint === null) throw new Error('claude-code activation is missing its sealed fingerprint');
   const nativeCatalog = matchingForeignLifecycleCatalog(handle.nativeId, handle.scopeId, handle.target, stagingRoot, slotVersion(handle.packageVersion, handle.sourceRevision));
   if (nativeCatalog === null) validateLifecycleCatalog(handle.nativeId, handle.scopeId);
+  const beforeCatalog = lifecycleSelectedMutationState(handle.nativeId);
   const installPath = cacheSlot(handle.nativeId, slotVersion(handle.packageVersion, handle.sourceRevision));
   const before = existsSync(installPath) ? fingerprintTree(installPath) : null;
   rmSync(installPath, { recursive: true, force: true });
@@ -1457,8 +1499,25 @@ function mutateInstall(handle: DurableLifecycleOperation, stagingRoot: string): 
   }
   return {
     receiptId: `claude-apply-${handle.operationId}`,
-    changed: before !== handle.projectedFingerprint,
+    changed: before !== handle.projectedFingerprint || beforeCatalog !== lifecycleSelectedMutationState(handle.nativeId),
   };
+}
+
+/** Receipt covers actual selected native state, including a catalog-only repair. No sibling slice is included. */
+function lifecycleSelectedMutationState(nativeId: string): string {
+  const market = marketplaceName(nativeId)!;
+  const known = readMarketplaces(join(pluginsDir(), 'known_marketplaces.json'));
+  const settings = readSettings(join(pluginsDir(), '..', 'settings.json'));
+  const extra = settings['extraKnownMarketplaces'];
+  const member = registeredLifecycleCatalogMember(nativeId)?.member ?? lifecycleCatalogCopy(nativeId);
+  return catalogEntryFingerprint({
+    catalogEntry: lifecycleCatalogEntryObservation(nativeId),
+    member: existsSync(member) ? fingerprintTree(member) : null,
+    registration: known[market] ?? null,
+    extraRegistration: isRecord(extra) ? extra[market] ?? null : null,
+    installedRows: readRegistry(join(pluginsDir(), 'installed_plugins.json')).plugins[nativeId] ?? null,
+    enabled: enabledPlugins()[nativeId] ?? null,
+  });
 }
 
 function setEnabled(handle: DurableLifecycleOperation, enabled: boolean, receiptId: string): { receiptId: string; changed: boolean } {
