@@ -144,7 +144,8 @@ assert.deepEqual(scope.target, { kind: 'kimi', instance: 'default' });
 const original = state.attempts.flatMap(row => row.journal).find(row => row.action === 'install' && row.nativeId === activation.nativeId);
 assert.ok(original?.sealedOperation);
 const stagedSource = join(nativeHome, 'plugins/.plgnz-kimi-lifecycle', original.sealedOperation.attemptId, original.operationId, 'stage/kimi-probe');
-assert.equal(registry.plugins[0].source, 'local');
+// Exact 2.0.1 vendor pluginSourceSchema: local-path | zip-url | github.
+assert.equal(registry.plugins[0].source, 'local-path');
 assert.equal(registry.plugins[0].originalSource, stagedSource);
 
 const port = await new Promise((resolvePort, reject) => {
