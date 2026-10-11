@@ -76,6 +76,15 @@ boundary. The generic SPI tests prove transaction mechanics, not any harness's
 Native capability; real released-harness snapshot and collateral-scope proof
 must precede enabling Native eligibility.
 
+Cleanup references privately preserve an asserted durable handle's existing
+`rollbackReference`; pre-seal projections supply `null`. This adapter-only
+authority supports canonical physical-root revalidation even when a staged
+artifact has already been disposed or retirement has no artifact. It changes
+neither the persisted handle schema nor public reports. Adapters must verify
+the exact bounded operation reference before deleting snapshots, preserve
+stable declared store symlinks, and refuse a retargeted physical root. Mutable
+receipts cannot manufacture that authority.
+
 Route contradictions are global zero-write defects for every recorded owned
 activation in a requested scope, including omissions and explicit retirement,
 and fresh disable/retire preparation checks the route again. Kimi's native

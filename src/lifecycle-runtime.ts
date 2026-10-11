@@ -1465,6 +1465,7 @@ function cleanupReference(
       operationId: target.handle.operationId,
       attemptId: target.handle.attemptId,
       artifactId: target.handle.artifactId,
+      rollbackReference: target.handle.rollbackReference,
     });
   }
   if ('schemaVersion' in target) {
@@ -1475,6 +1476,7 @@ function cleanupReference(
       operationId: target.operationId,
       attemptId: target.attemptId,
       artifactId: target.artifactId,
+      rollbackReference: target.rollbackReference,
     });
   }
   if (target.adapterId !== adapterId) invariant('cleanup projection belongs to another adapter');
@@ -1484,6 +1486,7 @@ function cleanupReference(
     operationId: target.operationId,
     attemptId: target.attemptId,
     artifactId: target.stagingId,
+    rollbackReference: null,
   });
 }
 

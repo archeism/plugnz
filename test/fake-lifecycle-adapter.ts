@@ -40,6 +40,7 @@ interface RegistryRow {
 type Registry = Record<string, RegistryRow>;
 
 export class FakeLifecycleHost {
+  readonly cleanupReferences: CleanupReference[] = [];
   readonly events: string[] = [];
   readonly adapter: LifecycleHostAdapter;
   version = '1.0.0';
@@ -250,6 +251,7 @@ export class FakeLifecycleHost {
         return { receiptId: `rollback:${handle.attemptId}:${handle.operationId}`, changed: true };
       },
       cleanup: async (reference, disposition) => {
+        this.cleanupReferences.push(reference);
         this.hit(`cleanup:${disposition}`);
         rmSync(join(this.preparationRoot, safe(reference.attemptId), safe(reference.operationId)), { recursive: true, force: true });
         return { cleanupId: `cleanup:${reference.attemptId}:${reference.operationId}`, completed: true };

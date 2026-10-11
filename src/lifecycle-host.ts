@@ -550,6 +550,8 @@ export interface CleanupReference {
   readonly operationId: string;
   readonly attemptId: string;
   readonly artifactId: string | null;
+  /** Private asserted handle authority; never projected into public reports. */
+  readonly rollbackReference: string | null;
 }
 
 export interface MutationResultData {

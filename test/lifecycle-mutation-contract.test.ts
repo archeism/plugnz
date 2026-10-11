@@ -510,6 +510,21 @@ describe('lifecycle mutation boundary', () => {
     expect(fake.inactiveMetadata('demo@market')).toBe(initialMetadata);
   });
 
+  test('cleanup privately preserves asserted rollback authority across prepared and hydrated handles', async () => {
+    const root = tempRoot('cleanup-reference');
+    const fake = new FakeLifecycleHost(join(root, 'host'), [fixtureProfile({ route: 'managed', operations: ['install'] })]);
+    const snapshot = fixtureSnapshot(root, { operationId: 'op-reference', attemptId: 'attempt-reference', action: 'install' });
+    const selection = await selectedActivationRoute(fake, snapshot, 'install', createResolvedLifecyclePins([]));
+    const staged = await fake.adapter.stageActivation({ selection, snapshot, pins: createResolvedLifecyclePins([]) });
+    await fake.adapter.cleanup(staged, 'aborted-preparation');
+    expect(fake.cleanupReferences[0]!.rollbackReference).toBe(null);
+    const prepared = await prepareInstall(fake, snapshot);
+    await fake.adapter.cleanup(prepared, 'aborted-preparation');
+    const hydrated = hydrateDurableLifecycleOperation(JSON.parse(JSON.stringify(prepared.handle)));
+    await fake.adapter.cleanup(hydrated, 'aborted-preparation');
+    expect(fake.cleanupReferences.slice(1).map(reference => reference.rollbackReference)).toEqual([prepared.handle.rollbackReference, prepared.handle.rollbackReference]);
+  });
+
   test('keeps a verified activation and durable recovery evidence when cleanup fails, then resumes cleanup', async () => {
     const root = tempRoot('cleanup');
     const profiles = [fixtureProfile({ route: 'managed', operations: ['install'] })];
