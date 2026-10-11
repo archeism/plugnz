@@ -8,10 +8,12 @@ import { createServer } from 'node:net';
 
 const base = '/vercel/sandbox/proof';
 assert.equal(resolve(process.cwd()), base, 'Oracle requires its owned Sandbox workdir');
-const [phase, expectedRevision, attempt = '01', candidate = 'd3da'] = process.argv.slice(2);
+const [phase, expectedRevision, attempt = '01', candidate = 'd3da', run = '00'] = process.argv.slice(2);
 assert.ok(['V1', 'V2'].includes(phase));
 assert.match(expectedRevision ?? '', /^[a-f0-9]{40}$/u);
 assert.match(attempt, /^[0-9]{2}$/u);
+assert.match(run, /^[0-9]{2}$/u);
+const prefix = run === '00' ? phase : `${phase}.r${run}`;
 const root = join(base, `attempt-${attempt}`);
 mkdirSync(root, { recursive: true });
 const processStatus = readFileSync('/proc/self/status', 'utf8');
@@ -90,7 +92,7 @@ async function command(label, executable, args, commandEnv = env) {
     try { process.kill(-child.pid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; }
   }
   const result = { code, signal, timedOut, overflow, outputBytes, milliseconds: performance.now() - started, stdout, stderr };
-  writeFileSync(join(root, `${phase}.${label}.streams.json`), JSON.stringify(result, null, 2), { flag: 'wx' });
+  writeFileSync(join(root, `${prefix}.${label}.streams.json`), JSON.stringify(result, null, 2), { flag: 'wx' });
   assert.equal(overflow, false, `${label} output overflow; retained bounded partial streams`);
   assert.equal(timedOut, false, `${label} timed out; retained full streams`);
   return result;
@@ -119,9 +121,11 @@ for (const [label, dryRun] of phase === 'V1' ? [['install', false], ['same-head-
     assert.equal(parsed.outcomes[0].action, label === 'install' ? 'install' : 'unchanged');
     if (label !== 'install') assert.equal(after, before, 'Unchanged Git sync wrote native state');
   } else {
-    assert.equal(result.code, 1, 'Unverified native update must not be admitted by the fixture');
-    assert.deepEqual(parsed.outcomes[0].reason, { category: 'capability', code: 'capability.unverified',
-      diagnostic: "target 'kimi' has no verified native update profile for version '2.0.1' and git Sources", capabilityId: 'profile', evidenceId: null });
+    assert.equal(result.code, 1, 'Unsupported native update must not be admitted by the fixture');
+    // Frozen d3da kimiUpdateProfile explicitly marks update unsupported.
+    assert.deepEqual(parsed.outcomes[0].reason, { category: 'capability', code: 'capability.unsupported',
+      diagnostic: "target 'kimi' 2.0.1 native update is unsupported", capabilityId: 'operation.update',
+      evidenceId: 'sha256:754f910c5cfa319ab144e4b7002bfeb67183752b023d28dc6be17bf4737c3452' });
     assert.equal(parsed.summary.mutationStarted, false);
     assert.equal(parsed.summary.changed, false);
     assert.equal(after, before, 'Unsupported changed sync wrote native state');
@@ -185,6 +189,6 @@ const allocated = spawnSync('du', ['-sk', '/vercel/sandbox/native', base], { enc
 assert.equal(allocated.status, 0);
 const kilobytes = allocated.stdout.trim().split('\n').reduce((sum, line) => sum + Number(line.split(/\s/u)[0]), 0);
 assert.ok(kilobytes <= 1024 * 1024, 'Owned native/proof allocation exceeded 1GiB budget');
-const evidence = { phase, candidate, expectedRevision, artifactSha256: hash(readFileSync(artifact)), nativePackage: packageJson.name, nativeVersion: packageJson.version, nativeEntrypointSha256: hash(readFileSync(realpathSync(native))), outputs, discovery, allocatedKiB: kilobytes };
-writeFileSync(join(root, `${phase}.result.json`), JSON.stringify(evidence, null, 2), { flag: 'wx' });
+const evidence = { phase, run, candidate, node: process.version, expectedRevision, artifactSha256: hash(readFileSync(artifact)), nativePackage: packageJson.name, nativeVersion: packageJson.version, nativeEntrypointSha256: hash(readFileSync(realpathSync(native))), outputs, discovery, allocatedKiB: kilobytes };
+writeFileSync(join(root, `${prefix}.result.json`), JSON.stringify(evidence, null, 2), { flag: 'wx' });
 console.log(JSON.stringify(evidence, null, 2));
