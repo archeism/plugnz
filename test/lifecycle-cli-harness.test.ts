@@ -1251,7 +1251,7 @@ describe('isolated lifecycle CLI harness', () => {
         exitCode: 0,
         stderr: '',
         outcome: [{
-          action: 'unchanged',
+          action: 'update',
           result: 'succeeded',
           route: 'managed',
           resourceState: 'present',
@@ -1262,7 +1262,7 @@ describe('isolated lifecycle CLI harness', () => {
         summary: {
           result: 'converged',
           terminalPhase: 'complete',
-          mutationStarted: false,
+          mutationStarted: true,
           changed: false,
           failureCategory: null,
           reason: null,
