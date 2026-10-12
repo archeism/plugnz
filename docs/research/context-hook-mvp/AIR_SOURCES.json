@@ -1,0 +1,66 @@
+{
+  "repository": "https://github.com/archeism/air",
+  "observed_default_head": "3443aed52bda16bf960968068080fa0b7dac6ec1",
+  "reference_commit": "436f45a55999d72a4549f57dcb209aabb732a72e",
+  "archive_commit": "70c37b2e99747b1f42197e98d4633ea02b8d6217",
+  "archive_parent_matches_reference": true,
+  "scope": "Read-only historical source inspection; no AIR hook execution, current-runtime qualification, installation, or AIR source changes.",
+  "files": [
+    {
+      "path": "alp/scripts/session-start.sh",
+      "git_blob": "5bb562e2bcc9fd72e52601cc8f44405848015784",
+      "sha256": "1a42f0db7578a221d0e264513616738c26f6dd2bd4886921b8d9b81f6a47785f",
+      "bytes": 11861,
+      "url": "https://github.com/archeism/air/blob/436f45a55999d72a4549f57dcb209aabb732a72e/alp/scripts/session-start.sh"
+    },
+    {
+      "path": "alp/scripts/triage-feedback.sh",
+      "git_blob": "90fe3e6f04de6c726fdc963c4ca3867f7f14e8ef",
+      "sha256": "9f297d78c2716198bb6a66effeb02dd3d610b57113bb8c41a03470cdbc8ec081",
+      "bytes": 4221,
+      "url": "https://github.com/archeism/air/blob/436f45a55999d72a4549f57dcb209aabb732a72e/alp/scripts/triage-feedback.sh"
+    },
+    {
+      "path": "alp/hooks/hooks.json",
+      "git_blob": "f84d1af3dc95a6ec9a0c9c4a3927bd517643d2fc",
+      "sha256": "c3302f347d60f3d11522c864ca97ea46cffe63155a0e98872878bd4f28cd323b",
+      "bytes": 4436,
+      "url": "https://github.com/archeism/air/blob/436f45a55999d72a4549f57dcb209aabb732a72e/alp/hooks/hooks.json"
+    },
+    {
+      "path": "alp-codex/hooks.json",
+      "git_blob": "eb97abcd0273c777e8e2782e0da21ba699f20888",
+      "sha256": "ec217f8758f5f75d3f0f4161c55d79df8aab35b7b7dcafc33e49c32e222aae7c",
+      "bytes": 2437,
+      "url": "https://github.com/archeism/air/blob/436f45a55999d72a4549f57dcb209aabb732a72e/alp-codex/hooks.json"
+    },
+    {
+      "path": "alp-codex/scripts/session-start.sh",
+      "git_blob": "bf9ce238ae7726e0ecd63745401267ffd5d9accc",
+      "sha256": "09f1548619140912e663f519ddc7c351ced235500c35a7228f5b2356d298668a",
+      "bytes": 9206,
+      "url": "https://github.com/archeism/air/blob/436f45a55999d72a4549f57dcb209aabb732a72e/alp-codex/scripts/session-start.sh"
+    },
+    {
+      "path": "alp-opencode/plugin/alp-opencode.ts",
+      "git_blob": "413f17add5f89d372434933bc8f24b4534ec20b9",
+      "sha256": "94d8dc1a749416202ca3419a5e49d0fe39de34276c0a3d1d83be774d1e3aa445",
+      "bytes": 22856,
+      "url": "https://github.com/archeism/air/blob/436f45a55999d72a4549f57dcb209aabb732a72e/alp-opencode/plugin/alp-opencode.ts"
+    },
+    {
+      "path": "docs/adr/027-hooks-are-dumb-pipes.md",
+      "git_blob": "2d24ec3ceba41cafe21a96c0b003b0a5860a969b",
+      "sha256": "b6e54d03081699c7611ec7f376e52b4095b9aef1f09c0ebd386db7067b7eceff",
+      "bytes": 3264,
+      "url": "https://github.com/archeism/air/blob/436f45a55999d72a4549f57dcb209aabb732a72e/docs/adr/027-hooks-are-dumb-pipes.md"
+    },
+    {
+      "path": "docs/adr/029-post-tool-use-failure-hook.md",
+      "git_blob": "5d0978ec8c514f1d74e2aaeac537a04a56fd6a96",
+      "sha256": "fe1d8a534c43f4227577c75daedca38d1be251876b7cd03a7d8f2aad36365c5e",
+      "bytes": 2760,
+      "url": "https://github.com/archeism/air/blob/436f45a55999d72a4549f57dcb209aabb732a72e/docs/adr/029-post-tool-use-failure-hook.md"
+    }
+  ]
+}

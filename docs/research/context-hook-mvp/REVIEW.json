@@ -1,0 +1,44 @@
+{
+  "verdict": "PASS",
+  "material_fixes": [],
+  "created_utc": "2026-10-12T13:53:58.881138+00:00",
+  "reviewer_model": "GPT-6.1 Sol",
+  "parent_model": "GPT-6 Astra Pro",
+  "review_harness": "ChatGPT delegated subagent / Remote Desktop Commander",
+  "note_sha256": "59da75cef3b3221c2dcc0ff8426304f6cc86abd2e37ab1c6181a0718a71c6ed5",
+  "historical_report_sha256": "657749d8ceab4cd0bb584afeae38ee70b0193d1134182704d56aff0a141e3512",
+  "historical_report_unchanged": true,
+  "source_manifest_sha256": "f01a74a0e57f8f0b7abfa117f88378b10765340a337ca3d35efba23b55caed09",
+  "history_pin": "436f45a55999d72a4549f57dcb209aabb732a72e",
+  "archive_commit": "70c37b2e99747b1f42197e98d4633ea02b8d6217",
+  "verified_archive_parent": "436f45a55999d72a4549f57dcb209aabb732a72e",
+  "independently_read_source_hashes": {
+    "alp/scripts/session-start.sh": {
+      "bytes": 11861,
+      "sha256": "1a42f0db7578a221d0e264513616738c26f6dd2bd4886921b8d9b81f6a47785f"
+    },
+    "alp/scripts/triage-feedback.sh": {
+      "bytes": 4221,
+      "sha256": "9f297d78c2716198bb6a66effeb02dd3d610b57113bb8c41a03470cdbc8ec081"
+    },
+    "alp/hooks/hooks.json": {
+      "bytes": 4436,
+      "sha256": "c3302f347d60f3d11522c864ca97ea46cffe63155a0e98872878bd4f28cd323b"
+    },
+    "alp-opencode/plugin/alp-opencode.ts": {
+      "bytes": 22856,
+      "sha256": "94d8dc1a749416202ca3419a5e49d0fe39de34276c0a3d1d83be774d1e3aa445"
+    },
+    "docs/adr/027-hooks-are-dumb-pipes.md": {
+      "bytes": 3264,
+      "sha256": "b6e54d03081699c7611ec7f376e52b4095b9aef1f09c0ebd386db7067b7eceff"
+    },
+    "docs/adr/029-post-tool-use-failure-hook.md": {
+      "bytes": 2760,
+      "sha256": "fe1d8a534c43f4227577c75daedca38d1be251876b7cd03a7d8f2aad36365c5e"
+    }
+  },
+  "native_reruns": 0,
+  "new_web_research": false,
+  "receipt_sha256": "95aea2609dbbb13019c6e98d6dc6ffb5264f20a73ceded744a395493f38d60a6"
+}
