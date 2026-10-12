@@ -7,8 +7,8 @@ import {
 import { unknownErrorDiagnostic } from './error-diagnostic';
 import { OPEN_LIFECYCLE_JOURNAL_STATES, parseRecoveryOperationProof, type RecoveryOperationProof } from './recovery-proof';
 import type { JournalState } from './state';
-import { parseAdoptionAdmission, type AdoptionAdmission } from './legacy-adoption-record';
-import { canonicalAdoptionJson } from './legacy-adoption-proof';
+import { parseAdoptionAdmission, parseAdoptionRecord, type AdoptionAdmission, type AdoptionRecord } from './legacy-adoption-record';
+import { canonicalAdoptionJson, type AdoptionDigest } from './legacy-adoption-proof';
 
 export const LIFECYCLE_REPORT_SCHEMA_VERSION = 1 as const;
 
@@ -165,6 +165,17 @@ export interface LifecycleReport {
   outcomes: LifecycleOperationOutcome[];
   summary: LifecycleReportSummary;
   recovery?: { readonly schemaVersion: 1; readonly receipts: readonly LifecycleRecoveryReceipt[] };
+  adoptions?: { readonly schemaVersion: 1; readonly receipts: readonly AdoptionReceipt[] };
+}
+
+/** Historical adoption accounting is not mutation authority or another changed flag. */
+export interface AdoptionReceipt {
+  readonly original: RecoveryOperationProof;
+  readonly legacyRecordDigest: AdoptionDigest;
+  readonly admissionId: AdoptionDigest;
+  readonly status: 'not-attempted' | 'pending' | 'rolled-back' | 'committed';
+  readonly record: AdoptionRecord | null;
+  readonly reason: LifecycleReason | null;
 }
 
 /** Historical recovery facts are not current Desired convergence outcomes. */
@@ -199,7 +210,7 @@ export function parseLifecycleReport(value: unknown): LifecycleReport {
   if (!isObject(value)) {
     throw invalid('lifecycle report must be an object');
   }
-  exactFields(value, ['schemaVersion', 'command', 'plan', 'outcomes', 'summary', 'recovery'], 'lifecycle report');
+  exactFields(value, ['schemaVersion', 'command', 'plan', 'outcomes', 'summary', 'recovery', 'adoptions'], 'lifecycle report');
   if (value['schemaVersion'] !== LIFECYCLE_REPORT_SCHEMA_VERSION) {
     throw invalid('lifecycle report schemaVersion must be 1');
   }
@@ -227,9 +238,20 @@ export function parseLifecycleReport(value: unknown): LifecycleReport {
     planned.set(operationId, operation);
   }
 
+  const adoptions = value['adoptions'] === undefined ? [] : parseAdoptionReceipts(value['adoptions'], command['dryRun'] as boolean);
+  const freshRelations = new Set<string>();
+  for (const receipt of adoptions) {
+    const admission = receipt.record?.admission ?? plan.find(row => isObject(row['adoption'])
+      && row['adoption']['admissionId'] === receipt.admissionId)?.['adoption'] as AdoptionAdmission | undefined;
+    if (admission === undefined) throw contradiction('adoption receipt has no exact requested admission or resumed modern relation');
+    const key = canonicalAdoptionJson([admission.fresh.attemptId, admission.fresh.operationId]);
+    if (freshRelations.has(key)) throw contradiction('adoption receipts cannot reuse one fresh operation');
+    freshRelations.add(key);
+  }
   const seen = new Set<string>();
   for (const outcome of outcomes) {
-    assertOutcome(outcome, command['sourceSnapshots'] as LifecycleSourceSnapshotContext[], command['dryRun'] as boolean, commandName);
+    const adoption = adoptions.find(receipt => isObject(outcome['adoption']) && outcome['adoption']['admissionId'] === receipt.admissionId);
+    assertOutcome(outcome, command['sourceSnapshots'] as LifecycleSourceSnapshotContext[], command['dryRun'] as boolean, commandName, adoption);
     const operationId = outcome['operationId'];
     if (typeof operationId !== 'string' || operationId.length === 0) throw invalid('every outcome needs a nonempty operationId');
     if (seen.has(operationId)) throw protocol('protocol.duplicate-outcome', `duplicate outcome for planned operation '${operationId}'`);
@@ -257,12 +279,115 @@ export function parseLifecycleReport(value: unknown): LifecycleReport {
   const historicalIds = new Set<string>();
   for (const receipt of receipts) {
     const id = receipt.original.operationId;
-    if (historicalIds.has(id) || planned.has(id)) throw contradiction('historical recovery operation identity is ambiguous');
+    const current = planned.get(id);
+    const resumed = adoptions.some(row => row.record !== null && matchesAdoptionRecovery(row.record, receipt)
+      && canonicalAdoptionJson(current?.['adoption'] ?? null) === canonicalAdoptionJson(row.record.admission));
+    if (historicalIds.has(id) || current !== undefined && !resumed) throw contradiction('historical recovery operation identity is ambiguous');
+    if (current !== undefined && outcomes.find(row => row['operationId'] === id)?.['changed'] !== false) {
+      throw contradiction('resumed adoption mutation must be accounted once by its modern recovery receipt');
+    }
     historicalIds.add(id);
   }
-  assertSummary(summary, outcomes, command['dryRun'] as boolean, receipts);
+  for (const receipt of adoptions) {
+    const id = receipt.original.operationId;
+    if (historicalIds.has(id) || planned.has(id)) throw contradiction('adoption and recovery originals must be disjoint and unambiguous');
+    historicalIds.add(id);
+    const operation = plan.find(row => isObject(row['adoption']) && row['adoption']['admissionId'] === receipt.admissionId);
+    const modern = receipt.record === null ? undefined : receipts.find(row => matchesAdoptionRecovery(receipt.record!, row));
+    if (operation === undefined) {
+      const fresh = receipt.record?.admission.fresh;
+      if (fresh === undefined || modern === undefined || !plan.some(row => (row['scope'] as DeploymentScopeIdentity).id === fresh.scopeId
+        && row['package'] === fresh.packageName && row['nativeId'] === fresh.nativeId)) {
+        throw contradiction('adoption receipt has no exact requested admission or resumed modern relation');
+      }
+      assertAdoptionRecoveryStatus(receipt, modern);
+      continue;
+    }
+    const admission = parseAdoptionAdmission(operation['adoption']);
+    if (canonicalAdoptionJson(admission.original) !== canonicalAdoptionJson(receipt.original)
+      || admission.legacyRecordDigest !== receipt.legacyRecordDigest
+      || receipt.record !== null && canonicalAdoptionJson(receipt.record.admission) !== canonicalAdoptionJson(admission)) {
+      throw contradiction('adoption receipt contradicts its exact admission or original');
+    }
+    const outcome = outcomes.find(row => row['operationId'] === operation['operationId'])!;
+    const result = receipt.status === 'committed' ? 'succeeded' : receipt.status === 'pending' ? 'pending'
+      : receipt.status === 'rolled-back' ? 'failed' : 'not-attempted';
+    const pendingResume = receipt.status === 'pending' && modern?.status === 'pending' && outcome['result'] === 'not-attempted';
+    if ((!pendingResume && (outcome['result'] !== result || canonicalAdoptionJson(outcome['reason']) !== canonicalAdoptionJson(receipt.reason)))
+      || receipt.status === 'not-attempted' && outcome['changed'] !== false
+      || receipt.status === 'pending' && !pendingResume && receipt.record?.seal === null
+      || receipt.status === 'rolled-back' && !isRestoredAdoptionPrior(outcome['resourceState'], outcome['activationState'])) {
+      throw contradiction('adoption receipt contradicts its exact current transaction outcome');
+    }
+    if (modern !== undefined) assertAdoptionRecoveryStatus(receipt, modern);
+  }
+  assertSummary(summary, outcomes, command['dryRun'] as boolean, receipts, adoptions);
 
   return value as unknown as LifecycleReport;
+}
+
+/** Same fresh operation, not a package-name match or legacy recovery authority. */
+function matchesAdoptionRecovery(record: AdoptionRecord, receipt: LifecycleRecoveryReceipt): boolean {
+  const fresh = record.admission.fresh; const original = receipt.original;
+  return original.attemptId === fresh.attemptId && original.operationId === fresh.operationId && original.command === fresh.command
+    && original.package === fresh.packageName && original.nativeId === fresh.nativeId && original.action === fresh.action
+    && canonicalAdoptionJson(original.scope) === canonicalAdoptionJson(record.legacy.original.scope)
+    && original.sealed === (record.seal !== null) && (record.seal === null || original.route === record.seal.route);
+}
+
+function assertAdoptionRecoveryStatus(adoption: AdoptionReceipt, modern: LifecycleRecoveryReceipt): void {
+  const matches = adoption.status === 'pending' ? modern.status === 'pending'
+    && modern.settlement === (adoption.record?.phase === 'committed' ? 'commit' : null)
+    && canonicalAdoptionJson(modern.reason) === canonicalAdoptionJson(adoption.reason)
+    : modern.status === 'completed' && modern.settlement === (adoption.status === 'committed' ? 'commit'
+      : adoption.status === 'rolled-back' ? 'rollback' : 'not-attempted');
+  if (!matches) throw contradiction('adoption receipt contradicts its exact fresh modern recovery settlement');
+  if (adoption.status === 'rolled-back' && !isRestoredAdoptionPrior(modern.resourceState, modern.activationState)) {
+    throw contradiction('adoption rollback recovery contradicts its sealed active prior');
+  }
+}
+
+function isRestoredAdoptionPrior(resource: unknown, activation: unknown): boolean {
+  return resource === 'present' && activation === 'active-conforming' || resource === 'retained' && activation === 'retained-prior';
+}
+
+function parseAdoptionReceipts(value: unknown, dryRun: boolean): AdoptionReceipt[] {
+  if (!isObject(value)) throw invalid('adoptions must be an object');
+  exactFields(value, ['schemaVersion', 'receipts'], 'adoptions');
+  if (value['schemaVersion'] !== 1 || !Array.isArray(value['receipts'])) throw invalid('adoptions requires schemaVersion 1 and receipts');
+  try { canonicalAdoptionJson(value); }
+  catch (error) { throw invalid(`invalid adoption receipt JSON: ${unknownErrorDiagnostic(error)}`); }
+  if (dryRun) throw contradiction('dry run cannot carry adoption receipts');
+  const admissions = new Set<string>();
+  return value['receipts'].map(item => {
+    if (!isObject(item)) throw invalid('adoption receipt must be an object');
+    exactFields(item, ['original', 'legacyRecordDigest', 'admissionId', 'status', 'record', 'reason'], 'adoption receipt');
+    let original: RecoveryOperationProof;
+    let record: AdoptionRecord | null;
+    try { original = parseRecoveryOperationProof(item['original']); record = item['record'] === null ? null : parseAdoptionRecord(item['record']); }
+    catch (error) { throw invalid(`invalid adoption receipt proof: ${unknownErrorDiagnostic(error)}`); }
+    if (original.command !== 'legacy-recovery' || original.sealed || original.package === null || original.nativeId === null) {
+      throw contradiction('adoption receipt requires an exact unsealed legacy original');
+    }
+    for (const field of ['legacyRecordDigest', 'admissionId']) {
+      if (typeof item[field] !== 'string' || !/^sha256:[0-9a-f]{64}$/u.test(item[field])) throw invalid(`invalid adoption receipt ${field}`);
+    }
+    if (!oneOf(['not-attempted', 'pending', 'rolled-back', 'committed'], item['status'])
+      || !(item['reason'] === null || isObject(item['reason']))) throw invalid('adoption receipt has missing or invalid status/reason');
+    if (item['reason'] !== null) assertReason(item['reason'] as Record<string, unknown>);
+    if (admissions.has(item['admissionId'] as string)) throw contradiction('duplicate adoption receipt admission');
+    admissions.add(item['admissionId'] as string);
+    if ((item['status'] === 'committed') !== (item['reason'] === null)) throw contradiction('adoption receipt status contradicts its reason');
+    if (record === null && item['status'] !== 'not-attempted'
+      || record !== null && (canonicalAdoptionJson(record.legacy.original) !== canonicalAdoptionJson(original)
+        || record.legacy.recordDigest !== item['legacyRecordDigest'] || record.admission.admissionId !== item['admissionId'])) {
+      throw contradiction('adoption receipt record contradicts its exact original or admission');
+    }
+    if (record !== null && (item['status'] === 'pending' ? !['prepared', 'committed'].includes(record.phase) : record.phase !== item['status'])) {
+      throw contradiction('adoption receipt status contradicts its retained record phase');
+    }
+    return { ...item, original, record } as unknown as AdoptionReceipt;
+  });
 }
 
 function parseRecoveryReceipts(value: unknown, dryRun: boolean): LifecycleRecoveryReceipt[] {
@@ -442,6 +567,7 @@ function assertOutcome(
   snapshots: readonly LifecycleSourceSnapshotContext[],
   dryRun: boolean,
   command: LifecycleCommandName,
+  adoptionReceipt?: AdoptionReceipt,
 ): void {
   assertPlanOperation(outcome, snapshots, command, 'outcome');
   if (!oneOf(LIFECYCLE_OPERATION_RESULTS, outcome['result']) || !oneOf(LIFECYCLE_RESOURCE_STATES, outcome['resourceState']) ||
@@ -451,7 +577,9 @@ function assertOutcome(
   }
   const reason = outcome['reason'];
   if (reason !== null) assertReason(reason as Record<string, unknown>);
-  if (outcome['adoption'] !== undefined && (outcome['result'] !== 'not-attempted' || outcome['changed'] !== false)) {
+  const matchingTransaction = adoptionReceipt?.record != null
+    && canonicalAdoptionJson(adoptionReceipt.record.admission) === canonicalAdoptionJson(outcome['adoption'] ?? null);
+  if (outcome['adoption'] !== undefined && !matchingTransaction && (outcome['result'] !== 'not-attempted' || outcome['changed'] !== false)) {
     throw contradiction(`read-only admission '${outcome['operationId']}' cannot claim delivered adoption without a verified transaction receipt`);
   }
   if (isObject(reason) && reason['category'] === 'readback' &&
@@ -552,7 +680,7 @@ function isKnownSafeReadbackState(resourceState: unknown, activationState: unkno
     (resourceState === 'absent' && activationState === 'inactive');
 }
 
-function assertSummary(summary: Record<string, unknown>, outcomes: readonly Record<string, unknown>[], dryRun: boolean, receipts: readonly LifecycleRecoveryReceipt[] = []): void {
+function assertSummary(summary: Record<string, unknown>, outcomes: readonly Record<string, unknown>[], dryRun: boolean, receipts: readonly LifecycleRecoveryReceipt[] = [], adoptions: readonly AdoptionReceipt[] = []): void {
   exactFields(summary, ['result', 'terminalPhase', 'mutationStarted', 'changed', 'failureCategory', 'reason', 'recoveryId', 'readbackId'], 'lifecycle summary');
   if (!oneOf(LIFECYCLE_COMMAND_RESULTS, summary['result']) || !oneOf(LIFECYCLE_TERMINAL_PHASES, summary['terminalPhase']) ||
       typeof summary['mutationStarted'] !== 'boolean' || typeof summary['changed'] !== 'boolean' ||
@@ -565,7 +693,8 @@ function assertSummary(summary: Record<string, unknown>, outcomes: readonly Reco
   if (reason !== null && (reason as Record<string, unknown>)['category'] !== summary['failureCategory']) {
     throw contradiction('summary failureCategory contradicts its reason');
   }
-  const nonSuccess = outcomes.some((outcome) => outcome['result'] !== 'succeeded') || receipts.some(row => row.status !== 'completed');
+  const nonSuccess = outcomes.some((outcome) => outcome['result'] !== 'succeeded') || receipts.some(row => row.status !== 'completed')
+    || adoptions.some(row => row.status !== 'committed');
   const anyChanged = outcomes.some((outcome) => outcome['changed'] === true) || receipts.some(row => row.changed);
   const potentiallyChanged = outcomes.some((outcome) => outcome['resourceState'] === 'potentially-changed');
   const earlyPhase = summary['terminalPhase'] === 'parse' || summary['terminalPhase'] === 'resolve' ||
