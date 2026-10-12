@@ -9,11 +9,12 @@ function withZcode(fn: (home: string, cliRoot: string, binary: string) => void):
   const home = mkdtempSync(join(tmpdir(), 'plgnz-zcode-reader-'));
   const cliRoot = join(home, '.zcode', 'cli');
   const binary = join(home, 'zcode');
-  const keys = ['OPEN_PLUGIN_HOME', 'OPEN_PLUGIN_ZCODE_CLI_BIN', 'ZCODE_STORAGE_DIR'] as const;
+  const keys = ['OPEN_PLUGIN_HOME', 'OPEN_PLUGIN_ZCODE_CLI_BIN', 'ZCODE_STORAGE_DIR', 'PATH'] as const;
   const prior = keys.map((key) => process.env[key]);
   process.env.OPEN_PLUGIN_HOME = home;
   process.env.OPEN_PLUGIN_ZCODE_CLI_BIN = binary;
   process.env.ZCODE_STORAGE_DIR = join(home, '.zcode');
+  process.env.PATH = home;
   try { fn(home, cliRoot, binary); }
   finally {
     keys.forEach((key, index) => { if (prior[index] === undefined) delete process.env[key]; else process.env[key] = prior[index]; });
@@ -98,6 +99,41 @@ describe('official ZCode CLI reader lifecycle', () => {
 });
 
 describe('official ZCode CLI default detection', () => {
+  test('detects the official CLI on an owned PATH before its native home exists, without seeding a store', () => {
+    withZcode((_home, cliRoot, binary) => {
+      delete process.env.OPEN_PLUGIN_ZCODE_CLI_BIN;
+      fakeBinary(binary, '0.16.9');
+      expect(resolveOfficialZcodeCli()).toBe(binary);
+      expect(zcodeCli.detect()).toBe(true);
+      expect(runDoctor([zcodeCli]).findings).toEqual([]);
+      expect(existsSync(cliRoot)).toBe(false);
+    });
+  });
+
+  test('an invalid explicit override cannot fall through to an official CLI on PATH', () => {
+    withZcode((home, cliRoot, binary) => {
+      fakeBinary(binary, '0.16.9');
+      const missing = join(home, 'missing-override');
+      process.env.OPEN_PLUGIN_ZCODE_CLI_BIN = missing;
+      expect(zcodeCliBinaryCandidates()).toEqual([missing]);
+      expect(resolveOfficialZcodeCli()).toBeUndefined();
+      expect(existsSync(cliRoot)).toBe(false);
+    });
+  });
+
+  for (const kind of ['community', 'wrong-doctor', 'nonexecutable'] as const) {
+    test(`PATH detection refuses a ${kind} binary without creating a profile`, () => {
+      withZcode((_home, cliRoot, binary) => {
+        delete process.env.OPEN_PLUGIN_ZCODE_CLI_BIN;
+        fakeBinary(binary, kind === 'community' ? 'zcode-app-cli 3.12.3-26' : '0.16.9');
+        if (kind === 'wrong-doctor') writeFileSync(binary, readFileSync(binary, 'utf8').replace('"processName":"zcode-cli"', '"processName":"community-cli"'));
+        if (kind === 'nonexecutable') chmodSync(binary, 0o644);
+        expect(zcodeCli.detect()).toBe(false);
+        expect(existsSync(cliRoot)).toBe(false);
+      });
+    });
+  }
+
   test('an explicit OPEN_PLUGIN_ZCODE_CLI_BIN override is exclusive: no fallback candidates', () => {
     withZcode((_home, _cliRoot, binary) => {
       fakeBinary(binary, '0.16.9');

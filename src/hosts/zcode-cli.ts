@@ -6,7 +6,8 @@
  * plugins in an otherwise empty store (evidence 2026-09-23).
  */
 import { existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { delimiter, dirname, join, resolve } from 'node:path';
+import { isExecutableFile } from '../exec';
 import type { HostReader, InstalledPlugin, McpServerEntry } from '../host';
 import { homeRoot, zcodeCliConfigRoot, zcodeCliRoot, zcodeStorageRoot } from '../paths';
 import { singleInstanceTargetProfile } from '../target-profile';
@@ -27,23 +28,26 @@ export function zcodeCliBinary(): string | undefined { return process.env['OPEN_
 
 /**
  * Candidate official CLI executables, most authoritative first. An explicit
- * `OPEN_PLUGIN_ZCODE_CLI_BIN` override is exclusive — candidates stop at it so
- * isolated roots and tests never reach a real desktop bundle. Without an
- * override the desktop app's bundled official CLI is probed: it reports the
- * same official identity (`doctor --json` → zcode/zcode-cli, bare-semver
- * `--version`, executable node shebang) and shares the `~/.zcode/cli` store
- * (evidence 2026-10-07). An isolated `OPEN_PLUGIN_HOME` never falls through to
- * a system-wide bundle.
+ * `OPEN_PLUGIN_ZCODE_CLI_BIN` override is exclusive. Otherwise preserve the
+ * desktop app's bundle priority on macOS, then consider the executable named
+ * `zcode` on PATH on every platform. Each candidate still has to report the
+ * official doctor identity and bare-semver version. An isolated
+ * `OPEN_PLUGIN_HOME` never falls through to a system-wide desktop bundle;
+ * CLI probes always receive the isolated HOME and storage environment.
  */
 export function zcodeCliBinaryCandidates(env: Record<string, string | undefined> = process.env): string[] {
   const override = env['OPEN_PLUGIN_ZCODE_CLI_BIN'];
   if (override !== undefined && override.length > 0) return [override];
-  const homeBundle = join(homeRoot(), 'Applications', 'ZCode.app', 'Contents', 'Resources', 'glm', 'zcode.cjs');
-  const systemBundle = '/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs';
-  const isolatedHome = process.env['OPEN_PLUGIN_HOME'];
-  if (process.platform !== 'darwin') return [];
-  if (isolatedHome !== undefined && isolatedHome.length > 0) return [homeBundle];
-  return [homeBundle, systemBundle].filter((path, index, all) => all.indexOf(path) === index);
+  const candidates: string[] = [];
+  if (process.platform === 'darwin') {
+    candidates.push(join(homeRoot(), 'Applications', 'ZCode.app', 'Contents', 'Resources', 'glm', 'zcode.cjs'));
+    const isolatedHome = process.env['OPEN_PLUGIN_HOME'];
+    if (isolatedHome === undefined || isolatedHome.length === 0) candidates.push('/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs');
+  }
+  const pathBinary = (env['PATH'] ?? '').split(delimiter)
+    .filter((dir) => dir.length > 0).map((dir) => join(dir, 'zcode')).find(isExecutableFile);
+  if (pathBinary !== undefined) candidates.push(pathBinary);
+  return candidates.filter((path, index, all) => all.indexOf(path) === index);
 }
 
 /** Official CLI gets its storage parent through this supported test override. */
@@ -126,7 +130,7 @@ export function isOfficialZcodeCli(): boolean {
 
 export function runOfficialZcode(args: string[]): string {
   const binary = resolveOfficialZcodeCli();
-  if (binary === undefined) throw new Error('Official ZCode CLI required: set OPEN_PLUGIN_ZCODE_CLI_BIN to a binary whose doctor --json reports zcode/zcode-cli, or install the ZCode desktop app (its bundled CLI is probed automatically on darwin)');
+  if (binary === undefined) throw new Error('Official ZCode CLI required: install zcode on PATH or set OPEN_PLUGIN_ZCODE_CLI_BIN to a binary whose doctor --json reports zcode/zcode-cli; the ZCode desktop app bundle is also probed automatically on darwin');
   const result = bunShapedSpawnSync([binary, ...args], { stdout: 'pipe', stderr: 'pipe', env: zcodeCliEnv(), timeout: 30_000 });
   const stdout = result.stdout instanceof Uint8Array ? new TextDecoder().decode(result.stdout) : '';
   const stderr = result.stderr instanceof Uint8Array ? new TextDecoder().decode(result.stderr) : '';

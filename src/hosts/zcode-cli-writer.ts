@@ -703,7 +703,12 @@ const ZCODE_INSTALL_SEMANTICS = new Set<PackageSemantic>([
 function installProjection(request: NativeProjectionRequest): NativeProjectionData | undefined {
   if (request.operation !== 'install' && request.operation !== 'update') return undefined;
   if (!('snapshot' in request) || request.pins.length > 0) return { kind: 'unverified', reasonId: 'zcode-native-projection-unverified' };
-  const unsupported = request.snapshot.inventory.requiredSemantics.find((semantic) => !ZCODE_INSTALL_SEMANTICS.has(semantic));
+  const inventory = request.snapshot.inventory;
+  // Portable hooks are compiled during staging; this does not admit authored native hook JSON.
+  const portableHooks = inventory.hookDeclarations.length > 0
+    && inventory.hookDeclarations.every((declaration) => declaration.form === 'portable-hooks');
+  const unsupported = inventory.requiredSemantics.find((semantic) =>
+    !ZCODE_INSTALL_SEMANTICS.has(semantic) && !(semantic === 'hooks' && portableHooks));
   if (unsupported !== undefined) return { kind: 'unverified', reasonId: `zcode-semantic-unverified:${unsupported}` };
   return { kind: 'equivalent', proofId: 'zcode-marketplace-projection' };
 }

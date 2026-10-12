@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { hookAdapters } from '../src/hook-build';
 import { inventoryPackageSemantics } from '../src/semantic-inventory';
@@ -9,6 +9,7 @@ import { admitPackageSemanticsFromProfiles } from '../src/capability-evidence';
 import { portableHookProfile } from '../src/portable-hook-policy';
 import { fingerprintTree } from '../src/fingerprint';
 import { repoRoot, isolatedHostEnv, writeFiles } from './util';
+import { nativeFixture } from './fixtures/historical-plugnz-75d/runtime';
 
 let root: string, home: string, source: string;
 let env: Record<string, string | undefined>;
@@ -220,5 +221,44 @@ for (const id of ['pi', 'opencode']) {
     expect(report.summary.mutationStarted).toBe(false);
     expect(readFileSync(join(home, 'state.json'), 'utf8')).toBe(state);
     expect(fingerprintTree(native)).toBe(fingerprint);
+  });
+}
+
+function zcodeOnPath(): string {
+  const tools = join(root, 'bin');
+  mkdirSync(tools);
+  symlinkSync(nativeFixture(home), join(tools, 'zcode'));
+  delete env.OPEN_PLUGIN_ZCODE_CLI_BIN;
+  env.PATH = tools + delimiter + (env.PATH ?? '');
+  return join(home, '.zcode', 'cli');
+}
+
+test('ZCode discovers an official PATH CLI and installs portable hooks before its native home exists', () => {
+  const native = zcodeOnPath(), before = fingerprintTree(source);
+  const detected = cli(['targets']);
+  expect(detected.status).toBe(0);
+  expect(JSON.parse(detected.stdout)).toContain('zcode-cli');
+  expect(existsSync(native)).toBe(false);
+  expect(success(['install', '--target', 'zcode-cli']).summary.result).toBe('converged');
+  const registry = JSON.parse(readFileSync(join(native, 'plugins', 'installed_plugins.json'), 'utf8'));
+  expect(registry.plugins).toHaveLength(1);
+  const installed = registry.plugins[0].installPath;
+  expect(existsSync(join(installed, 'hook-runtime.mjs'))).toBe(true);
+  expect(existsSync(join(installed, 'hooks', 'hooks.json'))).toBe(true);
+  expect(existsSync(join(installed, 'plugnz.hooks.json'))).toBe(false);
+  expect(JSON.parse(readFileSync(join(native, 'config.json'), 'utf8')).plugins.enabledPlugins[registry.plugins[0].id]).toBe(true);
+  expect(fingerprintTree(source)).toBe(before);
+});
+
+for (const form of ['native', 'mixed'] as const) {
+  test(`ZCode portable projection does not admit ${form} authored native hooks`, () => {
+    const native = zcodeOnPath();
+    if (form === 'native') rmSync(join(source, 'plugnz.hooks.json'));
+    writeFiles(source, { 'hooks/hooks.json': JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ type: 'command', command: 'echo authored-native' }] }] } }) });
+    const result = cli(['install', '--target', 'zcode-cli']);
+    expect(result.status).toBe(1);
+    expect(JSON.parse(result.stdout).summary.mutationStarted).toBe(false);
+    expect(existsSync(native)).toBe(false);
+    expect(existsSync(join(home, 'state.json'))).toBe(false);
   });
 }
