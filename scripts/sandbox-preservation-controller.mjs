@@ -17,14 +17,14 @@ const acquisition = config.operation === 'acquisition';
 const archiveMs = acquisition ? 240_000 : 50_000;
 const downloadMs = acquisition ? 300_000 : 60_000;
 // Larger acquisition archives get explicit conservative transport bounds;
-// tiny probes are not a throughput certification for 512 MiB.
+// tiny probes are not a throughput certification for 768 MiB.
 const reserveMs = 15_000 + 15_000 + archiveMs + downloadMs + (acquisition ? 60_000 : 30_000);
 assert.ok(config.expiresAt - config.archiveAt >= reserveMs, 'Reserve complete bounded preservation pipeline');
 assert.ok(config.diskGrowthBytes > 0 && config.diskGrowthBytes <= 3 * 1024 ** 3);
 assert.ok(Number.isSafeInteger(config.baselineUsedBytes) && config.baselineUsedBytes > 0, 'Freeze wholeFS baseline before supplier acquisition');
 assert.ok(config.operation === undefined || ['acquisition', 'native-proof', 'method-probe'].includes(config.operation));
-assert.ok(config.diskReserveBytes >= (acquisition ? 640 : 128) * 1024 ** 2);
-assert.ok(config.archiveBytes > 0 && config.archiveBytes <= (acquisition ? 512 : 100) * 1024 ** 2);
+assert.ok(config.diskReserveBytes >= (acquisition ? 896 : 128) * 1024 ** 2);
+assert.ok(config.archiveBytes > 0 && config.archiveBytes <= (acquisition ? 768 : 100) * 1024 ** 2);
 assert.match(config.evidenceRoot, /^\/vercel\/sandbox\/proof\/[a-zA-Z0-9_-]+$/u);
 const output = resolve(config.output);
 if (acquisition) {

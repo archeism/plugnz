@@ -33,3 +33,44 @@ for (const mode of ['fail', 'wait', 'partial']) test(`preservation controller re
     expect(readFileSync(join(config.output, 'receipt.json'), 'utf8')).toBe(original);
   } finally { rmSync(root, { recursive: true, force: true }); }
 }, 15_000);
+
+function withBudgetConfig(overrides, check) {
+  const root = mkdtempSync('/tmp/plugnz-preservation-test-');
+  try {
+    const cli = join(root, 'cli');
+    writeFileSync(cli, `#!${process.execPath}\n${readFileSync(resolve('test/fixtures/preservation-transport.mjs'), 'utf8')}`); chmodSync(cli, 0o755);
+    const settings = typeof overrides === 'function' ? overrides() : overrides;
+    const config = { sandbox: 'plugnz-fixture', project: 'fixture', team: 'fixture', cli,
+      experimentUid: 21001, evidenceRoot: '/vercel/sandbox/proof/fixture', output: join(root, 'output'),
+      operation: 'acquisition', baselineUsedBytes: 1, archiveAt: Date.now() + 5000, expiresAt: Date.now() + 700_000,
+      diskGrowthBytes: 3 * 1024 ** 3, diskReserveBytes: 896 * 1024 ** 2, archiveBytes: 768 * 1024 ** 2, command: ['fail'], ...settings };
+    config.sdkRoot = join(root, 'sdk'); mkdirSync(join(config.sdkRoot, 'dist/auth'), { recursive: true });
+    writeFileSync(join(config.sdkRoot, 'dist/index.js'), `export const Sandbox={get:async()=>({name:'plugnz-fixture',status:'running',expiresAt:new Date(${config.expiresAt})})};`);
+    writeFileSync(join(config.sdkRoot, 'dist/auth/index.js'), 'export const getAuth=()=>({});');
+    const configPath = join(root, 'config.json'); writeFileSync(configPath, JSON.stringify(config));
+    const result = spawnSync(process.execPath, [resolve('scripts/sandbox-preservation-controller.mjs'), configPath], {
+      env: { ...process.env, OPEN_PLUGIN_PRESERVATION_TRANSPORT_ROOT: root }, encoding: 'utf8', timeout: 10_000 });
+    check(result, config);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+}
+
+test('acquisition accepts the measured 768 MiB cap with 896 MiB scratch reserve and preserves the trial', () => {
+  withBudgetConfig(() => { const now = Date.now(); return { archiveAt: now + 5000, expiresAt: now + 635_000 }; }, (result, config) => {
+    expect(result.status).toBe(1); // transport's intentional supplier failure
+    expect(existsSync(join(config.output, 'receipt.json'))).toBe(true);
+    expect(readFileSync(join(config.output, 'restored/trial/sentinel'), 'utf8')).toBe('retained fixture');
+  });
+});
+
+for (const [label, overrides] of [
+  ['acquisition archive above 768 MiB', { archiveBytes: 768 * 1024 ** 2 + 1 }],
+  ['acquisition scratch reserve below 896 MiB', { diskReserveBytes: 896 * 1024 ** 2 - 1 }],
+  ['native archive above 100 MiB', { operation: 'native-proof', archiveBytes: 100 * 1024 ** 2 + 1 }],
+  ['acquisition expiry reserve below 630 seconds', () => { const now = Date.now(); return { archiveAt: now + 5000, expiresAt: now + 634_000 }; }],
+]) test(`preservation controller rejects ${label} before any transport or output mutation`, () => {
+  withBudgetConfig(overrides, (result, config) => {
+    expect(result.status).toBe(1);
+    expect(existsSync(config.output)).toBe(false);
+    expect(existsSync(resolve(config.sdkRoot, '../evidence'))).toBe(false);
+  });
+});

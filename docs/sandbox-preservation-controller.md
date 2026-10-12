@@ -25,8 +25,8 @@ Required JSON fields:
 | `baselineUsedBytes` | Fresh whole-filesystem `df -Pk /` used-byte measurement **before any supplier acquisition** |
 | `diskGrowthBytes` | Whole-filesystem additional allocation ceiling, at most 3 GiB |
 | `operation` | Optional `method-probe` / `native-proof`; explicit `acquisition` permits the separately approved acquisition budget |
-| `diskReserveBytes` | At least 128 MiB; acquisition requires 640 MiB (512 MiB archive plus 128 MiB growth margin) |
-| `archiveBytes` | At most 100 MiB for Native arms; acquisition alone permits at most 512 MiB |
+| `diskReserveBytes` | At least 128 MiB; acquisition requires 896 MiB (768 MiB archive plus 128 MiB growth margin) |
+| `archiveBytes` | At most 100 MiB for Native arms; acquisition alone permits at most 768 MiB |
 | `experimentUid` | Empty dedicated UID, 2000–60000, used only by this experiment inside this exact Sandbox |
 | `evidenceRoot` | Single owned child of `/vercel/sandbox/proof`; complete mutable trial state must be inside it |
 | `output` | New local evidence directory outside Git |
@@ -40,7 +40,7 @@ bounded to 20 seconds each; a late setup refuses launch. Pipeline bounds reserve
 50 seconds for archive, 60 for download and 30 margin (170 total). Acquisition
 reserves 240 seconds for inventory/archive, 300 for download and 60 margin (630
 total), including a 180-second remote compression bound. These are conservative
-configured bounds, not a claim tiny probes measured 512 MiB throughput. Download must finish before actual
+configured bounds, not a claim tiny probes measured 768 MiB throughput. Download must finish before actual
 expiry; local restore can finish afterward. Remote artifact SHA256, size, every
 trial file hash/mode and every symlink target are verified after a real local
 restore. Source snapshots and SHA256 files for both controller helpers accompany
@@ -67,15 +67,29 @@ attempts/archives are not adopted or deleted.
 
 Approved acquisition budget (parent explicitly revised the earlier 100 MiB trial
 choice): 2 vCPU/4 GiB, sufficient session duration for the
-frozen workflow plus the enforced 170-second archival reserve, additional remote
-allocation at most 3 GiB, stop reserve at least 640 MiB, local acquisition archive
-at most 512 MiB. Native arm archives remain at most 100 MiB. Before acquisition,
+frozen workflow plus the enforced 630-second acquisition archival reserve
+(170 seconds for Native arms), additional remote
+allocation at most 3 GiB, stop reserve at least 896 MiB, local acquisition archive
+at most 768 MiB. Native arm archives remain at most 100 MiB. Before acquisition,
 the controller requires at least 3 GiB local free space for bounded archive/restore
 scratch. At most three failed acquisition cohorts are authorized by the parent;
 measure aggregate local retention before each launch rather than infer it from
 the per-arm cap. Whole-filesystem sampling includes npm/pnpm/DNF caches, source/build
 scratch, temporary directories and archive growth. The image baseline is not
 mistaken for free trial allocation. No snapshots or full-store copies are used.
+
+The acquisition cap was raised after a preserved genuine Codex 0.162.0 npm
+attempt exceeded the former 384 MiB retention-stop threshold while unpacking.
+Its stopped supplier inventory retained 423,505,910 bytes of partial binary,
+compressed npm cache and diagnostics; the pinned binary was 1,840,958 bytes
+short of its known complete size. Independent restoration verified every
+retained byte, hash and mode and confirmed no partial body was omitted.
+The raw evidence archive is SHA256
+`c6e967d2c8fe6b49f6e83a15685404676be61b4ff564cf068cc21e511e8b6a6b`.
+This is an experiment-budget correction, not a change to supplier selection,
+product behavior or Native eligibility. The previous controller/configuration
+remain immutable in that failed attempt's evidence. The 630-second acquisition
+preservation deadline and 3 GiB whole-filesystem growth cap remain unchanged.
 
 Native homes, resources, journals and failed-operation snapshots are trial state:
 they must be inside `evidenceRoot` and archived intact. Each supplier declaration
