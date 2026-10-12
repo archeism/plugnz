@@ -139,6 +139,25 @@ receipt/history accounting, pin advancement or deployment. Producer and consumer
 main/release acceptance, actual adoption execution and the known full-suite
 repair failure remain unfinished requirements, not exclusions.
 
+### Remaining consumer history gap: untyped pass-through
+
+The current producer already emits optional `adoptionHistory` from
+`src/scope-inventory.ts`, including projected legacy originals and retained
+relations. Personal's scopes reader at frozen `c41141b` does **not** reject that
+field: it passes the raw history through without validating its version or shape.
+Both author and root independently reproduced acceptance of
+`{schemaVersion:99, legacyRecords:"not-an-array", records:null}` under an otherwise
+valid dcode scope. Therefore the gap is permissive, untyped pass-through, not an
+unknown-field refusal; earlier descriptions assuming rejection are incorrect.
+
+The separate `feat/personal-adoption-history-reader` candidate has a permanent
+public RED requiring that malformed history to hard-block. Its acceptance must
+cover exact producer shapes and enclosing Source/target/original correlations,
+first immutable snapshots, and retained closed history after retirement. Projected
+open originals correlate with physical `openJournals`; retained historical
+relations must not be rejected merely because their fresh journal later closes.
+No current consumer main/pin/deployment or history-parser delivery is claimed.
+
 ## Corrected candidate and combined verification
 
 Corrected candidate `2a7ca8b084e50927f1b0facf3808e97a61fab1ed` received
