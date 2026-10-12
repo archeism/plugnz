@@ -18,6 +18,8 @@ re-`add` from the source recorded in `state.json`, plus the pins that install
 carried. Both refuse rather than guess, and neither will touch a plugin this
 tool did not install. Details: `docs/pin-and-update.md`.
 
+**Portable context hooks:** `plugnz hooks build <plugin-dir> --target <host> --out <dir>` compiles session-start, stop, and pre/post-tool handlers for Claude Code, Codex, OMP, Pi v1, OpenCode, and ZCode. Handlers receive normalized JSON and return context; native adapters expose their delivery and continuation limits through `plugnz hooks targets`. See [the contract, usage, and native map](docs/hooks.md).
+
 Why another tool: `npx plugins` is closed-source and its Cursor target does not install into Cursor; nothing in the ecosystem checks that an installed plugin still *works*. See `docs/research/`.
 
 The published CLI runs under Node.js 22 or newer; `npx` needs npm, not Bun. `bunx` also works. Bun is used for development and building. `add` accepts a local plugin or marketplace directory as well as a Git URL. Native plugin targets currently include Claude Code, Codex, Kimi, Cursor, OMP, Hermes, Grok, DCode, and ZCode CLI. Run `plugnz targets --all` to see supported and unsupported capabilities for each host; standalone skill distribution is outside this CLI's scope.

@@ -1,0 +1,113 @@
+{
+  "version": 1,
+  "recorded_at": "2026-10-12T15:18:59.757856+00:00",
+  "candidate": "54a628ca53e593df1eab0c8cdf6de6f6d132cb6d",
+  "harness": "opencode",
+  "runtime_version": "1.19.0",
+  "source_pin": "733b2c627e5aec39cb33cc22373bdce33053ef2c",
+  "runtime_entry": "/root/workspace/harness-hooks-probes-20261012-9c3mll0g/runtimes/round2/opencode/node_modules/opencode-ai/bin/opencode.exe",
+  "runtime_entry_sha256": "135ac3f86c43f2a22328a3554fec5f0bc57d71576077902661bc38dac34871fd",
+  "raw_evidence": "/root/workspace/plugnz-context-hooks-20261012-evidence/opencode/attempt-02",
+  "summary": {
+    "status": "passed",
+    "elapsed_seconds": 7.461,
+    "allocated_growth_bytes": 2244608,
+    "model_request_count": 4,
+    "fake_model_usage_only": true,
+    "sessions": [
+      "ses_ecf4fd66fffeMeVTVZf8ZghduN",
+      "ses_ecf4fcfa8ffeqe7eB4C7WUE1wm"
+    ],
+    "fixture_errors": [],
+    "child_maxrss_kib": 734728,
+    "cleanup": {
+      "native_process_exited": true,
+      "native_process_group_absent": true,
+      "native_listener_closed": true,
+      "provider_listener_closed": true,
+      "provider_thread_stopped": true
+    }
+  },
+  "checks": {
+    "session1": true,
+    "session1_no_foreign_feedback": true,
+    "session1_tool_feedback_absent_before_tool": true,
+    "session2": true,
+    "session2_no_foreign_feedback": true,
+    "session2_tool_feedback_absent_before_tool": true,
+    "provider_budget": true,
+    "overall_deadline": true
+  },
+  "observed_events_by_session": [
+    {
+      "session_id": "ses_ecf4fd66fffeMeVTVZf8ZghduN",
+      "events": [
+        "session.start",
+        "tool.before",
+        "tool.after",
+        "turn.stop"
+      ]
+    },
+    {
+      "session_id": "ses_ecf4fcfa8ffeqe7eB4C7WUE1wm",
+      "events": [
+        "session.start",
+        "tool.before",
+        "tool.after",
+        "turn.stop"
+      ]
+    }
+  ],
+  "artifact_sha256": {
+    "built/opencode/context.mjs": "45e0ee30c2dae350b89d6f1d34aa36b85e1c59ac60cc0b16cbab0294ab4af6cd",
+    "built/opencode/hook-runtime.mjs": "cf673f114dd18ba382d50a5f38eebe1163c2f0e844b5106ab087a20bcba1682c",
+    "built/opencode/plugin.json": "9ceccb2be77dce800f9873c42453184b9989e4fb3cd00cf62f58b08ee42130ad",
+    "built/opencode/plugin.mjs": "1c9771e89992b4047b6e52e63b6f919beb53322a756220d33be66dbca14d1ba2"
+  },
+  "raw_receipt_sha256": {
+    "summary.json": "c151ca72106e9243f74b86782f8568b1461d2ec2623068feffb5874a56c5bcfc",
+    "health.json": "e84a915898113e67f57fe130625a64264718aa4c3634e1dc5f15068fb2a81152",
+    "checks.json": "a845752b6a75bcad750d12054af05d426e3d25c6946bfdef60debc012dfcf98b",
+    "invocation.json": "20850737a9c3ef4aaa3994e1f2a86c6eacdd255d3364753dbbfefa55d26eba13",
+    "process.json": "a8a0bb11bd36290c360e6d94420fdc4a972ac35812d8a532e36922a7353bc53b",
+    "events.jsonl": "76bb8516567bbcb951181296ab37fc03595de0b9605cd9b93bb57a55f581db13",
+    "requests.jsonl": "475ffa240e7170ac2cc299f18ccfee1c3f9d5317820354844443c24eb0e09e0e"
+  },
+  "reproduce": "python3 test/native-hook-probe-opencode.py --repo <plugnz-checkout> --runtime <isolated-opencode-1.19.0-install> --out <new-raw-root>",
+  "qualifications": [
+    "Real native server and native plugin configuration; model responses were synthesized by a loopback provider. No live model inference.",
+    "Two sessions share one server process. Startup context arrived in each first request; pre/post context and the original read result arrived in each following request. Each session emitted one observed idle check.",
+    "No cross-session feedback was observed, and tool feedback was absent before the tool ran.",
+    "Stop is observation-only. No synchronous stop gate or stop feedback was simulated.",
+    "Native successful builtin Read was exercised. MCP result variants, error paths, and continuation rejection are covered by focused adapter tests, not additional live native calls.",
+    "Resource summary measures the evidence tree and process child maximum RSS. Separately retained runtime/cache storage is not included in allocated_growth_bytes.",
+    "Attempt-02 enforces a shared 60s native operation deadline and verifies process group and both listeners are closed. The elapsed summary includes cleanup after native operations."
+  ],
+  "prior_attempts": [
+    {
+      "raw_evidence": "/root/workspace/plugnz-context-hooks-20261012-evidence/opencode/attempt-01",
+      "summary": {
+        "status": "passed",
+        "elapsed_seconds": 6.773,
+        "allocated_growth_bytes": 2240512,
+        "model_request_count": 4,
+        "fake_model_usage_only": true,
+        "sessions": [
+          "ses_ecf648cbdffexmz01W7s2o0qNs",
+          "ses_ecf6486aeffe22eH2ihyBHmzb9"
+        ],
+        "fixture_errors": [],
+        "child_maxrss_kib": 731936
+      },
+      "raw_receipt_sha256": {
+        "summary.json": "71435ee7c14869aa9719b899b1bb94f9283f48a6300f9df616f610a980dcb2ce",
+        "health.json": "e84a915898113e67f57fe130625a64264718aa4c3634e1dc5f15068fb2a81152",
+        "checks.json": "20f6364cc6b3fb970fcdf53d8c6e118508e5e65709064ea679699816cb89848f",
+        "invocation.json": "4bf6f5f319f502e3aab5cec5e276f0749c1c0ee8eb27c540bdc050a229b0bc34",
+        "events.jsonl": "e43c1096e1d53768010a3263b7154acf3666d8424cefbf9aacae12bc31248079",
+        "requests.jsonl": "b4cdf7f9bb195857c41e9691a919c3655adb5bafac36fc7e8228af1b59d7bb8e"
+      },
+      "qualification": "Native context assertions passed. Review found that recorded 60s overall deadline was not applied to every HTTP operation and cleanup was not explicitly receipted. Repro corrected and attempt-02 accepted; attempt-01 retained."
+    }
+  ]
+}

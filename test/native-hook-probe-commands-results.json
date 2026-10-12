@@ -1,0 +1,418 @@
+{
+  "schema_version": 1,
+  "reviewer": "ChatGPT GPT-6.1 Sol / final_hook_review",
+  "raw_root": "/root/workspace/plugnz-context-hooks-20261012-evidence/commands",
+  "live_model_inference": false,
+  "runtime_versions": {
+    "claude-code": "2.1.285",
+    "codex": "0.161.0",
+    "zcode-cli": "0.16.9"
+  },
+  "attempts": [
+    {
+      "harness": "claude-code",
+      "attempt": "/root/workspace/plugnz-context-hooks-20261012-evidence/commands/claude-code-20261012T170225-542301",
+      "receipt": "/root/workspace/plugnz-context-hooks-20261012-evidence/commands/claude-code-20261012T170225-542301/receipt.json",
+      "receipt_sha256": "d421ea1a108c7002846e82683d06eade69a80e92bf6157202af96ade8afdd654",
+      "status": "apparatus_failure_before_hooks_and_requests",
+      "checks": {
+        "exit_zero": false,
+        "no_budget_failure": true,
+        "three_task_requests": false,
+        "actual_read": false,
+        "kernel_read": false,
+        "startup_before_request": false,
+        "pre_context_received": false,
+        "post_context_received": false,
+        "stop_once_and_active": false,
+        "continuation_received": false,
+        "handler_pids_absent": true,
+        "listener_closed": true
+      },
+      "native": {
+        "pid": 3204329,
+        "exit_code": 134,
+        "failure": null,
+        "started_monotonic_ns": 1641767346469570,
+        "ended_monotonic_ns": 1641767355469010,
+        "wall_ms": 8.99944,
+        "log_bytes": 872,
+        "pid_absent": true,
+        "resources": {
+          "child_user_seconds": 0.0066809999999999994,
+          "child_system_seconds": 0.001857000000000001,
+          "children_maxrss_kib_cumulative": 259776
+        }
+      },
+      "native_transport": "native plugin loader",
+      "runtime": "/root/.local/bin/claude",
+      "runtime_sha256": "33dad1ec615a2e08cc78b494f05c110e49916de2c79d78ec8799ebf46b233d29",
+      "emitted_files": {
+        ".claude-plugin/plugin.json": {
+          "sha256": "de194857cf798855b4927ad7824395dfab847c2425da59d6544cea145dc7a5f6",
+          "bytes": 122
+        },
+        "handler.py": {
+          "sha256": "b9687e27636807a63e0dd03704c87e2dd9c5d04ff50b3258d338b4e3731dcd95",
+          "bytes": 525
+        },
+        "hook-runtime.mjs": {
+          "sha256": "cf673f114dd18ba382d50a5f38eebe1163c2f0e844b5106ab087a20bcba1682c",
+          "bytes": 11185
+        },
+        "hooks/hooks.json": {
+          "sha256": "f26eb56d9e57bd82fe68e5ac961f15ac4c17d46c73d05c97615cf68285c2e071",
+          "bytes": 1355
+        },
+        "hooks/plugnz-claude-code.mjs": {
+          "sha256": "1cbd5629fe34f9eee630ef4817308ee1b9056c4b3dfa3f2a355bb1e0de8c0b43",
+          "bytes": 3239
+        },
+        "plugin.json": {
+          "sha256": "de194857cf798855b4927ad7824395dfab847c2425da59d6544cea145dc7a5f6",
+          "bytes": 122
+        }
+      }
+    },
+    {
+      "harness": "claude-code",
+      "attempt": "/root/workspace/plugnz-context-hooks-20261012-evidence/commands/claude-code-20261012T171108-2adc7c",
+      "receipt": "/root/workspace/plugnz-context-hooks-20261012-evidence/commands/claude-code-20261012T171108-2adc7c/receipt.json",
+      "receipt_sha256": "14540ade3222bda7d261cebc88d50738ce9475096bafc7ef1d0b93853fc2bab9",
+      "status": "native_consumer_pass",
+      "checks": {
+        "exit_zero": true,
+        "no_budget_failure": true,
+        "three_task_requests": true,
+        "actual_read": true,
+        "kernel_read": true,
+        "startup_before_request": true,
+        "pre_context_received": true,
+        "post_context_received": true,
+        "stop_once_and_active": true,
+        "continuation_received": true,
+        "handler_pids_absent": true,
+        "listener_closed": true
+      },
+      "native": {
+        "pid": 3254631,
+        "exit_code": 0,
+        "failure": null,
+        "started_monotonic_ns": 1642290233440908,
+        "ended_monotonic_ns": 1642291479448591,
+        "wall_ms": 1246.007683,
+        "log_bytes": 10087,
+        "pid_absent": true,
+        "resources": {
+          "child_user_seconds": 0.7999269999999999,
+          "child_system_seconds": 0.21379199999999998,
+          "children_maxrss_kib_cumulative": 258600
+        }
+      },
+      "native_transport": "native plugin loader",
+      "runtime": "/root/.local/bin/claude",
+      "runtime_sha256": "33dad1ec615a2e08cc78b494f05c110e49916de2c79d78ec8799ebf46b233d29",
+      "emitted_files": {
+        ".claude-plugin/plugin.json": {
+          "sha256": "de194857cf798855b4927ad7824395dfab847c2425da59d6544cea145dc7a5f6",
+          "bytes": 122
+        },
+        "handler.py": {
+          "sha256": "b9687e27636807a63e0dd03704c87e2dd9c5d04ff50b3258d338b4e3731dcd95",
+          "bytes": 525
+        },
+        "hook-runtime.mjs": {
+          "sha256": "cf673f114dd18ba382d50a5f38eebe1163c2f0e844b5106ab087a20bcba1682c",
+          "bytes": 11185
+        },
+        "hooks/hooks.json": {
+          "sha256": "f26eb56d9e57bd82fe68e5ac961f15ac4c17d46c73d05c97615cf68285c2e071",
+          "bytes": 1355
+        },
+        "hooks/plugnz-claude-code.mjs": {
+          "sha256": "560b503f9e18abb154cd8e1dc5f659b57cc7912032f1edf25f6aa53c046cf586",
+          "bytes": 3239
+        },
+        "plugin.json": {
+          "sha256": "de194857cf798855b4927ad7824395dfab847c2425da59d6544cea145dc7a5f6",
+          "bytes": 122
+        }
+      }
+    },
+    {
+      "harness": "codex",
+      "attempt": "/root/workspace/plugnz-context-hooks-20261012-evidence/commands/codex-20261012T171120-3455e9",
+      "receipt": "/root/workspace/plugnz-context-hooks-20261012-evidence/commands/codex-20261012T171120-3455e9/receipt.json",
+      "receipt_sha256": "6f6a7e2adfa77351089c84d3508e600fd5fd93e2b55533dd48b07225141fdde4",
+      "status": "untrusted_negative_and_tool_sandbox_apparatus_error",
+      "checks": {
+        "exit_zero": true,
+        "no_budget_failure": true,
+        "three_task_requests": false,
+        "actual_read": false,
+        "kernel_read": false,
+        "startup_before_request": false,
+        "pre_context_received": false,
+        "post_context_received": false,
+        "stop_once_and_active": false,
+        "continuation_received": false,
+        "handler_pids_absent": true,
+        "listener_closed": true
+      },
+      "native": {
+        "pid": 3255103,
+        "exit_code": 0,
+        "failure": null,
+        "started_monotonic_ns": 1642301872483997,
+        "ended_monotonic_ns": 1642303654592536,
+        "wall_ms": 1782.108539,
+        "log_bytes": 600,
+        "pid_absent": true,
+        "resources": {
+          "child_user_seconds": 0.279999,
+          "child_system_seconds": 0.184922,
+          "children_maxrss_kib_cumulative": 309052
+        }
+      },
+      "native_transport": "native user hook config referring to generated wrapper; exact native trust required",
+      "runtime": "/root/.codex/packages/standalone/releases/0.161.0-x86_64-unknown-linux-musl/bin/codex",
+      "runtime_sha256": "9a820c17865fa825d04db416818679a9d63bd72e50835c396f496e5684626c9c",
+      "emitted_files": {
+        ".codex-plugin/plugin.json": {
+          "sha256": "de194857cf798855b4927ad7824395dfab847c2425da59d6544cea145dc7a5f6",
+          "bytes": 122
+        },
+        "handler.py": {
+          "sha256": "b9687e27636807a63e0dd03704c87e2dd9c5d04ff50b3258d338b4e3731dcd95",
+          "bytes": 525
+        },
+        "hook-runtime.mjs": {
+          "sha256": "cf673f114dd18ba382d50a5f38eebe1163c2f0e844b5106ab087a20bcba1682c",
+          "bytes": 11185
+        },
+        "hooks/hooks.json": {
+          "sha256": "6b678ab1b5323637a480cb5563ec44cccba14a95e44f00a0b31eec22ea44d946",
+          "bytes": 1057
+        },
+        "hooks/plugnz-codex.mjs": {
+          "sha256": "27fb4fe7200ae1f4df671c901d875670b7f5c864b5a4c1cd6a323430143d6534",
+          "bytes": 3175
+        }
+      }
+    },
+    {
+      "harness": "zcode-cli",
+      "attempt": "/root/workspace/plugnz-context-hooks-20261012-evidence/commands/zcode-cli-20261012T170234-fbaa6d",
+      "receipt": "/root/workspace/plugnz-context-hooks-20261012-evidence/commands/zcode-cli-20261012T170234-fbaa6d/receipt.json",
+      "receipt_sha256": "98927d78fbd46b4359f695f33a6deba933638396ce44c53468af2030c4e920b9",
+      "status": "native_consumer_pass",
+      "checks": {
+        "exit_zero": true,
+        "no_budget_failure": true,
+        "three_task_requests": true,
+        "actual_read": true,
+        "kernel_read": true,
+        "startup_before_request": true,
+        "pre_context_received": true,
+        "post_context_received": true,
+        "stop_once_and_active": true,
+        "continuation_received": true,
+        "handler_pids_absent": true,
+        "listener_closed": true
+      },
+      "native": {
+        "pid": 3204573,
+        "exit_code": 0,
+        "failure": null,
+        "started_monotonic_ns": 1641776155274383,
+        "ended_monotonic_ns": 1641778791132157,
+        "wall_ms": 2635.857774,
+        "log_bytes": 731,
+        "pid_absent": true,
+        "resources": {
+          "child_user_seconds": 2.440846,
+          "child_system_seconds": 0.460211,
+          "children_maxrss_kib_cumulative": 384176
+        }
+      },
+      "native_transport": "native plugin loader",
+      "runtime": "/root/workspace/harness-hooks-probes-20261012-9c3mll0g/runtimes/round2/zcode/source/apps/zcode-cli/packages/cli/dist/zcode.cjs",
+      "runtime_sha256": "f78a9144825414853caf3aac2f6913f72def33a808aae7885d50230c289c60ee",
+      "emitted_files": {
+        ".zcode-plugin/plugin.json": {
+          "sha256": "de194857cf798855b4927ad7824395dfab847c2425da59d6544cea145dc7a5f6",
+          "bytes": 122
+        },
+        "handler.py": {
+          "sha256": "b9687e27636807a63e0dd03704c87e2dd9c5d04ff50b3258d338b4e3731dcd95",
+          "bytes": 525
+        },
+        "hook-runtime.mjs": {
+          "sha256": "cf673f114dd18ba382d50a5f38eebe1163c2f0e844b5106ab087a20bcba1682c",
+          "bytes": 11185
+        },
+        "hooks/hooks.json": {
+          "sha256": "c812379d67fc4e7528ac2824188ddbb210ab746ccc69953f9b49a3f498ca6e87",
+          "bytes": 1345
+        },
+        "hooks/plugnz-zcode-cli.mjs": {
+          "sha256": "706ad2dd113a7dfc121c49ca49b1d4aad08843f6c21f83330393b9a133dbe2e8",
+          "bytes": 3284
+        },
+        "plugin.json": {
+          "sha256": "de194857cf798855b4927ad7824395dfab847c2425da59d6544cea145dc7a5f6",
+          "bytes": 122
+        }
+      }
+    }
+  ],
+  "codex_trusted_consumption": "pending native folder trust and exact-definition review; automatic approval rejection, no bypass",
+  "codex_review": {
+    "status": "blocked_before_hook_definition_review",
+    "folder": "/root/workspace/plugnz-context-hooks-20261012-evidence/commands/codex-20261012T171120-3455e9/project",
+    "isolated_profile": "/root/workspace/plugnz-context-hooks-20261012-evidence/commands/codex-20261012T171120-3455e9/profile",
+    "generated_plugin": "/root/workspace/plugnz-context-hooks-20261012-evidence/commands/codex-20261012T171120-3455e9/built/codex",
+    "native_config": "/root/workspace/plugnz-context-hooks-20261012-evidence/commands/codex-20261012T171120-3455e9/profile/hooks.json",
+    "rejected_action": {
+      "action": "Select 1 / Trust and continue in Codex owned disposable fixture folder access dialog",
+      "result": "rejected",
+      "reason": "The input selects Codex\u2019s \u201cTrust and continue\u201d option, which saves a folder-trust decision and changes the profile\u2019s trust state; the authorized review explicitly requires no trust-store edits or trust-all behavior, so this persistent security-boundary change is outside the approved scope."
+    },
+    "required_user_approval": "Trust this exact disposable folder through Codex native UI, then review and trust only the four exact generated hook definitions; no trust-all, hash copying or production profile changes.",
+    "native_project_trust_saved": false,
+    "native_hook_trust_saved": false,
+    "review_process": {
+      "pid": 3296009,
+      "exit": -15,
+      "wall_seconds": 138.65197693393566,
+      "pid_absent": true,
+      "trust_method": "Native exact-definition review; no trust-all and no trust-store edits"
+    },
+    "commands": [
+      {
+        "event": "SessionStart",
+        "group_index": 0,
+        "handler_index": 0,
+        "definition": {
+          "type": "command",
+          "command": "node \"/root/workspace/plugnz-context-hooks-20261012-evidence/commands/codex-20261012T171120-3455e9/built/codex/hooks/plugnz-codex.mjs\"",
+          "async": false,
+          "timeout": 4
+        },
+        "definition_json_sha256": "09e325d09dd0031605776bfb841ebc987b1e45677bffda3bef606a56d9ae39f3",
+        "identity_note": "Definition digest for review binding; not a fabricated native trust hash"
+      },
+      {
+        "event": "Stop",
+        "group_index": 0,
+        "handler_index": 0,
+        "definition": {
+          "type": "command",
+          "command": "node \"/root/workspace/plugnz-context-hooks-20261012-evidence/commands/codex-20261012T171120-3455e9/built/codex/hooks/plugnz-codex.mjs\"",
+          "async": false,
+          "timeout": 4
+        },
+        "definition_json_sha256": "c03f1aa14111595183b6cd17b1401dfdf3c5ed9b600ff5cab5f2f18310c8995f",
+        "identity_note": "Definition digest for review binding; not a fabricated native trust hash"
+      },
+      {
+        "event": "PreToolUse",
+        "group_index": 0,
+        "handler_index": 0,
+        "definition": {
+          "type": "command",
+          "command": "node \"/root/workspace/plugnz-context-hooks-20261012-evidence/commands/codex-20261012T171120-3455e9/built/codex/hooks/plugnz-codex.mjs\"",
+          "async": false,
+          "timeout": 4
+        },
+        "definition_json_sha256": "7cf8d0c6dadea3ac199d14b61ddd2634aa10fb6b2d4b76217b3970f61661333a",
+        "identity_note": "Definition digest for review binding; not a fabricated native trust hash"
+      },
+      {
+        "event": "PostToolUse",
+        "group_index": 0,
+        "handler_index": 0,
+        "definition": {
+          "type": "command",
+          "command": "node \"/root/workspace/plugnz-context-hooks-20261012-evidence/commands/codex-20261012T171120-3455e9/built/codex/hooks/plugnz-codex.mjs\"",
+          "async": false,
+          "timeout": 4
+        },
+        "definition_json_sha256": "75924b8ea160c11bf90d11f896fa6a8bdbdf3f41270cf9f89d28558525e55f7f",
+        "identity_note": "Definition digest for review binding; not a fabricated native trust hash"
+      }
+    ],
+    "current_lane_allocated_bytes": 139251712,
+    "current_isolated_profile_allocated_bytes": 137064448,
+    "declared_review_lane_cap_bytes": 67108864,
+    "review_budget_overrun": true,
+    "review_budget_admissible": false,
+    "missing_monitor": "Initial TUI bridge did not monitor disk; native marketplace cache grew beyond64MiB. Corrected reproducible bridge now checks disk before launch and everysecond; no new attempt run.",
+    "retained_cache_exclusion_from_bounded_archive": "/root/workspace/plugnz-context-hooks-20261012-evidence/commands/codex-20261012T171120-3455e9/profile/.tmp",
+    "retained_cache_allocated_bytes": 133111808,
+    "future_default64MiB_launch_refused": true
+  },
+  "approval_rejections": [
+    {
+      "action": "Remove bwrap isolation from Claude native probe",
+      "result": "rejected",
+      "reason": "This repeats the previously denied removal of `bwrap` isolation from the native Claude probe, changing it to execute the installed CLI unsandboxed with host-level access; that conflicts with the explicit isolated-profile/no-bypass scope, and there is no user-authored re-approval for this exact security-boundary weakening."
+    },
+    {
+      "action": "Run unsandboxed Claude native probe variant",
+      "result": "rejected",
+      "reason": "This would execute the native Claude probe through the modified script whose sandbox wrapper was removed, launching the installed CLI with host-level access; that violates the explicitly authorized isolated-profile/no-bypass scope, and no user-authored re-approval covers the unsandboxed execution."
+    },
+    {
+      "action": "Select 1 / Trust and continue in Codex owned disposable fixture folder access dialog",
+      "result": "rejected",
+      "reason": "The input selects Codex\u2019s \u201cTrust and continue\u201d option, which saves a folder-trust decision and changes the profile\u2019s trust state; the authorized review explicitly requires no trust-store edits or trust-all behavior, so this persistent security-boundary change is outside the approved scope."
+    }
+  ],
+  "bounds": {
+    "native_seconds": 40,
+    "task_requests": 6,
+    "request_body_bytes": 262144,
+    "process_log_bytes": 1048576,
+    "declared_lane_cap_initial": 20971520,
+    "declared_lane_cap_corrected_before_review": 67108864,
+    "allocated_lane_bytes": 139255808,
+    "correction": "Native Codex bootstrap produced29MiB isolated runtime state; initial20MiB forecast was insufficient. First native run finished before the periodic disk monitor observed finalgrowth. Subsequent review was blocked by before-launch size gate until64MiB budget declared. No data deleted. Native review later populated133MB marketplace cache; missing TUI monitor let it exceed64MiB. Review not accepted as bounded pass. All state retained; disk monitor added before handoff without another native attempt.",
+    "review_budget_overrun": true
+  },
+  "reproduction": {
+    "script": "test/native-hook-probe-commands.py",
+    "script_sha256": "b25052ab91e11d5878ca351ed2e70015e98412b872907e71db54b59b78c8744e",
+    "external_fixture_dependency": false,
+    "fixture_helper_provenance": "Minimal retained ZCode probe helpers copied into script; current source is self-contained. Native runtime binaries remain prerequisites.",
+    "claude": "python3 test/native-hook-probe-commands.py claude-code --evidence /absolute/owned/new-lane --worktree /absolute/plugnz-worktree",
+    "zcode": "unshare --net python3 test/native-hook-probe-commands.py zcode-cli --evidence /absolute/owned/new-lane --worktree /absolute/plugnz-worktree",
+    "codex_negative": "python3 test/native-hook-probe-commands.py codex --evidence /absolute/owned/new-lane --worktree /absolute/plugnz-worktree",
+    "codex_review": "Prepare --review --reuse-attempt then run test/native-hook-probe-codex-review.py ATTEMPT; user approval of exact folder prerequisite remains pending",
+    "read_fixture": "Claude/ZCode native Read; Codex native exec_command harmless cat attempted, blocked by nested sandbox apparatus before file read",
+    "review_script": "test/native-hook-probe-codex-review.py",
+    "review_script_sha256": "05502955f76bbc3b574e23dfbf31113d0a7b35b813c8ef2e76c7d22673af481a"
+  },
+  "limitations": [
+    "One fresh positive native case each for Claude/ZCode; previous independent baseline/omit-context controls remain historical evidence",
+    "Native Codex trusted generated-wrapper effects not admitted",
+    "No resume or other-tool-family qualification",
+    "Command shell invocation translated to absolute emitted wrapper path only for Codex user-scope native config; Codex plugin loader not exercised",
+    "Synthetic completions establish hook mechanics, not model obedience or quality",
+    "ZCode Node26.7.0 differs from source-declared24.14.0"
+  ],
+  "all_command_lane_writers_stopped": true,
+  "archive_exclusions": [
+    {
+      "path": "/root/workspace/plugnz-context-hooks-20261012-evidence/commands/codex-20261012T171120-3455e9/profile/.tmp",
+      "reason": "Native downloaded marketplace/cache, retained in place separately; not claimed included in bounded raw archive",
+      "allocated_bytes": 133111808
+    }
+  ],
+  "focused_tests": {
+    "command": "bun test /root/workspace/plugnz-context-hooks-20261012/test/command-hooks.test.ts",
+    "passed": 33,
+    "failed": 0,
+    "assertions": 77
+  }
+}

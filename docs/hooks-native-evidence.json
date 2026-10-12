@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "recorded_at": "2026-10-12T15:29:20.954708+00:00",
+  "candidate": "54a628ca53e593df1eab0c8cdf6de6f6d132cb6d",
+  "archive": "/root/workspace/plugnz-context-hooks-20261012-evidence/native-evidence-20261012.tar.gz",
+  "archive_sha256": "495d4120e6be6d5365bbbb2114b9ffd78d41e9fc1843b8d0924a5c5848374a5f",
+  "archive_bytes": 1026842,
+  "file_manifest": "/root/workspace/plugnz-context-hooks-20261012-evidence/native-evidence-files.json",
+  "file_manifest_sha256": "96be847ec601b57076b3e7c51e3fd86026ec8e9c56a2befd2b8f73c4dd798be6",
+  "entries": 447,
+  "logical_file_bytes": 10910160,
+  "declared_input_cap_bytes": 67108864,
+  "included_roots": [
+    "/root/workspace/plugnz-context-hooks-20261012-evidence/commands",
+    "/root/workspace/plugnz-context-hooks-20261012-evidence/omp-pi/runs",
+    "/root/workspace/plugnz-context-hooks-20261012-evidence/opencode"
+  ],
+  "excluded": [
+    {
+      "path": "/root/workspace/plugnz-context-hooks-20261012-evidence/commands/codex-20261012T171120-3455e9/profile/.tmp",
+      "reason": "Downloaded Codex native marketplace cache is retained separately. The original review exceeded its declared resource budget; see command receipt."
+    },
+    {
+      "path": "/root/workspace/plugnz-context-hooks-20261012-evidence/omp-pi/runtime",
+      "reason": "Separately acquired Pi runtime retained outside the native-attempt archive."
+    },
+    {
+      "path": "/root/workspace/plugnz-context-hooks-20261012-evidence/verification",
+      "reason": "Automated suite verification has a separate receipt and is still being finalized."
+    }
+  ],
+  "all_included_native_writers_stopped": true
+}

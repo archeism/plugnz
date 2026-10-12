@@ -1,0 +1,277 @@
+{
+  "schemaVersion": 1,
+  "recordedAtUtc": "2026-10-12T15:41:59.110579+00:00",
+  "baselineCommit": "db1021e8d2e867daa19aae3380c813f531527438",
+  "productionCommit": "54a628ca53e593df1eab0c8cdf6de6f6d132cb6d",
+  "testedCommit": "a25b05ab338843de7b98113c382408a650e793ae",
+  "evidenceDirectory": "plugnz-context-hooks-20261012-evidence/verification",
+  "finalGate": {
+    "passed": true,
+    "exitCode": 0,
+    "command": [
+      "setpriv",
+      "--reuid=65534",
+      "--regid=65534",
+      "--clear-groups",
+      "--bounding-set=-all",
+      "--no-new-privs",
+      "/tmp/plugnz-gate-runtimes-hyz_q1ph/bun",
+      "test"
+    ],
+    "runtime": {
+      "bun": {
+        "version": "1.4.3",
+        "sha256": "7ce7d6b654eddeec20afddf2396317fba6dc19ab52788a27e894e1806bf8f24b"
+      },
+      "node": {
+        "version": "v22.23.1",
+        "sha256": "93956de2e59480474a7b46571da1651180b1a050cdf32641ebec4ce6e478e068"
+      }
+    },
+    "privileges": {
+      "uid": 65534,
+      "euid": 65534,
+      "caps": [
+        "CapEff:\t0000000000000000",
+        "CapBnd:\t0000000000000000",
+        "NoNewPrivs:\t1"
+      ]
+    },
+    "sourceArchiveSha256": "4128dfe81187ebe3df4854442ac815c0de846453338bc75e5d63f3d6fdac572f",
+    "lockSha256": "404ccbedd999c4eb9586b3ecc357e171569137f533013be98394c054591f2735",
+    "freshArchive": true,
+    "globalRuntimeChanged": false,
+    "dependencyInstall": "Existing locked dependencies copied into the isolated archive; no global install.",
+    "result": {
+      "file": "final-suite-a25b05a.log",
+      "sha256": "322187232962d271bddee22f37a1a4e1f27f4aab8bdbff2761638e2428784609",
+      "bytes": 127122,
+      "pass": 991,
+      "skip": 6,
+      "fail": 0,
+      "tests": 997,
+      "files": 99,
+      "seconds": 206.1,
+      "assertions": 7133
+    },
+    "failures": [],
+    "skips": [
+      {
+        "file": "test/zcode-cli-lifecycle.test.ts",
+        "test": "official ZCode CLI default detection > without an override, the desktop-bundled CLI under an isolated home is detected"
+      },
+      {
+        "file": "test/zcode-cli-lifecycle.test.ts",
+        "test": "official ZCode CLI default detection > an isolated home never falls through to the system-wide desktop bundle"
+      },
+      {
+        "file": "test/hermes-native-loader.test.ts",
+        "test": "current Hermes loader registers ordinary discovery and queues a prompt command into CLI input"
+      },
+      {
+        "file": "test/hermes-native-loader.test.ts",
+        "test": "public CLI admits official editable and native forwarder launchers without source or venv writes"
+      },
+      {
+        "file": "test/grok-native-loader.test.ts",
+        "test": "real Grok loader reads a local bundle from an isolated home and empty cwd"
+      },
+      {
+        "file": "test/codex-lifecycle.test.ts",
+        "test": "codex lifecycle > keeps the new active slot when cleanup of an older owned version fails"
+      }
+    ],
+    "limits": {
+      "seconds": 420,
+      "logBytes": 20971520
+    },
+    "stopReason": null,
+    "workspaceCleaned": true,
+    "receipt": {
+      "file": "final-suite-a25b05a.json",
+      "sha256": "0858154492b4b12c0f54d306f6f921ada470e9aeb5965d9bc8d26deb142e7f58",
+      "bytes": 3571
+    },
+    "runner": {
+      "file": "final-suite-a25b05a.py",
+      "sha256": "793d8d7e3a5d5e2ddd8b371622e413473d95938691efb34b0ce435fffb48c736",
+      "bytes": 5024
+    }
+  },
+  "originalRootComparison": {
+    "bun": "1.4.2",
+    "uid": 0,
+    "candidate": {
+      "file": "full-suite-01.log",
+      "sha256": "58812d7f0dc267cbb8fdaede837ad9f0155b1f80d6c088142cf20032e9a5fc10",
+      "bytes": 269053,
+      "pass": 972,
+      "skip": 6,
+      "fail": 19,
+      "tests": 997,
+      "files": 99,
+      "seconds": 181.53,
+      "assertions": 7014
+    },
+    "baseline": {
+      "file": "baseline-suite-01.log",
+      "sha256": "eca15c571965260ab9f49a74932441bc5c434be51699595e873bdc837cdaa991",
+      "bytes": 262456,
+      "pass": 915,
+      "skip": 6,
+      "fail": 19,
+      "tests": 940,
+      "files": 93,
+      "seconds": 215.91,
+      "assertions": 6804
+    },
+    "sameFailureSet": true,
+    "matchedFailureCount": 19,
+    "candidateOnlyFailures": [],
+    "baselineOnlyFailures": [],
+    "affectedTestsUnchanged": true,
+    "cause": "Root retained DAC-bypass capabilities, so chmod-based denial fixtures did not induce the expected write or cleanup errors.",
+    "sameBunUnprivilegedRecheck": {
+      "file": "candidate-root-failures-unprivileged-bun142.log",
+      "sha256": "d56ae7ad0aac207168a414c26aec9ad3d6b9448d137e5a81687ea46ac31b2af9",
+      "bytes": 2511,
+      "pass": 19,
+      "skip": 0,
+      "fail": 0,
+      "tests": 19,
+      "files": 9,
+      "seconds": 8.69,
+      "assertions": 147
+    },
+    "permissionWitness": {
+      "file": "permission-fault-witness-01.json",
+      "sha256": "339ac03a709581a480a8d0982c6816dc9da1d043b3971cc301552266b9496ef8",
+      "bytes": 543
+    },
+    "fullComparison": {
+      "file": "full-suite-comparison-01.json",
+      "sha256": "d5a208921ff0591cb78ef8f11ca4db8c4dc9a92e7aef1510ab28972b80b38c55",
+      "bytes": 36903
+    }
+  },
+  "ciRuntimeBeforeRepair": {
+    "bun": "1.4.3",
+    "node": "v22.23.1",
+    "uid": 65534,
+    "capabilities": "zero",
+    "baseline": {
+      "file": "baseline-full-unprivileged-bun143-node22.log",
+      "sha256": "4f8776a425441f656a71f7300083048bd67d1a3fa464916b618e58c4dfbd6080",
+      "bytes": 120909,
+      "pass": 934,
+      "skip": 6,
+      "fail": 0,
+      "tests": 940,
+      "files": 93,
+      "seconds": 203.5,
+      "assertions": 6922
+    },
+    "baselineFocusedCrashTest": {
+      "file": "baseline-ci-crash-focused-01.log",
+      "sha256": "8f0b0797c790251ce8234af1c49e5419e45470cb4fb048488442878e7541ca4d",
+      "bytes": 274,
+      "pass": 1,
+      "skip": 0,
+      "fail": 0,
+      "tests": 1,
+      "files": 1,
+      "seconds": 1.67,
+      "assertions": 12
+    },
+    "candidate": {
+      "file": "candidate-full-unprivileged-bun143-node22.log",
+      "sha256": "b9410ddadf045d992dcdc425a5cfb94b6e1e90e0a1557d119e0a4ed22fe9f118",
+      "bytes": 128394,
+      "pass": 990,
+      "skip": 6,
+      "fail": 1,
+      "tests": 997,
+      "files": 99,
+      "seconds": 215.6,
+      "assertions": 7124
+    },
+    "remainingFailure": "killing the public CLI at cache rename leaves only a complete candidate or the complete prior registration",
+    "baselineReproducedRemainingFailure": false,
+    "observation": "The unchanged parent fs.watch observer could run after the child had committed and removed the prior slot. The baseline focused and full runs passed; the candidate full run exposed this unsynchronized test boundary."
+  },
+  "testOnlyRepair": {
+    "commit": "a25b05ab338843de7b98113c382408a650e793ae",
+    "changedFiles": [
+      "test/dcode-sync-public.test.ts"
+    ],
+    "productionFilesChanged": false,
+    "testSha256": "28d539f0fdc111ab9f5de05e9997d08a46a1af26190eba800d99152a520fe7a5",
+    "patch": {
+      "file": "dcode-fixture-fix-02.patch",
+      "sha256": "5cbb0a2cc21aa0302c2a4c3f26a20e6d2aeb247bddb6a5ae338073967be04d12",
+      "bytes": 3700
+    },
+    "mechanism": "Only the interrupted CLI child preloads a wrapper. It performs the real new-cache rename, then blocks synchronously before apply resumes. The test retains the original checks and asserts actual SIGKILL termination.",
+    "originalAssertionsRetained": 12,
+    "assertionsPerFocusedMode": 13,
+    "barrierTimeoutSeconds": 10,
+    "barrierTimeoutExitCode": 79,
+    "requiredExitSignal": "SIGKILL",
+    "bunMode": {
+      "file": "dcode-fixture-fix-bun-02.log",
+      "sha256": "e2547cbf7d1ed3d081bc6d2b8829683d3dea66357b760ed896b8172a37363a6d",
+      "bytes": 274,
+      "pass": 1,
+      "skip": 0,
+      "fail": 0,
+      "tests": 1,
+      "files": 1,
+      "seconds": 1.53,
+      "assertions": 13
+    },
+    "freshlyBuiltPackedNodeMode": {
+      "file": "dcode-fixture-fix-packed-node-02.log",
+      "sha256": "76c83de9b544a0706b6665696f391e722170c326f35362e5bf96ad3566273f3d",
+      "bytes": 274,
+      "pass": 1,
+      "skip": 0,
+      "fail": 0,
+      "tests": 1,
+      "files": 1,
+      "seconds": 2.18,
+      "assertions": 13
+    },
+    "buildPassed": true,
+    "typecheckPassed": true,
+    "receipt": {
+      "file": "dcode-fixture-fix-02.json",
+      "sha256": "6ab7dc8d1b7a08f5c5baecb78fc271c93216028ec245b74aaf68953b8ea15c21",
+      "bytes": 5648
+    },
+    "nativeRenameInterceptionProof": {
+      "file": "rename-interpose-probe-03.json",
+      "sha256": "178423c4cb211c8d1af4f1f4e6099f770e8bbe54f4f9910e7aa51aa5a53b0fe5",
+      "bytes": 1747
+    }
+  },
+  "preservedInvalidRuntimeAttempt": {
+    "diagnosticOnly": true,
+    "bun": "1.4.3",
+    "accidentallySelectedNode": "v20.19.2",
+    "result": {
+      "file": "candidate-full-unprivileged-bun143.log",
+      "sha256": "cfcc92d330f139126538e9053dc0e1828f4c7a8c9ebe9d57f3859f990040848f",
+      "bytes": 142169,
+      "pass": 977,
+      "skip": 6,
+      "fail": 14,
+      "tests": 997,
+      "files": 99,
+      "seconds": 211.01,
+      "assertions": 6909
+    },
+    "unsupportedNodeFailures": 13,
+    "additionalWatcherFailure": 1,
+    "correction": "The reduced PATH selected system Node 20. A copy of the existing Node 22.23.1 binary was then explicitly put on the isolated PATH; no global runtime was changed."
+  }
+}

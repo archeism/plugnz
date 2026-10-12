@@ -1,0 +1,283 @@
+{
+  "version": 1,
+  "recorded_at": "2026-10-12T15:01:34.962535+00:00",
+  "scope": "Real generated extension + standalone portable command runtime, real OMP/Pi CLI, builtin read and one pure Pi structured fixture tool; synthetic loopback model responses.",
+  "source_pins": {
+    "omp": "f261ed9faf16b61880b544f599876bface4ded0d",
+    "pi": "abe508e1b89912adde45528136c3221eb69acdd7"
+  },
+  "runtime_versions": {
+    "omp": "18.8.7",
+    "pi_package": "@earendil-works/pi-coding-agent",
+    "pi": "1.1.0",
+    "pi_cli_sha256": "e79626f2dd6f94aa45d30f3fa63cd84319a6eefcd150b353cfaf274366926774",
+    "pi_isolated_acquisition_receipt": "/root/workspace/plugnz-context-hooks-20261012-evidence/omp-pi/runtime/receipt.json",
+    "pi_lock_sha256": "d0ed1f37a031ede5b83196d3250e7d735523c0feeac134bbcb19defb6ad1bbad"
+  },
+  "accepted_cases": [
+    {
+      "evidence": "/root/workspace/plugnz-context-hooks-20261012-evidence/omp-pi/runs/attempt-01-omp/baseline",
+      "harness": "omp",
+      "case": "baseline",
+      "actual_request_count": 2,
+      "hook_invocations": 0,
+      "roles_observed_on_this_provider": {},
+      "status": "completed",
+      "exit_code": 0,
+      "cleanup": {
+        "native_pid_absent": true,
+        "process_group_absent": true,
+        "listener_closed": true,
+        "server_thread_stopped": true
+      },
+      "resource": {
+        "wall_seconds": 2.052299401955679,
+        "sampled_native_peak_rss_kib": 375868,
+        "child_cpu_user_seconds": 1.953699,
+        "child_cpu_system_seconds": 0.222756,
+        "before_allocated_bytes": 385024,
+        "after_allocated_bytes": 774144,
+        "scope": "Native CLI RSS samples; waited child CPU; raw evidence tree excludes separately bounded acquired runtime.",
+        "live_inference": false,
+        "token_usage": "Synthetic protocol only; no model inference or billable tokens."
+      },
+      "manifest_sha256": "a46538697e34b9679165dab3d5108bdd28544430a5d3e3a012e5ecd2e4c8b3fa",
+      "binary_sha256": "2a1f0be0d536031830c2de5abc1a0f7f06948e7c3fdcb77542ef70cba3497481",
+      "compiled_file_hashes": {
+        "extension.mjs": "611a364d61e63a671ed6ab2815c00ad48da6362b3366a5e7ef262b7dbcf0ff1e",
+        "handler.mjs": "6ebd4725a281c93a59d3ff5e2efce4d23566267186f72773329930dc7099c75a",
+        "observer.mjs": "ea309b823151a6cae2bdfeee39e6c6a9e9d835e6aa45807477d4eea646754dfd",
+        "portable-config.json": "887820009578e8dc55e174da5873b4025cde40c5b0c33e750b69238b3c158079",
+        "hook-runtime.mjs": "cf673f114dd18ba382d50a5f38eebe1163c2f0e844b5106ab087a20bcba1682c"
+      }
+    },
+    {
+      "evidence": "/root/workspace/plugnz-context-hooks-20261012-evidence/omp-pi/runs/attempt-01-omp/context",
+      "harness": "omp",
+      "case": "context",
+      "actual_request_count": 3,
+      "hook_invocations": 5,
+      "roles_observed_on_this_provider": {
+        "session.start": [
+          "user"
+        ],
+        "tool.before": [
+          "user"
+        ],
+        "tool.after": [
+          "user"
+        ],
+        "turn.stop": [
+          "user"
+        ]
+      },
+      "status": "completed",
+      "exit_code": 0,
+      "cleanup": {
+        "native_pid_absent": true,
+        "process_group_absent": true,
+        "listener_closed": true,
+        "server_thread_stopped": true
+      },
+      "resource": {
+        "wall_seconds": 2.32171917706728,
+        "sampled_native_peak_rss_kib": 437388,
+        "child_cpu_user_seconds": 2.2322789999999997,
+        "child_cpu_system_seconds": 0.30641099999999993,
+        "before_allocated_bytes": 851968,
+        "after_allocated_bytes": 1277952,
+        "scope": "Native CLI RSS samples; waited child CPU; raw evidence tree excludes separately bounded acquired runtime.",
+        "live_inference": false,
+        "token_usage": "Synthetic protocol only; no model inference or billable tokens."
+      },
+      "manifest_sha256": "a46538697e34b9679165dab3d5108bdd28544430a5d3e3a012e5ecd2e4c8b3fa",
+      "binary_sha256": "2a1f0be0d536031830c2de5abc1a0f7f06948e7c3fdcb77542ef70cba3497481",
+      "compiled_file_hashes": {
+        "extension.mjs": "3065e5975285f1b5818854524bdb1c05e24272a0540d1ab4ce6fe816e8fd9afb",
+        "handler.mjs": "6ebd4725a281c93a59d3ff5e2efce4d23566267186f72773329930dc7099c75a",
+        "observer.mjs": "ea309b823151a6cae2bdfeee39e6c6a9e9d835e6aa45807477d4eea646754dfd",
+        "portable-config.json": "60df56018a0dfa4c434af3a07714e95ac38b97b1c8de3ef1d46865804a7a06e1",
+        "hook-runtime.mjs": "cf673f114dd18ba382d50a5f38eebe1163c2f0e844b5106ab087a20bcba1682c"
+      }
+    },
+    {
+      "evidence": "/root/workspace/plugnz-context-hooks-20261012-evidence/omp-pi/runs/attempt-02-pi/baseline",
+      "harness": "pi",
+      "case": "baseline",
+      "actual_request_count": 2,
+      "hook_invocations": 0,
+      "roles_observed_on_this_provider": {},
+      "status": "completed",
+      "exit_code": 0,
+      "cleanup": {
+        "native_pid_absent": true,
+        "process_group_absent": true,
+        "listener_closed": true,
+        "server_thread_stopped": true
+      },
+      "resource": {
+        "wall_seconds": 0.973975685890764,
+        "sampled_native_peak_rss_kib": 120656,
+        "child_cpu_user_seconds": 0.600719,
+        "child_cpu_system_seconds": 0.07615,
+        "before_allocated_bytes": 1462272,
+        "after_allocated_bytes": 1511424,
+        "scope": "Native CLI RSS samples; waited child CPU; raw evidence tree excludes separately bounded acquired runtime.",
+        "live_inference": false,
+        "token_usage": "Synthetic protocol only; no model inference or billable tokens."
+      },
+      "manifest_sha256": "0aabb8799b5a1eb32dd6828a7dfd2ad665649b490a1a701293f9ac088adb466a",
+      "binary_sha256": "e79626f2dd6f94aa45d30f3fa63cd84319a6eefcd150b353cfaf274366926774",
+      "compiled_file_hashes": {
+        "extension.mjs": "2c7d5dba40242038f8948ecbbe253cc7d6b08ab20c873a05d268b6e03d0d968b",
+        "handler.mjs": "6ebd4725a281c93a59d3ff5e2efce4d23566267186f72773329930dc7099c75a",
+        "observer.mjs": "c7546bfb9b08d0b5791d101415c8f3cf97cf242b7aafa6655cd448cbfc8ed407",
+        "portable-config.json": "887820009578e8dc55e174da5873b4025cde40c5b0c33e750b69238b3c158079",
+        "hook-runtime.mjs": "cf673f114dd18ba382d50a5f38eebe1163c2f0e844b5106ab087a20bcba1682c"
+      }
+    },
+    {
+      "evidence": "/root/workspace/plugnz-context-hooks-20261012-evidence/omp-pi/runs/attempt-02-pi/context",
+      "harness": "pi",
+      "case": "context",
+      "actual_request_count": 3,
+      "hook_invocations": 5,
+      "roles_observed_on_this_provider": {
+        "session.start": [
+          "user"
+        ],
+        "tool.before": [
+          "user"
+        ],
+        "tool.after": [
+          "tool"
+        ],
+        "turn.stop": [
+          "user"
+        ]
+      },
+      "status": "completed",
+      "exit_code": 0,
+      "cleanup": {
+        "native_pid_absent": true,
+        "process_group_absent": true,
+        "listener_closed": true,
+        "server_thread_stopped": true
+      },
+      "resource": {
+        "wall_seconds": 1.037469336995855,
+        "sampled_native_peak_rss_kib": 122556,
+        "child_cpu_user_seconds": 0.637414,
+        "child_cpu_system_seconds": 0.08992000000000001,
+        "before_allocated_bytes": 1597440,
+        "after_allocated_bytes": 1658880,
+        "scope": "Native CLI RSS samples; waited child CPU; raw evidence tree excludes separately bounded acquired runtime.",
+        "live_inference": false,
+        "token_usage": "Synthetic protocol only; no model inference or billable tokens."
+      },
+      "manifest_sha256": "0aabb8799b5a1eb32dd6828a7dfd2ad665649b490a1a701293f9ac088adb466a",
+      "binary_sha256": "e79626f2dd6f94aa45d30f3fa63cd84319a6eefcd150b353cfaf274366926774",
+      "compiled_file_hashes": {
+        "extension.mjs": "8111b58c84722cac356b499011ddb975010d28488412e788b6266b80aa7ae2ab",
+        "handler.mjs": "6ebd4725a281c93a59d3ff5e2efce4d23566267186f72773329930dc7099c75a",
+        "observer.mjs": "c7546bfb9b08d0b5791d101415c8f3cf97cf242b7aafa6655cd448cbfc8ed407",
+        "portable-config.json": "60df56018a0dfa4c434af3a07714e95ac38b97b1c8de3ef1d46865804a7a06e1",
+        "hook-runtime.mjs": "cf673f114dd18ba382d50a5f38eebe1163c2f0e844b5106ab087a20bcba1682c"
+      }
+    },
+    {
+      "evidence": "/root/workspace/plugnz-context-hooks-20261012-evidence/omp-pi/runs/attempt-01-pi-structured/structured",
+      "harness": "pi",
+      "case": "structured",
+      "actual_request_count": 3,
+      "hook_invocations": 7,
+      "roles_observed_on_this_provider": {
+        "session.start": [
+          "user"
+        ],
+        "tool.before": [
+          "user",
+          "user"
+        ],
+        "tool.after": [
+          "tool",
+          "tool"
+        ],
+        "turn.stop": [
+          "user"
+        ]
+      },
+      "status": "completed",
+      "exit_code": 0,
+      "cleanup": {
+        "native_pid_absent": true,
+        "process_group_absent": true,
+        "listener_closed": true,
+        "server_thread_stopped": true
+      },
+      "resource": {
+        "wall_seconds": 1.093226701952517,
+        "sampled_native_peak_rss_kib": 123360,
+        "child_cpu_user_seconds": 0.679329,
+        "child_cpu_system_seconds": 0.129971,
+        "before_allocated_bytes": 1843200,
+        "after_allocated_bytes": 1912832,
+        "scope": "Native CLI RSS samples; waited child CPU; raw evidence tree excludes separately bounded acquired runtime.",
+        "live_inference": false,
+        "token_usage": "Synthetic protocol only; no model inference or billable tokens."
+      },
+      "manifest_sha256": "07de05d72db1279f1ba8347efae84ce924254c93190e274bcf0992cae7dff3e9",
+      "binary_sha256": "e79626f2dd6f94aa45d30f3fa63cd84319a6eefcd150b353cfaf274366926774",
+      "compiled_file_hashes": {
+        "extension.mjs": "7004e1704d921e18b90f11c412dd8d7a533ed0879345fc2469e25ede71805d97",
+        "handler.mjs": "6ebd4725a281c93a59d3ff5e2efce4d23566267186f72773329930dc7099c75a",
+        "observer.mjs": "d7e9b9115feef0ccd24afaa3c0cc0907d7daf2724b6b50b7426e179d3fe37688",
+        "portable-config.json": "5ba26a6ac3e66fabb4122563a364a04f31790f5fd28bebc58c9bb83aa0a617ec",
+        "hook-runtime.mjs": "cf673f114dd18ba382d50a5f38eebe1163c2f0e844b5106ab087a20bcba1682c"
+      }
+    }
+  ],
+  "retained_failed_attempts": [
+    {
+      "evidence": "/root/workspace/plugnz-context-hooks-20261012-evidence/omp-pi/runs/attempt-01-pi",
+      "manifest_sha256": "2328c68aefe68ed8ebbf60988de75156eb3c06f1723e281380085a3d38a0ddf1",
+      "actual_requests": 2,
+      "exit_code": -25,
+      "finding": "The first Pi baseline reached both expected requests but exited SIGXFSZ with the 1 MiB file cap. Pi 1.1 enables Node compile caching. Disabling only that optional cache made the next baseline and context case exit normally under unchanged limits."
+    }
+  ],
+  "checks": [
+    {
+      "command": "bun test test/omp-hooks.test.ts test/pi-hooks.test.ts",
+      "result": "2 passed, 29 assertions, 0 failed"
+    },
+    {
+      "command": "bun run check",
+      "result": "tsc --noEmit exit 0"
+    }
+  ],
+  "reproduce": [
+    "python3 test/omp-hooks-native-probe.py --harness omp --omp-bin <native-omp> --evidence <new-raw-root>/omp",
+    "python3 test/omp-hooks-native-probe.py --harness pi --pi-runtime <isolated-pi-1.1.0-install> --evidence <new-raw-root>/pi",
+    "python3 test/omp-hooks-native-probe.py --harness pi --pi-runtime <isolated-pi-1.1.0-install> --structured --evidence <new-raw-root>/pi-structured"
+  ],
+  "limits": {
+    "seconds_per_native_case": 45,
+    "requests_per_case": 6,
+    "request_body_bytes": 262144,
+    "raw_lane_allocated_bytes": 20971520,
+    "isolated_acquisition_allocated_bytes": 1073741824,
+    "native_file_size_bytes": 1048576
+  },
+  "qualifications": [
+    "OMP native additionalContext roles are provider-dependent; observed user role here is not a universal role guarantee.",
+    "Pi post context appends to original content; native structuredContent and details were verified preserved on the explicit pure fixture tool.",
+    "Stop handlers returned feedback once, then {} after stop.active became true; no claim that arbitrary external native extensions cannot continue.",
+    "No live inference, package lifecycle scripts, global installs, or global config writes."
+  ],
+  "source_file_verification": {
+    "path": "packages/coding-agent/src/extensibility/shared-events.ts",
+    "sha256": "c587e7ae812ea914dfd899d3bc46393fa294b3beac1078737abd817863edb1cb",
+    "comparison": "The installed 18.8.7 file and official raw source at both f261ed9faf16b61880b544f599876bface4ded0d and c8913466dd7bf92040de911f8e00e30b8f4e48a2 are byte-identical. The docs now cite the receipt pin f261ed9. This is a file comparison, not a claim that both entire revisions are identical."
+  }
+}
