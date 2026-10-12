@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 const root = process.env.OPEN_PLUGIN_PRESERVATION_TRANSPORT_ROOT;
 if (!root?.startsWith('/tmp/plugnz-preservation-test-')) throw new Error('Isolated transport required');
 const [verb, ...args] = process.argv.slice(2);
@@ -18,15 +19,31 @@ if (verb === 'copy') {
     writeFileSync(join(evidence, 'sentinel'), 'retained fixture');
     chmodSync(join(evidence, 'sentinel'), 0o644);
     if (config.command[0] === 'fast-partial') {
+      const { preservationProfile } = await import(pathToFileURL(join(root, 'sandbox-preservation-budget.mjs')).href);
+      const { startLargeRetentionSupervisor } =
+        await import(pathToFileURL(join(root, 'sandbox-preservation-supervisor.mjs')).href);
       const prefix = join(evidence, 'prefix');
       const writer = spawn(process.execPath, ['-e',
         `const {appendFileSync}=require('node:fs');const p=process.argv[1],b=Buffer.alloc(32768,0xa5);for(;;){appendFileSync(p,b);Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,2)}`,
         prefix], { detached: true, stdio: 'ignore' });
       writeFileSync(join(root, 'writer-pid'), String(writer.pid));
-      while (!existsSync(prefix) || lstatSync(prefix).size < 512 * 1024) await new Promise(resolve => setTimeout(resolve, 5));
-      process.kill(-writer.pid, 'SIGKILL');
+      let resolveStop;
+      const stopped = new Promise(resolve => { resolveStop = resolve; });
+      const closeMonitor = startLargeRetentionSupervisor({ root: evidence, suppliers: [], config,
+        profile: preservationProfile(config.operation), baseline: 1, used: () => 1,
+        intervalMs: 20, measurementDeadlineMs: 750,
+        stop: reason => { try { process.kill(-writer.pid, 'SIGKILL'); } catch {} resolveStop(reason); } });
+      const reason = await stopped;
       await new Promise(resolve => writer.once('close', resolve));
-      writeFileSync(join(root, 'writer-stopped.json'), JSON.stringify({ stopped: 'retention-budget', bytes: lstatSync(prefix).size }));
+      await closeMonitor();
+      let prior = -1, stable = 0;
+      for (let check = 0; check < 20 && stable < 3; check++) {
+        await new Promise(resolve => setTimeout(resolve, 20));
+        const size = lstatSync(prefix).size;
+        stable = size === prior ? stable + 1 : 0; prior = size;
+      }
+      if (stable < 3) throw new Error('Writer prefix did not settle after process exit');
+      writeFileSync(join(root, 'writer-stopped.json'), JSON.stringify({ stopped: reason, bytes: prior }));
       process.exitCode = 42;
     } else if (['fail', 'partial'].includes(config.command[0])) process.exitCode = 42;
     else {
@@ -53,8 +70,8 @@ if (verb === 'copy') {
       writeFileSync(join(evidence, 'control/reconstructible-suppliers.json'), JSON.stringify([{ acquisition: 'incomplete', omittedPaths: [], inventory: [{ path: 'unknown', kind: 'file', bytes: bytes.length, mode: 0o644, sha256: createHash('sha256').update(bytes).digest('hex') }] }]));
     } else writeFileSync(join(evidence, 'control/reconstructible-suppliers.json'), '[]');
     const archive = path(`${config.evidenceRoot}.tar.gz`);
-    const r = spawnSync('tar', ['-czf', archive, '-C', evidence, '.']);
-    if (r.status !== 0) throw new Error('Fixture tar failed');
+    const r = spawnSync('tar', ['-czf', archive, '-C', evidence, '.'], { encoding: 'utf8' });
+    if (r.status !== 0) throw new Error(`Fixture tar failed: ${r.stderr}`);
     const content = readFileSync(archive);
     console.log(JSON.stringify({ archive: `${config.evidenceRoot}.tar.gz`, bytes: content.length, sha256: createHash('sha256').update(content).digest('hex'), files: inventory.length }));
   }

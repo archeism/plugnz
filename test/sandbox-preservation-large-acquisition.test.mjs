@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { inventoryArchiveSource, measureRetainedArchive, preservationProfile,
   retentionStopReason, validatePreservationBudget } from '../scripts/sandbox-preservation-budget.mjs';
 import { stageBundle } from '../scripts/sandbox-preservation-stage.mjs';
+import { startLargeRetentionSupervisor } from '../scripts/sandbox-preservation-supervisor.mjs';
 
 function archiveAndRestore(temp, sources, compressed = true) {
   const bundle = join(temp, 'bundle'); stageBundle(bundle, sources);
@@ -107,6 +108,21 @@ test('large acquisition guard reserves 256 MiB against both body growth and tar 
     archiveBytes: 0 }, config, profile)).toBe('retained-body-budget');
   expect(retentionStopReason({ bodyBytes: 0,
     archiveBytes: config.archiveBytes - profile.monitorHeadroomBytes }, config, profile)).toBe('archive-projection-budget');
+});
+
+test('closing the private supervisor after producer exit does not manufacture a monitor failure', async () => {
+  const temp = mkdtempSync('/tmp/plugnz-preservation-large-');
+  try {
+    const reasons = [];
+    const close = startLargeRetentionSupervisor({ root: temp, suppliers: [],
+      config: { diskGrowthBytes: 6 * 1024 ** 3, diskReserveBytes: 2944 * 1024 ** 2,
+        retainedBodyBytes: 257 * 1024 ** 2, archiveBytes: 258 * 1024 ** 2 },
+      profile: preservationProfile('private-large-acquisition'), baseline: 1, used: () => 1,
+      stop: reason => reasons.push(reason) });
+    await close();
+    await new Promise(resolveWait => setTimeout(resolveWait, 20));
+    expect(reasons).toEqual([]);
+  } finally { rmSync(temp, { recursive: true, force: true }); }
 });
 
 test('large acquisition requires its reviewed limits without widening existing profiles', () => {

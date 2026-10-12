@@ -4,8 +4,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import { chownSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { stageBundle } from './sandbox-preservation-stage.mjs';
-import { fileHash, inventoryArchiveSource, measureRetainedArchive, preservationProfile,
-  retentionStopReason } from './sandbox-preservation-budget.mjs';
+import { fileHash, inventoryArchiveSource, measureRetainedArchive, preservationProfile } from './sandbox-preservation-budget.mjs';
+import { startLargeRetentionSupervisor } from './sandbox-preservation-supervisor.mjs';
 
 const [action, configPath] = process.argv.slice(2);
 const config = JSON.parse(readFileSync(configPath, 'utf8'));
@@ -118,20 +118,13 @@ if (action === 'run') {
   child.stdout.on('data', chunk => consume('stdout', chunk));
   child.stderr.on('data', chunk => consume('stderr', chunk));
   const measurements = [];
-  const monitor = setInterval(() => {
+  const sample = () => {
     try {
       const allocated = used(); measurements.push({ at: Date.now(), allocated });
       // Whole filesystem includes package caches, compiler scratch and archives.
       if (allocated - baseline >= config.diskGrowthBytes - config.diskReserveBytes) stop('disk-budget');
-      const suppliers = (config.suppliers ?? []).map(supplier => supplierState(supplier, false));
-      if (largeAcquisition) {
-        const measurement = measureRetainedArchive([{ namespace: 'trial', root,
-          inventory: inventoryFor(root, false), omittedPaths: [] }, ...suppliers.map((supplier, index) => ({
-          namespace: `suppliers/${index}`, root: supplier.root, inventory: supplier.inventory,
-          omittedPaths: supplier.omittedPaths }))]);
-        const reason = retentionStopReason(measurement, config, profile);
-        if (reason !== null) stop(reason);
-      } else {
+      if (!largeAcquisition) {
+        const suppliers = (config.suppliers ?? []).map(supplier => supplierState(supplier, false));
         const unknownBytes = suppliers.reduce((sum, supplier) => sum + supplier.inventory
           .filter(row => row.kind === 'file' && !supplier.omittedPaths.includes(row.path))
           .reduce((bytes, row) => bytes + row.bytes, 0), 0);
@@ -140,7 +133,11 @@ if (action === 'run') {
         if (unknownBytes >= config.archiveBytes * 0.75) stop('supplier-retention-budget');
       }
     } catch (error) { stopped = String(error); stop('measurement-failed'); }
-  }, 500);
+  };
+  const closeLargeMonitor = largeAcquisition ? startLargeRetentionSupervisor({ root, suppliers: config.suppliers ?? [],
+    config, profile, baseline, used, stop, recordAllocated: allocated => measurements.push({ at: Date.now(), allocated }) }) : null;
+  if (!largeAcquisition) sample();
+  const monitor = largeAcquisition ? null : setInterval(sample, 500);
   let result;
   try {
     result = await new Promise(resolveExit => {
@@ -148,7 +145,12 @@ if (action === 'run') {
       child.once('exit', () => stop(null));
       child.once('close', (code, signal) => resolveExit({ code, signal }));
     });
-  } finally { clearInterval(monitor); await stop(null); clearTimeout(settleTimer); }
+  } finally {
+    if (monitor !== null) clearInterval(monitor);
+    if (closeLargeMonitor !== null) await closeLargeMonitor();
+    await stop(null);
+    clearTimeout(settleTimer);
+  }
   write('finished.json', { ...result, stopped, stopFailure, outputBytes, stdout, stderr, measurements, finalUsed: used() });
   process.exitCode = result.code === 0 && stopped === null && stopFailure === null ? 0 : 1;
 } else if (action === 'stop') {

@@ -115,7 +115,10 @@ const preserve = () => preservePromise ??= (async () => {
 const helperPath = fileURLToPath(new URL('./sandbox-preservation-remote.mjs', import.meta.url));
 const stagePath = fileURLToPath(new URL('./sandbox-preservation-stage.mjs', import.meta.url));
 const budgetPath = fileURLToPath(new URL('./sandbox-preservation-budget.mjs', import.meta.url));
-for (const [name, path] of [['controller', fileURLToPath(import.meta.url)], ['remote', helperPath], ['stage', stagePath], ['budget', budgetPath]]) {
+const monitorPath = fileURLToPath(new URL('./sandbox-preservation-monitor.mjs', import.meta.url));
+const supervisorPath = fileURLToPath(new URL('./sandbox-preservation-supervisor.mjs', import.meta.url));
+for (const [name, path] of [['controller', fileURLToPath(import.meta.url)], ['remote', helperPath], ['stage', stagePath],
+  ['budget', budgetPath], ['monitor', monitorPath], ['supervisor', supervisorPath]]) {
   const bytes = readFileSync(path);
   writeFileSync(join(output, `${name}.mjs`), bytes, { flag: 'wx' });
   writeFileSync(join(output, `${name}.sha256`), createHash('sha256').update(bytes).digest('hex'), { flag: 'wx' });
@@ -123,6 +126,8 @@ for (const [name, path] of [['controller', fileURLToPath(import.meta.url)], ['re
 for (const args of [['copy', helperPath, `${config.sandbox}:${remoteHelper}`],
   ['copy', stagePath, `${config.sandbox}:/vercel/sandbox/proof/sandbox-preservation-stage.mjs`],
   ['copy', budgetPath, `${config.sandbox}:/vercel/sandbox/proof/sandbox-preservation-budget.mjs`],
+  ['copy', monitorPath, `${config.sandbox}:/vercel/sandbox/proof/sandbox-preservation-monitor.mjs`],
+  ['copy', supervisorPath, `${config.sandbox}:/vercel/sandbox/proof/sandbox-preservation-supervisor.mjs`],
   ['copy', configPath, `${config.sandbox}:${remoteConfig}`]]) {
   const result = await cli(args, 20_000); assert.equal(result.code, 0, result.stderr);
 }
