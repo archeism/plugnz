@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "harness": "OpenCode",
+  "version": "1.19.0",
+  "source_commit": "733b2c627e5aec39cb33cc22373bdce33053ef2c",
+  "status": "supported_in_tested_mode",
+  "entrypoint": "native run --format json; local plugin; built-in read",
+  "session_scope": "four fresh sessions",
+  "install_route_qualified": false,
+  "effects": {
+    "deny_tool": "Throwing before execution prevents this Read; correlated tool error; turn continues.",
+    "replace_tool_input": "In-place output.args.filePath mutation changes the actual file read.",
+    "rebind_tool_input": "Whole-object output.args rebinding is ineffective on this tested path.",
+    "replace_model_output": "Awaited output.output replacement becomes the entire correlated next tool-result body."
+  },
+  "cases": [
+    {
+      "case": "baseline",
+      "requests": 2,
+      "session_id": "ses_ecfd14c8dffejXYAlQ5MRnUkLX",
+      "exit_code": 0,
+      "wall_seconds": 4.708273834781721,
+      "checks_passed": 25,
+      "checks_total": 25,
+      "native_pids": [
+        3020536
+      ],
+      "details": {},
+      "resources": {
+        "sampled_runtime_peak_rss_kib": 742192,
+        "sample_interval_seconds": 0.1,
+        "child_cpu_user_seconds": 4.62497,
+        "child_cpu_system_seconds": 0.618647,
+        "cpu_scope": "native CLI plus disk measurement subprocesses during this case"
+      }
+    },
+    {
+      "case": "rebind",
+      "requests": 2,
+      "session_id": "ses_ecfd13a55ffeWzRYqcTEucrpQ0",
+      "exit_code": 0,
+      "wall_seconds": 4.701421681093052,
+      "checks_passed": 26,
+      "checks_total": 26,
+      "native_pids": [
+        3020709
+      ],
+      "details": {
+        "negative_control": "Rebinding output.args did not change executed arguments."
+      },
+      "resources": {
+        "sampled_runtime_peak_rss_kib": 719164,
+        "sample_interval_seconds": 0.1,
+        "child_cpu_user_seconds": 4.367431,
+        "child_cpu_system_seconds": 0.6953039999999999,
+        "cpu_scope": "native CLI plus disk measurement subprocesses during this case"
+      }
+    },
+    {
+      "case": "rewrite-replace",
+      "requests": 2,
+      "session_id": "ses_ecfd127d9ffevATmtqZsoTdeGr",
+      "exit_code": 0,
+      "wall_seconds": 4.791863618884236,
+      "checks_passed": 28,
+      "checks_total": 28,
+      "native_pids": [
+        3020950
+      ],
+      "details": {
+        "replacement_nonce": "OC_REPLACEMENT_b771aca7-1937-4739-9866-c03ad2e0ddd8",
+        "replacement_delay_ms": 128.226971,
+        "replacement_to_request_ms": 51.955151,
+        "native_input_still_original": true,
+        "native_metadata_retains_alternate_contents": true
+      },
+      "resources": {
+        "sampled_runtime_peak_rss_kib": 719792,
+        "sample_interval_seconds": 0.1,
+        "child_cpu_user_seconds": 4.510688999999999,
+        "child_cpu_system_seconds": 0.6178380000000001,
+        "cpu_scope": "native CLI plus disk measurement subprocesses during this case"
+      }
+    },
+    {
+      "case": "deny",
+      "requests": 2,
+      "session_id": "ses_ecfd114eeffepzIu605qePBNuR",
+      "exit_code": 0,
+      "wall_seconds": 4.757713748840615,
+      "checks_passed": 24,
+      "checks_total": 24,
+      "native_pids": [
+        3021182
+      ],
+      "details": {
+        "denial_nonce": "OC_DENIED_61262fc4-9a8c-4d6c-affb-c16b80c37cad"
+      },
+      "resources": {
+        "sampled_runtime_peak_rss_kib": 717744,
+        "sample_interval_seconds": 0.1,
+        "child_cpu_user_seconds": 4.369007999999999,
+        "child_cpu_system_seconds": 0.657297,
+        "cpu_scope": "native CLI plus disk measurement subprocesses during this case"
+      }
+    }
+  ],
+  "independent_review": {
+    "raw_manifest_entries_checked": 77,
+    "checks_passed": 106,
+    "checks_total": 106,
+    "receipt": "/root/workspace/harness-hook-capabilities-20261012/evidence/review/opencode-independent-recount.json",
+    "receipt_sha256": "f1a5a8d14d7afed2846fdcf125e6f5528d37f564f8f1d7d320eccab2ff68415c"
+  },
+  "limitations": [
+    "Native OpenCode 1.19.0 run --format json, local plugin, built-in read, four fresh cases. No live model quality or other-tool/MCP capability claim.",
+    "Inotify timestamps are polling receipt times, not kernel event times; events identify watched files, not actor PIDs. Positive baseline/rebind and native post output corroborate the witness.",
+    "Executed input changes do not rewrite assistant tool-call arguments or native stdout state.input. Both retain the original requested path.",
+    "Replacing output.output hides file contents from the next model request; native stdout metadata.preview/display.text retain alternate contents. This is model-visible result-body replacement, not full metadata/history redaction.",
+    "Denied tool invocation becomes a tool error and the turn continues to normal scripted final response.",
+    "PID absence and recorded-port closure are bounded cleanup checks, not exhaustive descendant/network audits.",
+    "Raw evidence was read only; only this review directory was written."
+  ],
+  "budgets": {
+    "case_seconds": 45,
+    "case_requests": 6,
+    "request_bytes": 262144,
+    "raw_lane_bytes": 20971520
+  },
+  "live_inference": false,
+  "raw_evidence": "/root/workspace/harness-hook-capabilities-20261012/evidence/opencode-effects/attempt-01"
+}

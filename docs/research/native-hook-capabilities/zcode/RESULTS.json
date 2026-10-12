@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "harness": "ZCode CLI",
+  "version": "0.16.9",
+  "source_commit": "aac4755666d09fdcd70272fcf063c077a639015f",
+  "node_version": "v26.7.0",
+  "status": "supported_in_tested_mode",
+  "entrypoint": "native source-built CLI --prompt --json --mode plan --workflow-mode disabled",
+  "install_route_qualified": false,
+  "session_scope": "three fresh sessions",
+  "version_basis": {
+    "prior_native_report": "/root/workspace/harness-hooks-probes-20261012-9c3mll0g/evidence-round2/zcode/20261012T114319-42a1b7/report.json",
+    "sha256": "05f19aa5b0a6af2cce479b871edcb726fda1981b9cc628a1047a0560b85c6c6f",
+    "same_cli_and_node_hashes": true
+  },
+  "effects": {
+    "PreToolUse.updatedInput": "real Read consumes rewritten input and hook-created file contents",
+    "PreToolUse.additionalContext": "appended to matching model-facing tool-role result",
+    "PreToolUse.deny": "matching denial tool result; zero watched-file open/access; no PostToolUse",
+    "PostToolUse.additionalContext": "appended to matching model-facing tool-role result; underlying toolResponse preserved",
+    "Stop.continue": "one additional request with user-role context; same session and turn; stopHookActive false then true"
+  },
+  "negative_control": "all callbacks run and generate nonces; omitted output leaves all nonces absent and original Read unchanged",
+  "case_results": [
+    {
+      "case": "baseline",
+      "status": "PASS",
+      "requests": 2,
+      "file_access": {
+        "open_events": 1,
+        "access_events": 1
+      },
+      "wall_ms": 2174.512832,
+      "resources": {
+        "child_user_seconds": 1.9784709999999999,
+        "child_system_seconds": 0.24830800000000003,
+        "children_maxrss_kib_cumulative": 385184
+      }
+    },
+    {
+      "case": "effects",
+      "status": "PASS",
+      "requests": 3,
+      "file_access": {
+        "open_events": 0,
+        "access_events": 0
+      },
+      "wall_ms": 2425.809479,
+      "resources": {
+        "child_user_seconds": 2.0125599999999997,
+        "child_system_seconds": 0.34760500000000005,
+        "children_maxrss_kib_cumulative": 385268
+      }
+    },
+    {
+      "case": "deny",
+      "status": "PASS",
+      "requests": 2,
+      "file_access": {
+        "open_events": 0,
+        "access_events": 0
+      },
+      "wall_ms": 1956.680257,
+      "resources": {
+        "child_user_seconds": 1.876169,
+        "child_system_seconds": 0.29303900000000005,
+        "children_maxrss_kib_cumulative": 385268
+      }
+    }
+  ],
+  "resource_scope": "child CPU includes native and disk-monitor children; maximum RSS is cumulative across children; synthetic model usage",
+  "attempt": "/root/workspace/harness-hook-capabilities-20261012/evidence/zcode/20261012T145814-02be9d",
+  "request_journal_bytes": 335729,
+  "allocated_lane_bytes": 3342336,
+  "budgets": {
+    "case_wall_seconds": 45,
+    "native_timeout_seconds": 40,
+    "requests_per_case": 6,
+    "request_body_bytes": 262144,
+    "request_journal_bytes": 2097152,
+    "process_log_bytes_per_case": 1048576,
+    "lane_allocated_bytes": 20971520
+  },
+  "cleanup": {
+    "native_and_hook_pids_absent": true,
+    "listener_closed": true,
+    "source_unchanged": true
+  },
+  "verification": {
+    "command": "python3 docs/research/native-hook-capabilities/zcode/verify.py /root/workspace/harness-hook-capabilities-20261012/evidence/zcode/20261012T145814-02be9d",
+    "exit_code": 0,
+    "raw_files_recounted": 60,
+    "manifest_sha256": "66ab0501320ec602f031bdeb6a90b1b66a594e09c2258fe0dd4c57b2a8471ad6",
+    "report_sha256": "9479c63277f06c35edf1574c263934b8e789846cd21706612f7d642d3958498d",
+    "verifier_output_sha256": "37c4936cfb2c2b19c6bcb453cd74094115dba9160942dd9f4542dd347736843c",
+    "retention_receipt": "/root/workspace/harness-hook-capabilities-20261012/evidence/zcode/retention-check.json",
+    "retention_receipt_sha256": "006eb83e9ba07ca867f77501a9907b19b0d4a1160c75984a9e44c07c34b8257a"
+  },
+  "fixture_sha256": {
+    "probe.py": "8ef1c0c8f9c80adedebc6871207fe3a5ff5b9a10bef51a83c93dea431db2e6dd",
+    "hook.py": "b4298d55a915eab9f7eeba85a4e63f231532f88f696e10dbf3b303937cc5959e",
+    "verify.py": "5f5f31465d05d411f41da9e4861e6c0621dcd8754cefc2a86e31bcea29dc71c8"
+  },
+  "skill_sha256": "5440bd6e8ed63cc588153bfbb94f62a54df3939dc3609f619fad47123124fa81",
+  "preserved_failures": [
+    {
+      "kind": "prelaunch syntax error",
+      "native_runtime_launched": false,
+      "receipt": "/root/workspace/harness-hook-capabilities-20261012/evidence/zcode/preflight/syntax-failure.json"
+    }
+  ],
+  "native_failed_attempts": 0,
+  "limits": [
+    "fresh native noninteractive CLI only",
+    "built-in Read only",
+    "no native allow/ask override probe",
+    "no post-tool replacement claim",
+    "one Stop continuation only; native maximum not probed",
+    "no crash cleanup or plugin installation certification",
+    "valid rewritten input only; validation failure and approval precedence source-reviewed, not runtime-probed",
+    "no post-hook result replacement; contract exposes additionalContext only",
+    "native maximum three Stop continuations source-reviewed, not reached"
+  ]
+}

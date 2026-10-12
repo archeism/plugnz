@@ -1,0 +1,182 @@
+{
+  "created_at_utc": "2026-10-12T13:24:40.432139+00:00",
+  "status": "pass",
+  "scope": "Research report, native reproduction fixtures, and evidence metadata only.",
+  "checks": [
+    {
+      "check": "markdown_links_and_reference_labels",
+      "file": "docs/native-hook-capabilities.md",
+      "relative_targets_checked": 5,
+      "result": "pass"
+    },
+    {
+      "check": "json_parse",
+      "file": "docs/research/native-hook-capabilities/EVIDENCE.json",
+      "result": "pass"
+    },
+    {
+      "check": "markdown_links_and_reference_labels",
+      "file": "docs/research/native-hook-capabilities/INDEPENDENT-REVIEW.md",
+      "relative_targets_checked": 1,
+      "result": "pass"
+    },
+    {
+      "check": "json_parse",
+      "file": "docs/research/native-hook-capabilities/omp-pi/EVIDENCE.json",
+      "result": "pass"
+    },
+    {
+      "check": "markdown_links_and_reference_labels",
+      "file": "docs/research/native-hook-capabilities/omp-pi/README.md",
+      "relative_targets_checked": 0,
+      "result": "pass"
+    },
+    {
+      "check": "json_parse",
+      "file": "docs/research/native-hook-capabilities/omp-pi/RESULTS.json",
+      "result": "pass"
+    },
+    {
+      "check": "node_check",
+      "file": "docs/research/native-hook-capabilities/omp-pi/effects-extension.mjs",
+      "result": "pass"
+    },
+    {
+      "check": "python_ast",
+      "file": "docs/research/native-hook-capabilities/omp-pi/probe.py",
+      "result": "pass"
+    },
+    {
+      "check": "python_ast",
+      "file": "docs/research/native-hook-capabilities/omp-pi/recount.py",
+      "result": "pass"
+    },
+    {
+      "check": "json_parse",
+      "file": "docs/research/native-hook-capabilities/opencode/EVIDENCE.json",
+      "result": "pass"
+    },
+    {
+      "check": "markdown_links_and_reference_labels",
+      "file": "docs/research/native-hook-capabilities/opencode/README.md",
+      "relative_targets_checked": 2,
+      "result": "pass"
+    },
+    {
+      "check": "json_parse",
+      "file": "docs/research/native-hook-capabilities/opencode/RESULTS.json",
+      "result": "pass"
+    },
+    {
+      "check": "python_ast",
+      "file": "docs/research/native-hook-capabilities/opencode/probe.py",
+      "result": "pass"
+    },
+    {
+      "check": "python_ast",
+      "file": "docs/research/native-hook-capabilities/opencode/recount.py",
+      "result": "pass"
+    },
+    {
+      "check": "node_check",
+      "file": "docs/research/native-hook-capabilities/opencode/startup-plugin.mjs",
+      "result": "pass"
+    },
+    {
+      "check": "markdown_links_and_reference_labels",
+      "file": "docs/research/native-hook-capabilities/zcode/README.md",
+      "relative_targets_checked": 0,
+      "result": "pass"
+    },
+    {
+      "check": "json_parse",
+      "file": "docs/research/native-hook-capabilities/zcode/RESULTS.json",
+      "result": "pass"
+    },
+    {
+      "check": "python_ast",
+      "file": "docs/research/native-hook-capabilities/zcode/hook.py",
+      "result": "pass"
+    },
+    {
+      "check": "python_ast",
+      "file": "docs/research/native-hook-capabilities/zcode/probe.py",
+      "result": "pass"
+    },
+    {
+      "check": "python_ast",
+      "file": "docs/research/native-hook-capabilities/zcode/verify.py",
+      "result": "pass"
+    },
+    {
+      "check": "integration_artifact_hashes",
+      "count": 19,
+      "result": "pass"
+    },
+    {
+      "check": "independent_review_receipt_hashes",
+      "count": 8,
+      "result": "pass"
+    },
+    {
+      "check": "lane_fixture_and_result_hashes",
+      "result": "pass"
+    },
+    {
+      "check": "git_staged_whitespace_and_scope",
+      "files": 20,
+      "result": "pass"
+    },
+    {
+      "check": "base_checkout_unchanged",
+      "result": "pass"
+    }
+  ],
+  "commands": [
+    "Python ast.parse on every committed Python fixture/recount.",
+    "Node v22.23.1 --check on each .mjs extension/plugin.",
+    "JSON parse; local Markdown targets and reference-label resolution.",
+    "Recompute integration/lane artifact and independent review hashes.",
+    "git diff --cached --check; assert staged paths are restricted to this research checkpoint.",
+    "git status --porcelain on the untouched base checkout."
+  ],
+  "native_validation": "Thirteen accepted fresh native effect cases and independent raw recounts are recorded in EVIDENCE.json.",
+  "opencode_parameterized_recount_replay": {
+    "status": "pass",
+    "checks": 106,
+    "receipt": "/root/workspace/harness-hook-capabilities-20261012/evidence/review/opencode-replay-paths-recount.json",
+    "sha256": "4451aa436be87e02787068ce7ec2fb30680d3e4dc0f13950d61be1d5aa82b6f2"
+  },
+  "archive_validation": {
+    "created_at_utc": "2026-10-12T13:20:18.281345+00:00",
+    "archive": "/root/workspace/harness-hook-capabilities-20261012/native-hook-capabilities-evidence-20261012.tar.gz",
+    "archive_bytes": 1410902,
+    "archive_sha256": "e96b31f2b8ca986c1494102bf844768c6dab255cea7b43f97d76ac996be82c3c",
+    "manifest": "/root/workspace/harness-hook-capabilities-20261012/native-hook-capabilities-evidence-20261012.manifest.json",
+    "manifest_sha256": "8c835c846376bc28610202739aba99eabf1fcb7c28ed3c5ba4086027fa3808c6",
+    "regular_files_verified": 356,
+    "symlink_targets_verified": 3,
+    "exact_archive_inventory_verified": true,
+    "real_restore": "/root/workspace/harness-hook-capabilities-20261012/verified-restore-20261012",
+    "restored_inventory_content_and_symlink_targets_match": true,
+    "source_rechecked_unchanged_after_archive": true,
+    "allocated_raw_bytes": 14376960,
+    "allocated_restore_bytes": 14487552,
+    "extra_budget_bytes": 67108864,
+    "loose_evidence_deleted": false,
+    "native_runtime_dependencies_included": false,
+    "encryption_key": null,
+    "retention_scope": "Same-host archive and verified restore. Native runtimes remain at their recorded retained paths. No disk-failure/off-host backup guarantee."
+  },
+  "full_product_suite": "Not run: research-only branch, no production source change or direct main push.",
+  "packaging_correction": {
+    "first_check": "/root/workspace/harness-hook-capabilities-20261012/packaging-validation-attempt-01.json",
+    "first_check_sha256": "284bb94dc47873ebe02d065d7b9a56e172b4d9eaae5293b1a6f436d687c53641",
+    "reason": "git diff --check found an extra blank line at the end of the OpenCode README.",
+    "change": "Removed only the extra terminal newline and refreshed its integration hash; report, runtime fixtures and raw evidence unchanged.",
+    "prior_readme_sha256": "d5cdf11c16dc9a1137d836d86618a899ccd96704a864c8ae6fd3be1e5bfa8fef",
+    "final_readme_sha256": "bfd376167bedc0810727037814b463f2f97832b44d87f12c8a1fef85f7541171",
+    "original_retained": "/root/workspace/harness-hook-capabilities-20261012/opencode-readme-before-eof-fix.md"
+  },
+  "note": "This validation receipt is the output of the listed checks; its own content is outside its artifact hash list."
+}

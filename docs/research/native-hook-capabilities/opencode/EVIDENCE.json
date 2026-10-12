@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "runtime_recheck": {
+    "checked_at": "2026-10-12T13:09:51.103323+00:00",
+    "runtime_root": "/root/workspace/harness-hooks-probes-20261012-9c3mll0g/runtimes/round2/opencode",
+    "native_binary": "/root/workspace/harness-hooks-probes-20261012-9c3mll0g/runtimes/round2/opencode/node_modules/opencode-linux-x64/bin/opencode",
+    "sha256": "135ac3f86c43f2a22328a3554fec5f0bc57d71576077902661bc38dac34871fd",
+    "size": 185747584,
+    "retained_probe_version": "1.19.0",
+    "version_basis": "native session.created properties.info.version on all four action cases; package metadata and binary digest also checked",
+    "package_version": "1.19.0",
+    "source_commit": "733b2c627e5aec39cb33cc22373bdce33053ef2c",
+    "new_install": false,
+    "source_patches": false
+  },
+  "runtime_receipt_sha256": "b63abe8cd7df7064afcf1861e84c181941e3a17cd8d7eef886e7113302a2b979",
+  "raw_manifest": "/root/workspace/harness-hook-capabilities-20261012/evidence/opencode-effects/attempt-01/hashes.json",
+  "raw_manifest_sha256": "6815531ceb0aa21338e07ffde3af030277e9668cbe6eb823db69cd0e88690411",
+  "raw_summary_sha256": "c2057ef9ca3bbd6d117b6ca9924eb3b1513954f0e17a6efc514e0f181fb6a1b1",
+  "results_sha256": "b7c63d0b7219f439f724b10ab224c8c3bff7ac308d997603d03593c10a646fe7",
+  "fixtures": {
+    "probe.py": "19b8181ddb999b5a70abc9947f1175bd5996c63d3ee9ce2271790b73194e9959",
+    "startup-plugin.mjs": "77280782809f525c015eceb23d64e4ae8beedff8267b1eb009c0352008bf3f62",
+    "recount.py": "86a895c2473e641bf5c299577c985c136773de6c3f0e34fd29d9454e92831936"
+  },
+  "independent_original_script": "/root/workspace/harness-hook-capabilities-20261012/evidence/review/recount-opencode-independent.py",
+  "independent_original_script_sha256": "ef5e6e582e4015fb9808a8cbd18c8a10fdf6c93eec89c3ad7f135f6f4bc3b017",
+  "replay_changes": "Independent recount copied with evidence/output path arguments, refusal to overwrite output or write under frozen input, and meaningful failure exit code. Original independent script and receipt retained unchanged.",
+  "parent_startup_fixture_sha256": "0cecf32d5d93d1d604c05bddd92dd46a3dda2e38b69c9aefb4a20ca895906e58",
+  "skill_sha256": "5440bd6e8ed63cc588153bfbb94f62a54df3939dc3609f619fad47123124fa81",
+  "preserved_failed_native_attempts": 0,
+  "network_scope": "Dedicated fake loopback provider and native discovery/download disable flags; no private network namespace and no exhaustive egress audit."
+}

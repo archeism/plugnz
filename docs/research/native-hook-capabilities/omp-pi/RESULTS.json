@@ -1,0 +1,276 @@
+{
+  "schema_version": 1,
+  "verified_cases": 6,
+  "results": [
+    {
+      "harness": "pi",
+      "case": "baseline",
+      "verified": true,
+      "evidence": "/root/workspace/harness-hook-capabilities-20261012/evidence/omp-pi/attempt-01-pi/baseline",
+      "native_pid": 3021435,
+      "session_id": "01a1302e-ffb6-7698-97b1-a5511a3443e3",
+      "request_count": 2,
+      "opened_or_accessed": [
+        "requested.txt"
+      ],
+      "tool_receipt_role": "tool",
+      "native_execution_start_observed": true,
+      "native_execution_end_is_error": false,
+      "native_execution_start_args": {
+        "path": "requested.txt"
+      },
+      "assistant_history_tool_args": [
+        {
+          "path": "requested.txt"
+        }
+      ],
+      "stop_continuation": null,
+      "resources": {
+        "sampled_native_peak_rss_kib": 174304,
+        "sample_interval_seconds": 0.05,
+        "child_cpu_user_seconds": 0.963151,
+        "child_cpu_system_seconds": 0.136953,
+        "scope": "Native CLI child RSS; RUSAGE_CHILDREN for waited native CLI, not a whole-host profiler.",
+        "wall_seconds": 1.3544623628258705,
+        "lane_allocated_before": 77824,
+        "lane_allocated_after": 114688,
+        "live_inference": false,
+        "token_usage": "No inference; protocol completion metadata is synthetic, not billable usage."
+      },
+      "post_nonce": "POST_REPLACED_6c0342e9-1961-4529-81dd-afb0700c3893",
+      "post_nonce_delivered": false,
+      "post_original_marker": "RAW_REQUESTED_34257745b90345bda2ee84b66469e89c",
+      "post_callback_count": 1,
+      "post_to_next_request_ms": 5.867135
+    },
+    {
+      "harness": "pi",
+      "case": "rewrite",
+      "verified": true,
+      "evidence": "/root/workspace/harness-hook-capabilities-20261012/evidence/omp-pi/attempt-01-pi/rewrite",
+      "native_pid": 3021477,
+      "session_id": "01a1302f-0523-7490-a934-0e08e3278310",
+      "request_count": 2,
+      "opened_or_accessed": [
+        "alternate.txt"
+      ],
+      "tool_receipt_role": "tool",
+      "native_execution_start_observed": true,
+      "native_execution_end_is_error": false,
+      "native_execution_start_args": {
+        "path": "requested.txt"
+      },
+      "assistant_history_tool_args": [
+        {
+          "path": "requested.txt"
+        }
+      ],
+      "stop_continuation": null,
+      "resources": {
+        "sampled_native_peak_rss_kib": 173940,
+        "sample_interval_seconds": 0.05,
+        "child_cpu_user_seconds": 1.0179580000000001,
+        "child_cpu_system_seconds": 0.13173600000000002,
+        "scope": "Native CLI child RSS; RUSAGE_CHILDREN for waited native CLI, not a whole-host profiler.",
+        "wall_seconds": 1.3814106970094144,
+        "lane_allocated_before": 188416,
+        "lane_allocated_after": 225280,
+        "live_inference": false,
+        "token_usage": "No inference; protocol completion metadata is synthetic, not billable usage."
+      },
+      "post_nonce": "POST_REPLACED_886d30a0-92c0-40f1-b991-ff636e11e91e",
+      "post_nonce_delivered": true,
+      "post_original_marker": "RAW_ALTERNATE_9f0c6af8f77c40038b374eb879160dae",
+      "post_callback_count": 1,
+      "post_to_next_request_ms": 5.292643
+    },
+    {
+      "harness": "pi",
+      "case": "deny",
+      "verified": true,
+      "evidence": "/root/workspace/harness-hook-capabilities-20261012/evidence/omp-pi/attempt-01-pi/deny",
+      "native_pid": 3021501,
+      "session_id": "01a1302f-0a4e-722a-b2a6-d1b634ae9620",
+      "request_count": 2,
+      "opened_or_accessed": [],
+      "tool_receipt_role": "tool",
+      "native_execution_start_observed": true,
+      "native_execution_end_is_error": true,
+      "native_execution_start_args": {
+        "path": "requested.txt"
+      },
+      "assistant_history_tool_args": [
+        {
+          "path": "requested.txt"
+        }
+      ],
+      "stop_continuation": null,
+      "resources": {
+        "sampled_native_peak_rss_kib": 174468,
+        "sample_interval_seconds": 0.05,
+        "child_cpu_user_seconds": 0.9270480000000001,
+        "child_cpu_system_seconds": 0.12842499999999996,
+        "scope": "Native CLI child RSS; RUSAGE_CHILDREN for waited native CLI, not a whole-host profiler.",
+        "wall_seconds": 1.2260744541417807,
+        "lane_allocated_before": 299008,
+        "lane_allocated_after": 335872,
+        "live_inference": false,
+        "token_usage": "No inference; protocol completion metadata is synthetic, not billable usage."
+      },
+      "denial_nonce": "DENIED_a21b4211-6420-4083-a2a9-7a5c68a62452",
+      "post_callback_count": 0
+    },
+    {
+      "harness": "omp",
+      "case": "baseline",
+      "verified": true,
+      "evidence": "/root/workspace/harness-hook-capabilities-20261012/evidence/omp-pi/attempt-02-omp/baseline",
+      "native_pid": 3022462,
+      "session_id": "01a1302f-dea4-7760-812b-74fcf9c46391",
+      "request_count": 2,
+      "opened_or_accessed": [
+        "requested.txt"
+      ],
+      "tool_receipt_role": "tool",
+      "native_execution_start_observed": true,
+      "native_execution_end_is_error": false,
+      "native_execution_start_args": {
+        "path": "requested.txt"
+      },
+      "assistant_history_tool_args": [
+        {
+          "path": "requested.txt"
+        }
+      ],
+      "stop_continuation": null,
+      "resources": {
+        "sampled_native_peak_rss_kib": 400916,
+        "sample_interval_seconds": 0.05,
+        "child_cpu_user_seconds": 1.772256,
+        "child_cpu_system_seconds": 0.239971,
+        "scope": "Native CLI child RSS; RUSAGE_CHILDREN for waited native CLI, not a whole-host profiler.",
+        "wall_seconds": 2.1101376209408045,
+        "lane_allocated_before": 774144,
+        "lane_allocated_after": 1163264,
+        "live_inference": false,
+        "token_usage": "No inference; protocol completion metadata is synthetic, not billable usage."
+      },
+      "post_nonce": "POST_REPLACED_3afe436b-91cc-4ffc-9ed4-e16b7f614cd4",
+      "post_nonce_delivered": false,
+      "post_original_marker": "RAW_REQUESTED_efa1dd22a60e42ee911de71a06d95cf6",
+      "post_callback_count": 1,
+      "post_to_next_request_ms": 32.503008
+    },
+    {
+      "harness": "omp",
+      "case": "rewrite",
+      "verified": true,
+      "evidence": "/root/workspace/harness-hook-capabilities-20261012/evidence/omp-pi/attempt-02-omp/rewrite",
+      "native_pid": 3022577,
+      "session_id": "01a1302f-e76f-77e1-ac57-91dc4f4fb478",
+      "request_count": 3,
+      "opened_or_accessed": [
+        "alternate.txt"
+      ],
+      "tool_receipt_role": "tool",
+      "native_execution_start_observed": true,
+      "native_execution_end_is_error": false,
+      "native_execution_start_args": {
+        "path": "alternate.txt"
+      },
+      "assistant_history_tool_args": [
+        {
+          "path": "alternate.txt"
+        }
+      ],
+      "stop_continuation": {
+        "nonce": "STOP_CONTINUE_b48f0743-6e81-4332-8dc0-43d1e37c9c6d",
+        "request_index": 2,
+        "message_index": 5,
+        "role": "user",
+        "decision_to_request_ms": 28.796415
+      },
+      "resources": {
+        "sampled_native_peak_rss_kib": 396912,
+        "sample_interval_seconds": 0.05,
+        "child_cpu_user_seconds": 1.9422879999999998,
+        "child_cpu_system_seconds": 0.24295499999999998,
+        "scope": "Native CLI child RSS; RUSAGE_CHILDREN for waited native CLI, not a whole-host profiler.",
+        "wall_seconds": 2.318909670924768,
+        "lane_allocated_before": 1232896,
+        "lane_allocated_after": 1654784,
+        "live_inference": false,
+        "token_usage": "No inference; protocol completion metadata is synthetic, not billable usage."
+      },
+      "post_nonce": "POST_REPLACED_a09c792f-0a62-4b73-a034-00b84eb8e9cd",
+      "post_nonce_delivered": true,
+      "post_original_marker": "RAW_ALTERNATE_fa85aa15366648e3a33217396adc5ea2",
+      "post_callback_count": 1,
+      "post_to_next_request_ms": 31.019582
+    },
+    {
+      "harness": "omp",
+      "case": "deny",
+      "verified": true,
+      "evidence": "/root/workspace/harness-hook-capabilities-20261012/evidence/omp-pi/attempt-02-omp/deny",
+      "native_pid": 3022683,
+      "session_id": "01a1302f-f0e5-7012-b965-57365d17dec8",
+      "request_count": 2,
+      "opened_or_accessed": [],
+      "tool_receipt_role": "tool",
+      "native_execution_start_observed": true,
+      "native_execution_end_is_error": true,
+      "native_execution_start_args": {
+        "path": "requested.txt"
+      },
+      "assistant_history_tool_args": [
+        {
+          "path": "requested.txt"
+        }
+      ],
+      "stop_continuation": null,
+      "resources": {
+        "sampled_native_peak_rss_kib": 426892,
+        "sample_interval_seconds": 0.05,
+        "child_cpu_user_seconds": 1.8949740000000004,
+        "child_cpu_system_seconds": 0.28842799999999996,
+        "scope": "Native CLI child RSS; RUSAGE_CHILDREN for waited native CLI, not a whole-host profiler.",
+        "wall_seconds": 2.173621938796714,
+        "lane_allocated_before": 1724416,
+        "lane_allocated_after": 2109440,
+        "live_inference": false,
+        "token_usage": "No inference; protocol completion metadata is synthetic, not billable usage."
+      },
+      "denial_nonce": "DENIED_0e6fa565-7cd2-4eff-8d41-f3019939783b",
+      "post_callback_count": 0
+    }
+  ],
+  "raw_files_hash_verified": 150,
+  "attempt_manifest_sha256": {
+    "attempt-01-pi": "3af85d2a216291dbcc4c7f2a2f3b67c204ccfddac2e7aa45b57e5989aad54035",
+    "attempt-02-omp": "12b0bfc7ddd91b919ff64e9f19ebb36dc2c549cc4153aeb46c25460d8c38a625",
+    "attempt-01-omp": "3f2e213673c747bd5d5c01a19e0091b87198924d06e1cfbe4c7f507ffd25377b"
+  },
+  "retained_apparatus_failure": {
+    "evidence": "/root/workspace/harness-hook-capabilities-20261012/evidence/omp-pi/attempt-01-omp",
+    "run": {
+      "harness": "omp",
+      "case": "baseline",
+      "status": "runner-error:FileNotFoundError:[Errno 2] No such file or directory: '/root/workspace/harness-hook-capabilities-20261012/evidence/omp-pi/attempt-01-omp/baseline/agent/models.db-journal'",
+      "pid": 3021897,
+      "exit_code": 143,
+      "process_waited": true,
+      "native_pid_absent": true,
+      "process_group_absent": true,
+      "listener_closed": true,
+      "server_thread_stopped": true,
+      "request_count": 0,
+      "observation_count": 0,
+      "fixture_errors": []
+    },
+    "classification": "Disk scanner raced removal of a transient SQLite journal before any native hook/model request."
+  },
+  "verification": "Offline raw request/event/kernel-watch recount; no runner PASS fields.",
+  "scope": "Fresh native CLI and built-in read only; no resume, approval, runtime crash, cap8, error-status inversion, or other tool-family claims.",
+  "script_sha256": "e078227c872ce2d81962fda619d56f1d2c3d8120b84d15da3166fe974d8845e5"
+}

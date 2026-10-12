@@ -1,0 +1,391 @@
+{
+  "schema_version": 1,
+  "kind": "research_checkpoint",
+  "created_at_utc": "2026-10-12T13:22:38.846708+00:00",
+  "scope": [
+    "Claude Code",
+    "Codex",
+    "OMP",
+    "Pi",
+    "OpenCode",
+    "official ZCode CLI"
+  ],
+  "repository": "https://github.com/archeism/plugnz",
+  "base_commit": "890e03b169a301f256223a19abd340d03485f845",
+  "research_branch": "research/native-hook-capabilities-20261012",
+  "production_hook_adapters_implemented": false,
+  "native_installation_route_qualified": false,
+  "inventory": {
+    "repository": "https://github.com/archeism/personal",
+    "commit": "af8ddb5da101a083ed09eb2545d7c63e77f7cd44",
+    "path": "deploy/harnesses.yaml",
+    "selection": "Charles's explicit six-harness first batch."
+  },
+  "evidence_levels": {
+    "P": "Observed native execution or receiving model request; scope remains exact runtime/mode/tool/entry path.",
+    "S": "Pinned source and consumer inspected; that effect was not newly executed.",
+    "D": "Current official documentation; not a version-pinned native effect pass."
+  },
+  "runtimes": {
+    "Claude Code": {
+      "version": "2.1.285",
+      "startup": "P fresh/cold resume in prior cohort",
+      "new_action_cases": 0,
+      "other_actions": "D current official docs"
+    },
+    "Codex": {
+      "version": "0.161.0",
+      "source_commit": "979011409de0a60b52f179721948e65531d26144",
+      "startup": "P fresh/cold resume in prior cohort",
+      "new_action_cases": 0,
+      "other_actions": "S pinned source"
+    },
+    "OMP": {
+      "version": "18.8.7",
+      "source_commit": "f261ed9faf16b61880b544f599876bface4ded0d",
+      "new_action_cases": 3
+    },
+    "Pi": {
+      "version": "0.73.1",
+      "source_commit": "781152fc24841dc54b22284514604048ebe5e2c9",
+      "new_action_cases": 3
+    },
+    "OpenCode": {
+      "version": "1.19.0",
+      "source_commit": "733b2c627e5aec39cb33cc22373bdce33053ef2c",
+      "new_action_cases": 4
+    },
+    "official ZCode CLI": {
+      "version": "0.16.9",
+      "source_commit": "aac4755666d09fdcd70272fcf063c077a639015f",
+      "node_used": "26.7.0",
+      "node_declared_by_source": "24.14.0",
+      "new_action_cases": 3
+    }
+  },
+  "new_native_cohort": {
+    "host": "charles-netcup",
+    "device_id": "aa89735a-dc9b-4102-ae27-3ebeb3ea2e5b",
+    "accepted_fresh_cases": 13,
+    "actual_requests": 28,
+    "tool_scope": "One selected built-in Read per case; no all-tool-family claim.",
+    "provider": "Bounded synthetic loopback responses; no live model inference.",
+    "lanes": [
+      {
+        "lane": "omp-pi",
+        "result_file": "omp-pi/RESULTS.json",
+        "result_sha256": "51e47716b76d0fb76ed27aca5cbf1f4b856e93c045392aed208742a8561609be",
+        "accepted_cases": 6,
+        "actual_model_requests": 13,
+        "readme": "omp-pi/README.md",
+        "cases": [
+          {
+            "harness": "pi",
+            "case": "baseline",
+            "requests": 2
+          },
+          {
+            "harness": "pi",
+            "case": "rewrite",
+            "requests": 2
+          },
+          {
+            "harness": "pi",
+            "case": "deny",
+            "requests": 2
+          },
+          {
+            "harness": "omp",
+            "case": "baseline",
+            "requests": 2
+          },
+          {
+            "harness": "omp",
+            "case": "rewrite",
+            "requests": 3
+          },
+          {
+            "harness": "omp",
+            "case": "deny",
+            "requests": 2
+          }
+        ]
+      },
+      {
+        "lane": "opencode",
+        "result_file": "opencode/RESULTS.json",
+        "result_sha256": "b7c63d0b7219f439f724b10ab224c8c3bff7ac308d997603d03593c10a646fe7",
+        "accepted_cases": 4,
+        "actual_model_requests": 8,
+        "readme": "opencode/README.md",
+        "cases": [
+          {
+            "harness": "OpenCode",
+            "case": "baseline",
+            "requests": 2
+          },
+          {
+            "harness": "OpenCode",
+            "case": "rebind",
+            "requests": 2
+          },
+          {
+            "harness": "OpenCode",
+            "case": "rewrite-replace",
+            "requests": 2
+          },
+          {
+            "harness": "OpenCode",
+            "case": "deny",
+            "requests": 2
+          }
+        ]
+      },
+      {
+        "lane": "zcode",
+        "result_file": "zcode/RESULTS.json",
+        "result_sha256": "55bf81d52ce0a06dd8fe0100cf5cdbef8da2de88e16e438eb571b7d6ef7567a7",
+        "accepted_cases": 3,
+        "actual_model_requests": 7,
+        "readme": "zcode/README.md",
+        "cases": [
+          {
+            "harness": "ZCode CLI",
+            "case": "baseline",
+            "requests": 2
+          },
+          {
+            "harness": "ZCode CLI",
+            "case": "effects",
+            "requests": 3
+          },
+          {
+            "harness": "ZCode CLI",
+            "case": "deny",
+            "requests": 2
+          }
+        ]
+      }
+    ],
+    "preserved_apparatus_failures": [
+      "OMP first attempt allocation scanner raced a disappeared SQLite journal before any hook or model request; frozen attempt retained.",
+      "ZCode prelaunch syntax gate caught a fixture error before a native runtime launched; original source and receipt retained."
+    ],
+    "new_packages_installed": false,
+    "native_runtime_source_patched": false,
+    "global_credential_or_trust_changes": false,
+    "added_permission_bypass_modes": false
+  },
+  "recommendation": {
+    "first_effect": "Session-entry context on all six using a shared command and target-native output/extension shims.",
+    "next_effects": [
+      "deny selected tool",
+      "change execution arguments"
+    ],
+    "optional_effects": [
+      "native approval request",
+      "explicit native approval",
+      "result replacement or rejection",
+      "Stop continuation",
+      "orderly teardown cleanup"
+    ],
+    "contract": "Event and accepted effect are separate. Preserve native placement, scope, failure semantics, validation and permission behavior. Unsupported required effects must be rejected visibly."
+  },
+  "independent_review": {
+    "summary_file": "INDEPENDENT-REVIEW.md",
+    "raw_reviewers_did_not_author_their_reviewed_lanes": true,
+    "raw_review_checks": {
+      "OpenCode": 106,
+      "OMP_and_Pi": 775,
+      "ZCode": 286
+    },
+    "raw_hashes_recounted": {
+      "OpenCode": 77,
+      "OMP_and_Pi_including_failed_attempt": 150,
+      "ZCode": 60
+    },
+    "different_model_final_review": {
+      "model": "GPT-6.1 Sol",
+      "harness": "ChatGPT collaboration",
+      "verdict": "PASS",
+      "report_sha256": "657749d8ceab4cd0bb584afeae38ee70b0193d1134182704d56aff0a141e3512"
+    },
+    "receipts": [
+      {
+        "path_within_evidence": "review/opencode-independent-recount.json",
+        "sha256": "f1a5a8d14d7afed2846fdcf125e6f5528d37f564f8f1d7d320eccab2ff68415c"
+      },
+      {
+        "path_within_evidence": "review/omp-pi-independent-receipt.json",
+        "sha256": "7c12f9c995f6eadde99c77b1abbf8a1792c607bff8f1535313cd206d9c2b0f02"
+      },
+      {
+        "path_within_evidence": "review/omp-pi-independent-addendum.json",
+        "sha256": "bd7cded7ec1a80892edffbfed8f2fc6d26c2c02cddd6b79b7e840a14e23dbbb2"
+      },
+      {
+        "path_within_evidence": "review/zcode-independent-20261012-omp-pi/receipt.json",
+        "sha256": "9b270b63dd4af21a479609d15fbbd36c3c604c72e5619955b7d509fcdbb3a28c"
+      },
+      {
+        "path_within_evidence": "review/integrated-report-claude-codex.md",
+        "sha256": "c02cdd0bb6a31f1345f9ef6fb38a8d66fcca3570e866e238406e237092d7e9e3"
+      },
+      {
+        "path_within_evidence": "review/final-cross-model-review.md",
+        "sha256": "bbbc0f90697eac9f3ff969fc5d61ca5fbe85b07795fc4d94d552c1bb9a0d418f"
+      },
+      {
+        "path_within_evidence": "review/final-cross-model-review.json",
+        "sha256": "303d036234b37383b423f4b3142d93607db5c522a8898f30a63c9e63a6a11604"
+      },
+      {
+        "path_within_evidence": "review/opencode-replay-paths-recount.json",
+        "sha256": "4451aa436be87e02787068ce7ec2fb30680d3e4dc0f13950d61be1d5aa82b6f2"
+      }
+    ]
+  },
+  "source_snapshots": [
+    {
+      "path_within_evidence": "claude-docs/SOURCE-MANIFEST.json",
+      "sha256": "2803c80372d0fda20c108ee38466324a6e663e4adfccdb8657eb076fb832ac15"
+    },
+    {
+      "path_within_evidence": "codex-source/SOURCE-MANIFEST.json",
+      "sha256": "c93e11195866e0411740db2acc34c937b6f3646535215ad3ce55182fade5a0b9"
+    },
+    {
+      "path_within_evidence": "opencode/manifest.json",
+      "sha256": "6f1b860de5e17611f578bbc13946faad27fb913e5ad3de93e3f7eae46f1dc326"
+    }
+  ],
+  "prior_startup_evidence": {
+    "commit": "fda5314ac1678504872c8fed659ea732aabd89ed",
+    "first_cohort": "https://github.com/archeism/oh-my-ai/blob/fda5314ac1678504872c8fed659ea732aabd89ed/labs/harness-hooks-probes/README.md",
+    "expanded_cohort": "https://github.com/archeism/oh-my-ai/blob/fda5314ac1678504872c8fed659ea732aabd89ed/labs/harness-hooks-probes/round2/README.md",
+    "role": "Historical evidence location only; no orchestration/runtime architecture dependency."
+  },
+  "skill": {
+    "repository": "https://github.com/archeism/personal",
+    "commit": "ef7d93dfa49e995843f3bc536df5a02d69f392ec",
+    "path": "plugins/csuite/skills/probe-runtime-boundaries/SKILL.md",
+    "sha256": "5440bd6e8ed63cc588153bfbb94f62a54df3939dc3609f619fad47123124fa81",
+    "changed_this_cohort": false,
+    "claim": "Used on real native effect probes. No measured skill-improvement claim."
+  },
+  "preservation": {
+    "raw_root": "/root/workspace/harness-hook-capabilities-20261012/evidence",
+    "archive_receipt": {
+      "created_at_utc": "2026-10-12T13:20:18.281345+00:00",
+      "archive": "/root/workspace/harness-hook-capabilities-20261012/native-hook-capabilities-evidence-20261012.tar.gz",
+      "archive_bytes": 1410902,
+      "archive_sha256": "e96b31f2b8ca986c1494102bf844768c6dab255cea7b43f97d76ac996be82c3c",
+      "manifest": "/root/workspace/harness-hook-capabilities-20261012/native-hook-capabilities-evidence-20261012.manifest.json",
+      "manifest_sha256": "8c835c846376bc28610202739aba99eabf1fcb7c28ed3c5ba4086027fa3808c6",
+      "regular_files_verified": 356,
+      "symlink_targets_verified": 3,
+      "exact_archive_inventory_verified": true,
+      "real_restore": "/root/workspace/harness-hook-capabilities-20261012/verified-restore-20261012",
+      "restored_inventory_content_and_symlink_targets_match": true,
+      "source_rechecked_unchanged_after_archive": true,
+      "allocated_raw_bytes": 14376960,
+      "allocated_restore_bytes": 14487552,
+      "extra_budget_bytes": 67108864,
+      "loose_evidence_deleted": false,
+      "native_runtime_dependencies_included": false,
+      "encryption_key": null,
+      "retention_scope": "Same-host archive and verified restore. Native runtimes remain at their recorded retained paths. No disk-failure/off-host backup guarantee."
+    },
+    "archive_receipt_file": "/root/workspace/harness-hook-capabilities-20261012/archive-verification.json",
+    "archive_receipt_sha256": "afc519b6267fcdd98b20084b7c530cfb31cc325a71b238ff22a87b4295ea11c7",
+    "restore_command": [
+      "tar",
+      "-xzf",
+      "/root/workspace/harness-hook-capabilities-20261012/native-hook-capabilities-evidence-20261012.tar.gz",
+      "-C",
+      "<new-empty-directory>"
+    ],
+    "restore_verification": "Compare extracted evidence entries to MANIFEST.json; file hashes, lengths, types and symlink targets were verified by a real restore.",
+    "runtime_dependencies": "Retained native installations are outside the archive. Three ZCode cache symlinks retain their recorded absolute targets. Supply the documented runtime when replaying native fixtures.",
+    "off_host_backup_claim": false
+  },
+  "artifact_hashes": [
+    {
+      "path": "docs/native-hook-capabilities.md",
+      "sha256": "657749d8ceab4cd0bb584afeae38ee70b0193d1134182704d56aff0a141e3512"
+    },
+    {
+      "path": "docs/research/native-hook-capabilities/INDEPENDENT-REVIEW.md",
+      "sha256": "f1420ceb431a76a7cdf9c15c051c242715cabf3e023a85eacc8dee15e6fdf66c"
+    },
+    {
+      "path": "docs/research/native-hook-capabilities/omp-pi/EVIDENCE.json",
+      "sha256": "2c8b06619097b8e43786115e917faa1c225dadd4ccd20c3fd0e22414cef2b7f4"
+    },
+    {
+      "path": "docs/research/native-hook-capabilities/omp-pi/README.md",
+      "sha256": "eafd82177d79a1daaf53f54f107b7974fb28ab57d2f9b1bb332379545f3cf86b"
+    },
+    {
+      "path": "docs/research/native-hook-capabilities/omp-pi/RESULTS.json",
+      "sha256": "51e47716b76d0fb76ed27aca5cbf1f4b856e93c045392aed208742a8561609be"
+    },
+    {
+      "path": "docs/research/native-hook-capabilities/omp-pi/effects-extension.mjs",
+      "sha256": "465bc309bd9c3b9d0e9a562e6648ffd25268d87ead7341f21f2e130924b225f5"
+    },
+    {
+      "path": "docs/research/native-hook-capabilities/omp-pi/probe.py",
+      "sha256": "72250ab2083336882023e66d772afc0a33affbf5cc8dbc7dba40c2dc77acfde6"
+    },
+    {
+      "path": "docs/research/native-hook-capabilities/omp-pi/recount.py",
+      "sha256": "e078227c872ce2d81962fda619d56f1d2c3d8120b84d15da3166fe974d8845e5"
+    },
+    {
+      "path": "docs/research/native-hook-capabilities/opencode/EVIDENCE.json",
+      "sha256": "0f527f1a15d10daa2f542bf9bb1c8276bb123eb16bd4b7ffcf1898dd47d653ab"
+    },
+    {
+      "path": "docs/research/native-hook-capabilities/opencode/README.md",
+      "sha256": "bfd376167bedc0810727037814b463f2f97832b44d87f12c8a1fef85f7541171"
+    },
+    {
+      "path": "docs/research/native-hook-capabilities/opencode/RESULTS.json",
+      "sha256": "b7c63d0b7219f439f724b10ab224c8c3bff7ac308d997603d03593c10a646fe7"
+    },
+    {
+      "path": "docs/research/native-hook-capabilities/opencode/probe.py",
+      "sha256": "19b8181ddb999b5a70abc9947f1175bd5996c63d3ee9ce2271790b73194e9959"
+    },
+    {
+      "path": "docs/research/native-hook-capabilities/opencode/recount.py",
+      "sha256": "86a895c2473e641bf5c299577c985c136773de6c3f0e34fd29d9454e92831936"
+    },
+    {
+      "path": "docs/research/native-hook-capabilities/opencode/startup-plugin.mjs",
+      "sha256": "77280782809f525c015eceb23d64e4ae8beedff8267b1eb009c0352008bf3f62"
+    },
+    {
+      "path": "docs/research/native-hook-capabilities/zcode/README.md",
+      "sha256": "78520c5db50b8de83a49da221913eb9dd85f677433a4370736b19984a5b4916b"
+    },
+    {
+      "path": "docs/research/native-hook-capabilities/zcode/RESULTS.json",
+      "sha256": "55bf81d52ce0a06dd8fe0100cf5cdbef8da2de88e16e438eb571b7d6ef7567a7"
+    },
+    {
+      "path": "docs/research/native-hook-capabilities/zcode/hook.py",
+      "sha256": "b4298d55a915eab9f7eeba85a4e63f231532f88f696e10dbf3b303937cc5959e"
+    },
+    {
+      "path": "docs/research/native-hook-capabilities/zcode/probe.py",
+      "sha256": "8ef1c0c8f9c80adedebc6871207fe3a5ff5b9a10bef51a83c93dea431db2e6dd"
+    },
+    {
+      "path": "docs/research/native-hook-capabilities/zcode/verify.py",
+      "sha256": "5f5f31465d05d411f41da9e4861e6c0621dcd8754cefc2a86e31bcea29dc71c8"
+    }
+  ],
+  "focused_validation_file": "VALIDATION.json"
+}
