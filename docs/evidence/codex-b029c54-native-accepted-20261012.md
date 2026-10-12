@@ -15,6 +15,8 @@ Released supplier: official npm `@openai/codex@0.162.0`, actual
 `50ed828f357c655a3c82054d346cab8434f24901f14ec19b8267571bdd008b38`.
 Successful acquisition archive SHA256 is
 `ca055d81032720a7c1b5190c3597869e3da39e8613b6fdc3650c47192343882f`.
+Its permanent archive and controller/configuration snapshots are under
+`~/.local/state/plugnz-evidence/20261012/codex-acquisition-03/`.
 Root independently restored its retained files and verified registry metadata,
 package-lock SRI bindings and cached tarball integrity before Native execution.
 
@@ -27,7 +29,7 @@ preservation deadline. Source branches under
 `9a1a72e8f8aa58f93a7fe96dc80693d4c330421a`. All declare plugin version `0.1.0`.
 No prior trial was relocated, overwritten, reset or repaired in place.
 
-| Case / raw output directory under `/tmp/plugnz-codex-b029c54-` | Verified outcome | Archive SHA256 |
+| Case / permanent directory name | Verified outcome | Archive SHA256 |
 | --- | --- | --- |
 | `rollback-02` | Actual same-version Native V2 plus app-server `skills/list`; actual permission failure after checkout advanced to V3; exact cache/config/checkout/data bytes and modes restored; settled journal, no pending recovery | `32dbc99c5d8f8ae08e833937d92c12eacded47bdd4bbc595b91a136cfe93f641` |
 | `foreign-01` | Actual Native failure followed by foreign checkout edit; exact post-call surfaces retained and sealed recovery left pending | `bf842d21b7ee7f3b054f99aa822ab9f49b87658442608187e703f8223f237c48` |
@@ -36,8 +38,13 @@ No prior trial was relocated, overwritten, reset or repaired in place.
 | `sparse-01` | Sparse marketplace selects Managed V2 before Native mutation; no marketplace upgrade | `bab2392caadbfa1b9e4b4b455ae5e4e9204fae2fb4d99bc5c84315de2abe33eb` |
 | `malformed-01` | Malformed sparse metadata hard-blocks the public Cursor + Codex batch; exact host and state bytes unchanged | `5f8dd05e792548d4e6fb8d44cb6e780bfd54b724dc776a3dcbd6f59bfe6f25b9` |
 
-Raw archives are `evidence.tar.gz` inside those directories, accompanied by
-controller config, snapshots, streams, `receipt.json` and verified `restored/`.
+Permanent evidence root:
+`~/.local/state/plugnz-evidence/20261012/codex-native-final-c72/`.
+Raw archives are `evidence.tar.gz` inside each case directory in the table,
+accompanied by controller config, source snapshots and SHA files, transport
+streams, SDK lifetime metadata, `receipt.json` and the original sidecars. These
+copies were independently rehashed against every original file; all six archive
+SHA256 values above match. No loose restored trees were copied.
 Archived trial directories contain the exact workflow, artifact, frozen inputs,
 dependency provenance and per-phase reports, SDK responses, surfaces and journals.
 Controller source is `be36648`; workflow/oracles are frozen at `1f31820`.
@@ -51,13 +58,17 @@ non-symlink/nonwritable status were checked. Private acquisition caches correctl
 remain unreadable to case UIDs; explicit unreadable paths are recorded rather
 than falsely claiming those users hashed the private bodies.
 
-Sidecars are `<output-dir>-supplier-before.json` and
-`<output-dir>-supplier-after.json`; each includes protected transport verification
+Sidecars retain their original names inside each permanent case directory:
+`plugnz-codex-b029c54-<case>-supplier-before.json` and
+`plugnz-codex-b029c54-<case>-supplier-after.json`; they retain protected transport verification
 and an attestation bound to the case ID, acquisition archive and final case
 archive SHA. Supplier inventory digest is
 `420ceb6a2bc722ac1263bb6a5e42a89ef0123fca579cba771d6a084f0bd33573`;
 privileged helper digest is
 `8bbada03201fef6b17049e3058c06e1d733f02cfc717bb2c31b45eb51a59b29b`.
+The clean rollback sidecars use separate retained `-transport-before.json` and
+`-transport-after.json` files. Protected helper/input source copies are retained
+under the permanent evidence root's `helpers/` directory.
 
 Independent reviewer `finish_sync` fresh-restored the first three cases into
 `/tmp/plugnz-codex-independent-{l0cCtL,sB7vWC,qlvtsU}` and the remaining three into
@@ -66,6 +77,20 @@ inventory byte/hash/mode/link, recomputed actual four-surface digests, verified
 CLI and SDK outcomes, exact V2 source bytes and clean versus foreign recovery.
 The reviewer accepted all six bounded cases. No role or model identity beyond
 that independently reported evidence is inferred.
+
+To restore, choose a fresh empty directory and extract the selected permanent
+`<case>/evidence.tar.gz` there with `tar -xzf`. Check its full SHA256 against the
+table first; validate `control/inventory.json` against all restored trial bytes,
+modes and links. Native case archives preserve all case-owned bytes; the
+read-only supplier bodies are instead bound to the separately preserved
+acquisition archive by their identity and privileged before/after attestations.
+Acquisition verifiers are
+permanently retained at
+`~/.local/state/plugnz-evidence/20261012/native-git-f470/plugnz-codex-acquisition{,03}-independent.mjs`;
+they record the exact inventory/SRI checks and restore procedure (their historical
+`base` points to the original temporary acquisition; substitute the corresponding
+permanent acquisition directory). Do not execute archived native scripts during
+restoration.
 
 Acquisition and all cases stayed inside 3 GiB whole-filesystem growth. Maximum
 observed allocation was 4722585600 bytes against baseline 3671310336: growth
@@ -81,10 +106,18 @@ All experiment UIDs had zero live writers at the final scan. SDK stop returned
 2026-10-12T00:33:07.447Z. The method does not rely on VM snapshots; the separate
 783 MiB automatic snapshot from the earlier empty setup remains retained.
 
-Preserved failures: acquisition 02 (`c6e967d2...`), early guard-only rollback 01
-(`b451bd973...`), and an unlaunched sparse configuration rejected by the lifetime
+Preserved failures: acquisition 02 (`c6e967d2...`) is permanently retained under
+`~/.local/state/plugnz-evidence/20261012/codex-acquisition-02/`; early guard-only
+rollback 01 is under the permanent native evidence root's `rollback-01/`, archive
+SHA256 `b451bd973abe5c1766d820d24dc6a35703706d056d34c7ae6794d3e3f88720ba`.
+An unlaunched sparse configuration was rejected by the lifetime
 reserve check. The first two were independently restored; no Native execution is
 claimed for them. Their original roots, source refs, configurations and code
-remain preserved. No raw evidence, restored trial or snapshot was deleted.
+remain preserved. The original rejected sparse configuration is retained beside
+its eventual successful configuration in `sparse-01/`.
+No raw evidence, original archive or snapshot was deleted. Separately reviewed
+duplicate acquisition/Kimi restoration directories were removed only after
+durable archive hashes, complete inventories and a privileged zero-process-use
+scan passed; this did not remove the original attempts or their recovery data.
 No skill was revised; concrete method improvements were the measured acquisition
 budget and independently reviewed proof guards, not a claimed skill A/B result.

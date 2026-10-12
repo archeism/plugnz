@@ -23,19 +23,25 @@ does not match the required complete binary SHA256
 `50ed828f357c655a3c82054d346cab8434f24901f14ec19b8267571bdd008b38`.
 All partial supplier bodies were archived; none were omitted as reconstructible.
 
-Archive: `/tmp/plugnz-codex-b029c54-acquisition-02/evidence.tar.gz`,
+Permanent archive:
+`~/.local/state/plugnz-evidence/20261012/codex-acquisition-02/evidence.tar.gz`,
 225584848 bytes, SHA256
 `c6e967d2c8fe6b49f6e83a15685404676be61b4ff564cf068cc21e511e8b6a6b`.
 Controller restoration checked every trial and supplier file hash and mode.
 Root independently restored into
 `/tmp/plugnz-codex-acquisition-independent-k8ga7s` and verified all 12 files,
 423509318 bytes, including the explicitly incomplete binary and zero omissions.
-Verifier: `/tmp/plugnz-codex-acquisition-independent.mjs`.
+Permanent verifier:
+`~/.local/state/plugnz-evidence/20261012/native-git-f470/plugnz-codex-acquisition-independent.mjs`.
+The original temporary archive was copied with config, receipt and all controller
+source/SHA snapshots; independent full checksums matched every copy.
 
 The approved retry budget is 768 MiB acquisition/archive cap with 896 MiB remote
 scratch reserve, still bounded by 3 GiB whole-filesystem growth and 630 seconds
 reserved for preservation before actual expiry. Native evidence remains capped
 at 100 MiB. Controller change `be36648` is separately reviewed before any retry.
 No claims about maximum archive throughput or Native eligibility follow from
-this failed attempt. Local raw evidence and both restored inventories remain
-retained; no files or snapshots were deleted.
+this failed attempt. Raw evidence and inventories remain durably retained.
+The duplicate loose restorations were separately approved for removal after
+complete byte/hash/mode/link validation and a privileged zero-process-use scan;
+no original archive, failed-attempt metadata or snapshot was removed.
