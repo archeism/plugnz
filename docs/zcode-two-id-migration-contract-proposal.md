@@ -912,6 +912,24 @@ Unknown mixtures/foreign state fail loudly. Committed cleanup cannot resurrect
 the old activation, roll back a committed migration, or reopen a superseded
 legacy obligation. Fresh retries never replay the original unknown operation.
 
+## Reviewed contract checkpoint (not runtime delivery)
+
+Independent Standards and Spec rereviews approved the finalization correction
+at `ed99b1a9476d5f7b97672ded5ba6795945ec47dd`, tree
+`bb23de4d280bdbe1c0f82d0b3f39b3ccf973a853`, against `9b24990`.
+The Spec run passed five pure checks / 25 assertions with actual Bun 1.3.14 and
+Node 22.23.1; log SHA-256:
+`e301137882f930a7557a0ca35b2115e040fd1d504de154715e78b9142caf50db`.
+Both typecheck and diff checks exited zero. The combined integration merge
+`c5386d6034fa744fe18279087a48257ec005b3e8` repeated those five checks / 25
+assertions in 278 ms, with zero failures and a clean typecheck.
+
+These assertions check proposal ordering and concrete identity-framing vectors,
+not an implemented transaction or genuine native exclusion. The explicit owner
+options above remain unselected. The known public adoption failure remains a
+hard failure; no native capability or full-suite approval follows from this
+checkpoint. Skills were used unchanged, not claimed as an RSI improvement.
+
 ## Acceptance and foundation scan
 
 Required public subprocess proofs use authentic historical CLI-generated homes,
