@@ -1,7 +1,7 @@
 // One complete scenario per controller-owned immutable root; no home relocation.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { accessSync, constants, copyFileSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 
@@ -9,6 +9,42 @@ const [arm, source, v1, v2, v3, baseline] = process.argv.slice(2);
 assert(['rollback', 'foreign', 'cache', 'inactive', 'sparse', 'malformed'].includes(arm));
 const root = process.cwd();
 assert.match(root, /^\/vercel\/sandbox\/proof\/codex-native-b029c54-[a-z0-9-]+$/);
+const caps = readFileSync('/proc/self/status', 'utf8');
+assert.match(caps, /^NoNewPrivs:\s+1$/m);
+for (const field of ['Inh', 'Prm', 'Eff', 'Bnd', 'Amb']) assert.match(caps, new RegExp(`^Cap${field}:\\s+0+$`, 'm'));
+assert.notEqual(process.getuid(), 22064, 'Native case must not share acquisition UID');
+assert.deepEqual(process.getgroups(), [], 'No inherited acquisition group authority');
+const supplierInput = JSON.parse(readFileSync('/vercel/sandbox/proof/codex-acquisition03-input.json', 'utf8'));
+assert.equal(supplierInput.archiveSha256, 'ca055d81032720a7c1b5190c3597869e3da39e8613b6fdc3650c47192343882f');
+assert.equal(supplierInput.locator, 'https://registry.npmjs.org/@openai/codex/0.162.0');
+assert.equal(supplierInput.revision, '0.162.0');
+const supplier = '/vercel/sandbox/native/codex-0162';
+const binary = join(supplier, 'node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex');
+const binarySha = () => createHash('sha256').update(readFileSync(binary)).digest('hex');
+function verifySupplier() {
+  for (const name of readdirSync('/proc')) {
+    if (!/^\d+$/.test(name)) continue;
+    try {
+      const status = readFileSync(`/proc/${name}/status`, 'utf8');
+      assert(!(Number(status.match(/^Uid:\s+(\d+)/m)?.[1]) === 22064 && !/^State:\s+Z/m.test(status)), 'Acquisition UID writers remain live');
+    } catch (error) { if (!['ENOENT', 'ESRCH'].includes(error.code)) throw error; }
+  }
+  for (const path of [supplier, ...supplierInput.inventory.map(row => join(supplier, row.path))]) {
+    let writable = false;
+    try { accessSync(path, constants.W_OK); writable = true; } catch (error) { assert.equal(error.code, 'EACCES'); }
+    assert.equal(writable, false, `Existing supplier input is writable by Native case: ${path}`);
+  }
+  for (const row of supplierInput.inventory) {
+    const path = join(supplier, row.path), stat = lstatSync(path);
+    if (row.kind === 'file') {
+      assert(stat.isFile()); assert.equal(stat.size, row.bytes); assert.equal(stat.mode & 0o777, row.mode);
+      assert.equal(createHash('sha256').update(readFileSync(path)).digest('hex'), row.sha256);
+    } else if (row.kind === 'directory') { assert(stat.isDirectory()); assert.equal(stat.mode & 0o777, row.mode); }
+  }
+  assert.equal(binarySha(), '50ed828f357c655a3c82054d346cab8434f24901f14ec19b8267571bdd008b38');
+}
+verifySupplier();
+writeFileSync(join(root, 'supplier-provenance.json'), JSON.stringify({ ...supplierInput, supplierRoot: supplier, caseUid: process.getuid(), groups: process.getgroups(), caps, binaryBefore: binarySha() }, null, 2), { flag: 'wx' });
 assert.match(source, /^https:\/\/github\.com\/archeism\/plugnz\.git#proof\/codex-b029c54-source-20261011(?:-[a-z0-9-]+)?$/);
 for (const revision of [v1, v2, v3]) assert.match(revision, /^[a-f0-9]{40}$/);
 for (const name of ['probe', 'boundary', 'surfaces', 'preflight', 'run']) {
@@ -48,5 +84,6 @@ if (['inactive', 'sparse', 'malformed'].includes(arm)) {
   const phase = { rollback: 'native-exit', foreign: 'foreign-checkout', cache: 'foreign-cache' }[arm];
   run('fault', 'codex-preserved-native-probe.mjs', [phase, arm, v3]);
 }
-writeFileSync(join(root, 'complete.json'), JSON.stringify({ arm, source, at: Date.now() }), { flag: 'wx' });
+verifySupplier();
+writeFileSync(join(root, 'complete.json'), JSON.stringify({ arm, source, binaryAfter: binarySha(), at: Date.now() }), { flag: 'wx' });
 console.log(JSON.stringify({ arm, source, result: 'verified' }));
