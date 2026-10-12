@@ -154,6 +154,8 @@ export interface LifecycleCliHarness {
   source(name: string, files: Record<string, string>): string;
   storePath(host: keyof typeof HOST_STORE_PATHS): string;
   fakeNative(name: string, steps: FakeNativeStep[]): FakeNative;
+  /** Absolute PATH-visible path for a caller-installed shim in fake-bin. */
+  fakeBinPath(name: string): string;
   run(args: string[], options?: RunOptions): CliRunResult;
 }
 
@@ -204,6 +206,11 @@ class LifecycleCliHarnessImpl implements LifecycleCliHarness {
     this.sources = join(this.root, 'sources');
     this.fakeBin = join(this.root, 'fake-bin');
     for (const path of [this.home, this.ambientHome, this.sources, this.fakeBin]) mkdirSync(path, { recursive: true });
+  }
+
+  fakeBinPath(name: string): string {
+    if (!/^[a-z0-9][a-z0-9._-]*$/iu.test(name)) throw new Error(`unsafe fake-bin name: ${name}`);
+    return join(this.fakeBin, name);
   }
 
   writeHome(files: Record<string, string>): void {
