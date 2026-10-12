@@ -115,3 +115,41 @@ gates. The writer refactor
 changes production bundle bytes: earlier C72 Native evidence must not be relabeled
 as verification of this exact producer. Skill instructions are unchanged; no
 skill A/B improvement is claimed.
+
+## Independent review corrections (not acceptance)
+
+Both independent axes requested changes on `b4a6fda`; the earlier green focused
+receipt did not prove these protections. Preserve that receipt as its original
+bounded result, not as acceptance of the later correction.
+
+The Standards review found authored executable Markdown command mode was carried
+into the new projection, whereas the authentic old writer created nonexecutable
+command text. Byte-only `snapshotTree` checks missed the mode difference. The
+new regression first observed `0755` instead of literal `0644`, then passed after
+explicit projected regular-command mode. It separately checks the materialized
+command is `0644` and authored Source remains `0755`. The authentic old CLI proof
+now runs both its root-TOML case and an executable authored Markdown variant.
+
+The Spec review found lexical output checks admitted an absent destination or
+resource leaf below a symlink ancestor pointing into Source. Both missing-leaf
+regressions first accepted the unsafe call. The writer now resolves **both**
+outputs through their nearest existing physical ancestor and checks physical
+Source containment before either output is materialized. It reuses the existing
+canonical path helper; it does not prohibit stable declared native-root links.
+Both negative tests prove all fixture bytes and paths remain unchanged.
+
+RED receipt: pinned Bun 1.4.0 projection suite, four pass, three fail, 22 assertions.
+GREEN unit receipt: seven pass, zero fail, 26 assertions. Source correction freeze:
+`2ae117c2c82c0831e4f353639f24d675a68938a3` (49 added/four removed lines, four files).
+Projection SHA256:
+`c1c6c6d3e8ac3a2bff04b8be470324406fb6358656874fb59d4272a2845a9074`.
+Writer SHA256:
+`08391d9c67b91d2abdb9798a8510ca40dd090888dd1f691ad76804d451912d14`.
+
+The same six-file command above, pinned Bun 1.4.0 on that corrected source,
+finished with 47 pass, two existing macOS-only skips, zero fail, 382 assertions,
+49 tests, 103.33 seconds, terminal exit 0. Typecheck and diff check also exited 0.
+Both stable declared CLI-root and storage-root symlink lifecycle positives,
+rollback/retirement guards and historical public global containment passed.
+Both independent rereviews remain required before integration; no result here
+enables the still-missing paired migration transaction or fence.
