@@ -73,6 +73,10 @@ declare module 'node:os' {
   export function tmpdir(): string;
 }
 
+declare module 'node:module' {
+  export function createRequire(path: string): (specifier: string) => unknown;
+}
+
 /** Minimal surface of Bun's test runner used by this repo's tests. */
 declare module 'bun:test' {
   export function beforeEach(fn: () => void | Promise<void>): void;
