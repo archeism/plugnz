@@ -86,8 +86,32 @@ proof. No accepted paired serialization/schema, first-retained modern snapshot,
 paired rollback/commit/CAS, interruption/restart handling, real native supplier
 proof or concurrency fence exists in this slice. No real installation is touched.
 
-Focused checks are recorded in the commit handoff. Full combined/packed-runtime
-and independent two-axis reviews remain integration gates. The writer refactor
+## Frozen focused receipt
+
+Production/proof freeze: `5c5e209d6417c9df315e75d5c9821734fff7a3b3`.
+Projection module SHA256:
+`ffe22fc369f7a4659b25c8ea2f4ddce4bd1988568ff65c825b885b5b6a06f0eb`.
+Historical precondition module SHA256:
+`a2ae13fd62754fcf7233cc59e5c02e2030ef39a5f0156e5d2b28c4374274e4b1`.
+The original compressed producer remains
+`1a49ed61123091f662ba7d65aeda66aed381d455a20c203a5cf85582123add6f`.
+
+```sh
+PATH=/tmp/plugnz-pr62-deps.0msIJO/node_modules/.bin:$PATH bun test \
+  test/zcode-historical-projection.test.ts test/zcode-historical-identity.test.ts \
+  test/historical-native-id-public.test.ts test/zcode-cli-activation.test.ts \
+  test/zcode-cli-retirement.test.ts test/zcode-cli-lifecycle.test.ts
+bun run check
+git diff --check
+```
+
+Pinned Bun 1.4.0 focused run: 43 pass, two existing macOS-only skips, zero fail,
+338 assertions, 45 tests across six files, 97.13 seconds, terminal exit 0.
+Typecheck and diff check separately exited 0. Earlier targeted Bun 1.3.14 checks
+passed; those are not a cross-version whole-suite or Native-runtime certification.
+
+Full combined/packed-runtime and independent two-axis reviews remain integration
+gates. The writer refactor
 changes production bundle bytes: earlier C72 Native evidence must not be relabeled
 as verification of this exact producer. Skill instructions are unchanged; no
 skill A/B improvement is claimed.
