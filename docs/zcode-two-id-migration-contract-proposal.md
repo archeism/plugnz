@@ -809,7 +809,12 @@ no runtime floor changes and no safety gate is weakened.
    pass or silently rebind/refetch a precommand expectation or Source.
 2. Acquire ALL required fences for that complete batch in deterministic global canonical order.
    Before acquiring any, enumerate the complete lock set, including the ledger
-   lease and every proven native-writer boundary. Canonical physical lock-resource
+   write lease and every proven native-writer boundary. Record their distinct
+   roles: Native fences exclude native application writers; the ledger writer
+   lease authorizes ledger CAS writes, including final journal closure. Neither
+   substitutes for the other. An ambiguous physical alias/role assignment cannot
+   authorize release; its exact authority and release protocol must be proved.
+   Canonical physical lock-resource
    identities, not Scope order or logical aliases, determine one common total
    order for admission, apply and recovery. Deduplicate aliases of the same lock;
    acquire it once, never reentrantly. Ledger lease acquisition participates in
@@ -854,10 +859,40 @@ no runtime floor changes and no safety gate is weakened.
    canonical activation, removes only the exact old active record, commits the
    retained migration relation/readback and modern COMMIT cleanup-pending journal.
    `lastConverged` advances only at this verified composite boundary.
-8. Cleanup/dispose only exact captured artifacts after the durable commit receipt;
-   release the complete fence set in reverse order, then close the modern journal.
-   Any failure keeps accurate durable pending state and referenced backups.
-   Original historical proofs stay.
+8. Cleanup/dispose only exact captured artifacts after the durable commit receipt,
+   with the ledger write lease and Native fences still held. Retain referenced
+   artifacts for unresolved cleanup; original historical proofs always stay.
+   No post-COMMIT failure can authorize Native rollback.
+9. Release and verify the Native fences after verified cleanup, in reverse order
+   within their canonical acquisition order, while keeping the ledger writer
+   lease held. Releasing this subset acquires no new lock and does not alter the
+   common acquisition order. Unresolved application Native-fence release is
+   cleanup-pending, not successful finalization: keep the modern COMMIT journal
+   open and report the exact unresolved fence/evidence loudly. Any pending-state
+   ledger write still requires the held lease and exact generation CAS. Do not
+   close the journal merely because Native payload convergence succeeded.
+10. Atomically close the fresh journal only after verified cleanup and Native-fence
+    release, with the ledger write lease still held and the exact current ledger
+    generation/commit identity CAS. Closure is the last ledger write under that
+    lease. Journal-close failure leaves accurate durable COMMIT cleanup-pending;
+    it never rolls back committed Native state or erases historical relations.
+    If cleanup, Native release or closure cannot complete, do not close: finish
+    any truthful pending-state CAS under the held lease, then proceed to ledger
+    lease release after the last such write. Retain the existing pending journal
+    if that CAS also fails; report the unresolved operation rather than inventing
+    a successful pending-state update or retaining assumed write authority.
+11. Release the ledger writer lease only AFTER that last write. A writer-mutex
+    release error is distinct from application Native-fence-release pending: return
+    loud nonzero with the actual committed/journal-close result and mutex failure,
+    never roll back committed Native state, and never claim all finalization green.
+    Failed release does not confer assumed continuing ledger authority. No repair
+    write may occur after releasing or losing that lease. If any repair write is
+    contemplated, first reacquire the complete required lock set in the same
+    canonical order and revalidate the exact current generation, commit identity
+    and journal state before writing; do not re-open a closed journal or fabricate
+    cleanup-pending when only mutex release failed. If cleanup or Native release
+    was unresolved instead, retain its existing cleanup-pending journal and exact
+    referenced artifacts, without claiming successful closure.
 
 Rollback validates **all** affected surfaces before its first restore write.
 Each must equal the sealed prior or an exact reachable fresh candidate/phase
@@ -955,6 +990,17 @@ correction, Bun 1.3.14 ran the same focused file with four pass, zero fail and
 diff checks exited 0. This checks the documented sequence, not an executor,
 working lock primitive, actual concurrency or migration functionality. Both
 independent design axes must review this delta; native exclusion remains blocked.
+
+The finalization correction distinguishes Native application fences from the
+ledger writer lease: cleanup and verified Native release precede atomic journal
+closure under the still-held ledger lease; lease release follows the last write.
+The new pure regression was RED against `9b24990` (four pass, one fail, 20
+assertions) because the proposal released the entire set before journal closure.
+It checks the documented roles and final ordering, not working runtime exclusion.
+After correction Bun 1.3.14 ran five passing tests, zero failures and 25
+assertions; Node 22.23.1 reproduced the framing literals, and typecheck/diff
+checks exited 0. No executor, runtime policy, capability grant or owner fence
+option changed; both independent axes must review this finalization delta.
 
 Proofs: canonical Git Source install, same-HEAD zero-write preview/apply, changed
 SHA/content convergence where supported, actual loader skill/command/resource

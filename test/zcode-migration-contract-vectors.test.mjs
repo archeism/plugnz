@@ -24,6 +24,20 @@ test('transaction requires whole-batch admission, fencing and revalidation befor
   expect(steps[revalidation]).toContain('command-global zero-write');
 });
 
+test('final journal close keeps ledger authority after native fence release', () => {
+  const transaction = document.split('## Transaction, CAS and restart\n')[1].split('\nRollback validates')[0];
+  const steps = transaction.split(/\n(?=\d+\. )/u).map(step => step.trim()).filter(Boolean);
+  const nativeRelease = steps.findIndex(step => /Release and verify the Native fences/u.test(step));
+  const close = steps.findIndex(step => /Atomically close the fresh journal/u.test(step));
+  const leaseRelease = steps.findIndex(step => /Release the ledger writer lease/u.test(step));
+  expect(nativeRelease).toBeGreaterThanOrEqual(0);
+  expect(close).toBeGreaterThan(nativeRelease);
+  expect(leaseRelease).toBeGreaterThan(close);
+  expect(steps[close]).toContain('ledger write lease still held');
+  expect(steps[leaseRelease]).toContain('loud nonzero');
+  expect(steps[leaseRelease]).toContain('never roll back committed Native state');
+});
+
 test('proposal specifies an actual NUL, not a backslash-zero operation salt', () => {
   expect(document.includes('sourceFingerprint + "\\0" + attemptId')).toBe(true);
   expect(document.includes('sourceFingerprint + "\\\\0" + attemptId')).toBe(false);
