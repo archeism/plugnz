@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { readState } from '../src/state';
 import { parseLifecycleReport } from '../src/lifecycle-report';
 import { adoptionDigest } from '../src/legacy-adoption-proof';
+import { parseAdoptionAdmission } from '../src/legacy-adoption-record';
+import { createDeploymentScopeIdentity } from '../src/deployment-scope';
 import { withLifecycleCliHarness } from './lifecycle-cli-harness';
 
 test('Cursor composes exact legacy admission through the public preview but hard-blocks before its unfinished mutation fence', async () => {
@@ -57,6 +59,23 @@ test('Cursor composes exact legacy admission through the public preview but hard
       operation.adoption.admissionId = adoptionDigest('plugnz/legacy-admission/v1', payload);
     }
     expect(reportRefusal(falseProjection)).toContain('projected');
+    expect(parseAdoptionAdmission(preview.plan[0].adoption).native.adapterId).toBe('cursor');
+    for (const kind of ['dcode', 'codex']) {
+      const wrongHost = JSON.parse(JSON.stringify(preview));
+      for (const operation of [wrongHost.plan[0], wrongHost.outcomes[0]]) {
+        const admission = operation.adoption;
+        const target = { kind, instance: 'default' };
+        const scope = createDeploymentScopeIdentity(admission.original.scope.source, target);
+        operation.scope = scope;
+        admission.target = target;
+        admission.original.scope = scope;
+        admission.fresh.scopeId = scope.id;
+        const { admissionId: _id, ...payload } = admission;
+        admission.admissionId = adoptionDigest('plugnz/legacy-admission/v1', payload);
+      }
+      expect([admissionRefusal(wrongHost.plan[0].adoption), reportRefusal(wrongHost)]
+        .map(reason => reason.includes('adapter'))).toEqual([true, true]);
+    }
     const applied = harness.run(args, { env });
     const report = parseLifecycleReport(JSON.parse(applied.stdout));
     expect(applied.exitCode).toBe(1);
@@ -120,6 +139,11 @@ test('Cursor ignores an unrelated original pin before resolving the selected pac
 
 function reportRefusal(value: unknown): string {
   try { parseLifecycleReport(value); return 'accepted'; }
+  catch (error) { return error instanceof Error ? error.message : String(error); }
+}
+
+function admissionRefusal(value: unknown): string {
+  try { parseAdoptionAdmission(value); return 'accepted'; }
   catch (error) { return error instanceof Error ? error.message : String(error); }
 }
 
