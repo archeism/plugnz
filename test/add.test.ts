@@ -4,7 +4,7 @@ import { chmodSync, existsSync, readFileSync, mkdirSync, rmSync, writeFileSync }
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { materialize, materializeInto, withHostEnvAsync, initGitRepo, repoRoot, writeLedger, isolatedHostEnv } from './util';
+import { writeFiles, materialize, materializeInto, withHostEnvAsync, initGitRepo, repoRoot, writeLedger, isolatedHostEnv } from './util';
 import { main } from '../src/cli';
 import { readState } from '../src/state';
 import { claudeCode } from '../src/hosts/claude-code';
@@ -744,21 +744,23 @@ describe('add', () => {
 
   test('refuses standalone Pi delivery without writing an install record or skill tree', async () => {
     await withHostEnvAsync('codex', async (home) => {
+      const source = join(home, 'ordinary-source');
+      writeFiles(source, { 'plugin.json': JSON.stringify({ name: 'new-plugin', version: '1.0.0' }), 'skills/demo/SKILL.md': '---\nname: demo\ndescription: demo\n---\nbody\n' });
+      writeFiles(join(home, '.pi', 'agent'), { 'settings.json': '{}' });
       const output: string[] = [];
       const originalLog = console.log;
       console.log = (value: string) => output.push(value);
       try {
-        expect(await main(['add', '/must-not-read', '--target', 'pi', '--legacy-json'])).toBe(1);
+        expect(await main(['add', source, '--target', 'pi', '--legacy-json'])).toBe(1);
       } finally {
         console.log = originalLog;
       }
       const outcomes = JSON.parse(output.join('')) as Array<{ target: string; status: string; action: string; diagnostic?: string }>;
       expect(outcomes).toHaveLength(1);
-      // Pairless command failures can only be represented by the legacy wildcard row.
-      expect(outcomes[0]?.target).toBe('*');
+      expect(outcomes[0]?.target).toBe('pi');
       expect(outcomes[0]?.status).toBe('unsupported');
       expect(outcomes[0]?.action).toBe('install');
-      expect(outcomes[0]?.diagnostic).toContain('unsupported for install');
+      expect(outcomes[0]?.diagnostic).toContain('portable plugnz.hooks.json packages');
       expect(readState()).toEqual([]);
       expect(existsSync(join(home, '.pi', 'agent', 'skills', 'local___new-plugin'))).toBe(false);
     });

@@ -24,6 +24,7 @@ import { commitAll, fakeBin, initGitRepo, materialize, materializeInto, repoRoot
 import { kimiNativeEnv, resetKimiNativeStore, withKimiNative } from './kimi-fixture';
 import { parseLifecycleReport } from '../src/lifecycle-report';
 import { writers } from '../src/hosts/writers';
+import { fingerprintTree } from '../src/fingerprint';
 
 const plannedNativeId: HostWriter['plannedNativeId'] = (plugin) => plugin.name;
 
@@ -211,10 +212,18 @@ describe('update · re-add from the recorded source', () => {
     });
   });
 
-  test('refuses cleanup-only Pi updates without reading or changing its recorded install', async () => {
+  test('refuses ordinary Pi package updates without changing legacy installation or provenance', async () => {
     await withHostEnvAsync('kimi', async (home) => {
-      writeLedger(home, [{ host: 'pi', id: 'demo-plugin', source: '/must-not-read', sourceSha: 'old', ownership: 'plgnz' }]);
+      const source = join(home, 'legacy-source');
+      const native = join(home, '.pi', 'agent');
+      writeFiles(source, { 'plugin.json': JSON.stringify({ name: 'demo-plugin', version: '1.0.0' }) });
+      writeFiles(join(native, 'skills', 'local___demo-plugin'), {
+        '.plgnz-install.json': JSON.stringify({ pluginId: 'demo-plugin@local', source, fingerprint: 'old' }),
+        'SKILL.md': 'historical owned skill\n',
+      });
+      writeLedger(home, [{ host: 'pi', id: 'demo-plugin@local', source, sourceSha: 'old', ownership: 'plgnz' }]);
       const before = readFileSync(join(home, 'state.json'), 'utf8');
+      const nativeBefore = fingerprintTree(native), sourceBefore = fingerprintTree(source);
       const output: string[] = [];
       const originalLog = console.log;
       console.log = (value: string) => output.push(value);
@@ -222,10 +231,13 @@ describe('update · re-add from the recorded source', () => {
         expect(await main(['update', '--target', 'pi', '--json'])).toBe(1);
       } finally { console.log = originalLog; }
       const report = parseLifecycleReport(JSON.parse(output.join('')));
-      expect(report.outcomes).toEqual([]);
-      expect(report.summary.reason?.code).toBe('capability.unsupported');
-      expect(report.summary.reason?.diagnostic).toContain('unsupported for update');
+      expect(report.outcomes).toHaveLength(1);
+      expect(report.outcomes[0]?.reason?.code).toBe('capability.unsupported');
+      expect(report.outcomes[0]?.reason?.diagnostic).toContain('portable plugnz.hooks.json packages');
+      expect(report.summary.mutationStarted).toBe(false);
       expect(readFileSync(join(home, 'state.json'), 'utf8')).toBe(before);
+      expect(fingerprintTree(native)).toBe(nativeBefore);
+      expect(fingerprintTree(source)).toBe(sourceBefore);
     });
   });
 

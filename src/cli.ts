@@ -2182,10 +2182,15 @@ export async function main(argv: string[]): Promise<number> {
         group.push(finding);
         groups.set(key, group);
       }
-      if (flags.dryRun) {
+      {
         updatePlan = freezePlan(selectedPairs.map((pair, index) => {
           const findings = groups.get(`${pair.scope.id}\u0000${pair.nativeId}`) ?? [];
           const failed = findings.find((finding) => finding.mark !== '✓' || finding.status !== undefined);
+          const preflightCapability = (failed?.status === 'unsupported' || failed?.status === 'unverified')
+            && failed.terminalPhase === 'preflight'
+            && !findings.some((finding) => finding.mutationStarted === true || finding.changed === true)
+            && failed.resourceState !== 'potentially-changed';
+          if (!flags.dryRun && !preflightCapability) return baseOperations[index]!;
           const successfulAction = findings.find((finding) => finding.action !== undefined)?.action;
           return planOperation({
             command: 'update',

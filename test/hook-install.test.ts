@@ -182,3 +182,43 @@ for (const id of ['pi', 'opencode']) {
     }
   });
 }
+
+test('Codex is detected from its CLI and installs before its native home exists', () => {
+  const native = target('codex');
+  rmSync(native, { recursive: true });
+  const detected = cli(['targets']);
+  expect(detected.status).toBe(0);
+  expect(JSON.parse(detected.stdout)).toContain('codex');
+  expect(existsSync(native)).toBe(false);
+  expect(success(['install', source, '--target', 'codex']).summary.result).toBe('converged');
+  expect(existsSync(join(installedRoot(native), '.codex-plugin', 'plugin.json'))).toBe(true);
+});
+
+test('Codex detection does not accept a nonexecutable CLI or create its native home', () => {
+  const native = target('codex');
+  rmSync(native, { recursive: true });
+  chmodSync(env.OPEN_PLUGIN_CODEX_BIN!, 0o644);
+  const detected = cli(['targets']);
+  expect(detected.status).toBe(0);
+  expect(JSON.parse(detected.stdout).includes('codex')).toBe(false);
+  expect(existsSync(native)).toBe(false);
+});
+
+for (const id of ['pi', 'opencode']) {
+  test(id + ' update reports version refusal before intent and preserves native bytes', () => {
+    const native = target(id);
+    success(['install', source, '--target', id]);
+    const state = readFileSync(join(home, 'state.json'), 'utf8');
+    const fingerprint = fingerprintTree(native);
+    target(id, '9.9.9');
+    const result = cli(['update', 'automatic-hooks', '--target', id]);
+    expect(result.status).toBe(1);
+    const report = JSON.parse(result.stdout);
+    expect(report.outcomes[0]?.action).toBe('not-attempted');
+    expect(report.outcomes[0]?.route).toBe('none');
+    expect(report.outcomes[0]?.reason?.code).toBe('capability.unverified');
+    expect(report.summary.mutationStarted).toBe(false);
+    expect(readFileSync(join(home, 'state.json'), 'utf8')).toBe(state);
+    expect(fingerprintTree(native)).toBe(fingerprint);
+  });
+}

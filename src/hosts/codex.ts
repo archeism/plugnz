@@ -152,7 +152,7 @@ export const codex: HostReader = {
   gui: false,
 
   detect(): boolean {
-    return existsSync(codexHome());
+    return existsSync(codexHome()) || probeCodexVersion().kind === 'detected';
   },
 
   stores(): string[] {

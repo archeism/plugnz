@@ -69,7 +69,12 @@ describe('targets', () => {
       const profiles = JSON.parse(output) as Array<{ id: string; scope: string; version: string; evidence: string; capabilityEvidenceIds: string[]; capabilities: Record<string, string> }>;
       expect(profiles).toHaveLength(16);
       expect(profiles.find((profile) => profile.id === 'grokbot')?.scope).toBe('excluded-standalone');
-      expect(profiles.find((profile) => profile.id === 'pi')?.capabilities.install).toBe('unsupported');
+      for (const id of ['pi', 'opencode']) {
+        const profile = profiles.find((profile) => profile.id === id);
+        expect(profile?.scope).toBe('native-plugin');
+        expect(profile?.capabilities).toEqual({ install: 'supported', update: 'supported' });
+        expect(profile?.evidence).toBe('docs/hooks.md');
+      }
       expect(profiles.find((profile) => profile.id === 'gemini-cli')?.scope).toBe('native-plugin');
       expect(profiles.find((profile) => profile.id === 'cursor')?.evidence).toBe('docs/hosts/cursor.md');
       expect(Object.keys(profiles.find((profile) => profile.id === 'codex')?.capabilities ?? {}).sort()).toEqual(['install', 'update']);
