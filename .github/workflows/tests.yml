@@ -1,0 +1,28 @@
+name: Tests
+
+# The suite never ran in CI: publish runs build+smoke, node-compat runs build+gates,
+# CodeQL is static. This is the missing regression net (and the clean-environment
+# tiebreaker for locally-flaky suites).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+      - name: Install and run the full suite
+        run: |
+          bun install --frozen-lockfile
+          bun test
+      - name: Typecheck
+        run: bunx tsc --noEmit
