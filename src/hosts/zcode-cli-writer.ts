@@ -1,9 +1,8 @@
 /** Official ZCode CLI marketplace writer. */
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createCapabilityEvidenceProfile, type CapabilityEvidenceProfile, type CapabilityStatus } from '../capability-evidence';
-import { normalizeCommandTree } from '../conversion';
 import { fingerprintTree } from '../fingerprint';
 import type { AddOptions, HostWriter, InstalledPlugin, PinOptions, PinOutcome } from '../host';
 import type {
@@ -27,8 +26,8 @@ import { zcodeCliConfigRoot, zcodeCliRoot } from '../paths';
 import { CryptoHasher, spawnSync as bunShapedSpawnSync } from '../runtime';
 import { PACKAGE_SEMANTICS, type PackageSemantic } from '../semantic-inventory';
 import type { PluginSource, ResolvedSource } from '../source';
-import { yamlParse, yamlStringify } from '../yaml';
 import { assertZcodeNativeRegistryReadable, readZcodeEnabledPluginIds, readZcodeNativeRecords, readZcodeOwnership, resolveOfficialZcodeCli, runOfficialZcode, zcodeCli, zcodeCliEnv, zcodeMarketplaceRoot, zcodeRegistryFile, zcodeResourceRoot, zcodeSafeInstallRoot } from './zcode-cli';
+import { projectZcodePayload, type ZcodeProjectionTree } from './zcode-cli-projection';
 
 declare const TextDecoder: { new (): { decode(input: Uint8Array): string } };
 
@@ -103,18 +102,31 @@ export const zcodeCliWriter: HostWriter = {
 export function projectZcodePlugin(source: string, destination: string, resourceCopy: string, resourceLinkRoot: string, logicalId: string, nativeId: string, nativeVersion: string, fingerprint: string, sourceUri: string): void {
   const input = resolve(source); const target = resolve(destination); const ownedResources = resolve(resourceCopy); const links = resolve(resourceLinkRoot);
   if (!existsSync(input) || !statSync(input).isDirectory()) throw new Error(`ZCode plugin source is not a directory: ${input}`);
-  if (target.startsWith(`${input}/`) || ownedResources.startsWith(`${input}/`)) throw new Error('ZCode projected outputs must not be inside the source');
-  assertNoSymlinks(input); cpSync(input, target, { recursive: true });
-  validateRootManifest(target);
-  projectCommands(target, sourceName(target));
-  projectUserOnlySkills(target, ownedResources, links, sourceName(target));
-  const manifest: Record<string, unknown> = { name: sourceName(target), version: nativeVersion };
-  const rootManifest = readJson(join(target, 'plugin.json'));
-  for (const key of ['description', 'author', 'license']) if (typeof rootManifest?.[key] === 'string') manifest[key] = rootManifest[key];
-  if (hasSkill(target)) manifest['skills'] = 'skills';
-  if (hasCommand(target)) manifest['commands'] = 'commands';
-  mkdirSync(join(target, '.zcode-plugin'), { recursive: true });
-  writeFileSync(join(target, '.zcode-plugin', 'plugin.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  if (target === input || ownedResources === input || target.startsWith(`${input}/`) || ownedResources.startsWith(`${input}/`)) throw new Error('ZCode projected outputs must not be inside the source');
+  // Missing leaves must be resolved through their nearest existing ancestor.
+  // Stable declared native-root links remain supported; only an output that
+  // physically enters this Source is refused, before either output is written.
+  const physicalInput = realpathSync(input);
+  for (const output of [target, ownedResources]) {
+    const physicalOutput = canonicalExistingPath(output);
+    if (physicalOutput === physicalInput || physicalOutput.startsWith(`${physicalInput}/`)) throw new Error('ZCode projected outputs must not be inside the source');
+  }
+  for (const output of [target, ownedResources]) {
+    try { lstatSync(output); assertNoSymlinks(output); }
+    catch (error) { if ((error as { code?: string }).code !== 'ENOENT') throw error; }
+  }
+  const projected = projectZcodePayload(input, links, nativeVersion);
+  const writeTree = (tree: ZcodeProjectionTree, root: string): void => {
+    mkdirSync(root, { recursive: true });
+    for (const [path, entry] of tree) {
+      const destination = join(root, path);
+      mkdirSync(dirname(destination), { recursive: true });
+      if (entry.kind === 'directory') mkdirSync(destination, { recursive: true });
+      else { (writeFileSync as unknown as (path: string, bytes: Uint8Array) => void)(destination, entry.bytes); chmodSync(destination, entry.mode); }
+    }
+    for (const [path, entry] of tree) if (entry.kind === 'directory') chmodSync(join(root, path), entry.mode);
+  };
+  writeTree(projected.payload, target); writeTree(projected.resources, ownedResources);
   writeFileSync(join(target, MARKER), `${JSON.stringify({ owner: 'plgnz', schema: 1, logicalId, nativeId, fingerprint, source: sourceUri, resourcePath: resourceLinkRoot, resourceFingerprint: fingerprintTree(ownedResources) } satisfies Ownership, null, 2)}\n`);
   assertNoSymlinks(target); assertNoSymlinks(ownedResources);
 }
@@ -126,91 +138,7 @@ function stagePackage(plugin: PluginSource, market: string, resources: string, r
   writeFileSync(join(market, 'marketplace.json'), `${JSON.stringify({ name: nativeId.slice(nativeId.indexOf('@') + 1), plugins: [{ name: plugin.name, source: `./plugins/${plugin.name}` }] }, null, 2)}\n`);
 }
 
-function projectCommands(root: string, pluginName: string): void {
-  const source = join(root, 'commands'); if (!existsSync(source)) return;
-  if (!statSync(source).isDirectory()) throw new Error(`ZCode commands path is not a directory: ${source}`);
-  const temp = join(root, '.plgnz-zcode-commands'); renameSync(source, temp);
-  try {
-    normalizeCommandTree(temp);
-    copyCommandTree(temp, join(root, 'commands', pluginName));
-  } finally { rmSync(temp, { recursive: true, force: true }); }
-}
-function copyCommandTree(source: string, dest: string): void {
-  for (const entry of readdirSync(source)) {
-    const from = join(source, entry); const to = join(dest, entry); const stat = lstatSync(from);
-    if (stat.isSymbolicLink()) throw new Error(`ZCode command source contains symlink: ${from}`);
-    if (stat.isDirectory()) { copyCommandTree(from, to); continue; }
-    if (!stat.isFile() || !entry.endsWith('.md')) throw new Error(`ZCode command source must be Markdown: ${from}`);
-    const text = readFileSync(from, 'utf8'); validateCommand(text, from); mkdirSync(dirname(to), { recursive: true }); writeFileSync(to, text);
-  }
-}
-function projectUserOnlySkills(root: string, resources: string, resourceLinks: string, pluginName: string): void {
-  const skills = join(root, 'skills'); if (!existsSync(skills)) return;
-  if (!statSync(skills).isDirectory()) throw new Error(`ZCode skills path is not a directory: ${skills}`);
-  for (const entry of readdirSync(skills)) {
-    const dir = join(skills, entry); if (!statSync(dir).isDirectory()) throw new Error(`ZCode skill is not a directory: ${dir}`);
-    const skill = join(dir, 'SKILL.md'); if (!existsSync(skill)) continue;
-    const raw = readFileSync(skill, 'utf8'); const fm = frontmatter(raw, skill);
-    const hidden = fm.values['disable-model-invocation'] ?? fm.values['disable_model_invocation'];
-    const invocable = fm.values['user-invocable'] ?? fm.values['user_invocable'];
-    if (hidden !== undefined && typeof hidden !== 'boolean') throw new Error(`ZCode disable-model-invocation must be boolean: ${skill}`);
-    if (invocable !== undefined && typeof invocable !== 'boolean') throw new Error(`ZCode user-invocable must be boolean: ${skill}`);
-    if (hidden !== true) continue;
-    if (invocable === false) throw new Error(`ZCode cannot represent user-invocable: false as a command: ${skill}`);
-    const name = typeof fm.values['name'] === 'string' ? fm.values['name'] : entry; assertName(name, 'user-only skill name');
-    const command = join(root, 'commands', pluginName, `${name}.md`);
-    if (existsSync(command)) throw new Error(`ZCode command collision for user-only skill ${name}`);
-    for (const key of Object.keys(fm.values)) if (!['name', 'description', 'disable-model-invocation', 'disable_model_invocation', 'user-invocable', 'user_invocable', 'argument-hint', 'allowed-tools', 'disable-noninteractive', 'model', 'skills'].includes(key)) throw new Error(`ZCode unsupported user-only skill metadata ${key}: ${skill}`);
-    const resource = join(resources, 'skills', entry); const linkResource = join(resourceLinks, 'skills', entry); copyResources(dir, resource);
-    const commandMeta: string[] = [`description: ${JSON.stringify(typeof fm.values['description'] === 'string' ? fm.values['description'] : name)}`];
-    for (const key of ['argument-hint', 'allowed-tools', 'disable-noninteractive', 'model', 'skills']) {
-      const value = fm.values[key]; if (value === undefined) continue;
-      commandMeta.push(`${key}: ${key === 'argument-hint' ? argumentHint(value, skill) : JSON.stringify(value)}`);
-    }
-    const body = raw.slice(fm.end); validateCommand(`---\n${commandMeta.join('\n')}\n---\n${body}`, skill);
-    mkdirSync(dirname(command), { recursive: true });
-    writeFileSync(command, `---\n${commandMeta.join('\n')}\n---\n${rewriteLinks(body, dir, linkResource, skill)}`);
-    rmSync(dir, { recursive: true, force: true });
-  }
-}
-function copyResources(source: string, destination: string): void {
-  mkdirSync(destination, { recursive: true });
-  for (const name of readdirSync(source)) {
-    if (name === 'SKILL.md') continue;
-    const from = join(source, name); const stat = lstatSync(from); if (stat.isSymbolicLink()) throw new Error(`ZCode resource contains symlink: ${from}`);
-    cpSync(from, join(destination, name), { recursive: true });
-  }
-}
-function rewriteLinks(body: string, source: string, resources: string, label: string): string {
-  if (/\]\s*\[[^\]]+\]/u.test(body)) throw new Error(`ZCode unsupported reference-style Markdown link: ${label}`);
-  // Inline code spans are not links; mask them before rewriting so example
-  // syntax like `[title](link)` inside backticks stays literal (CommonMark).
-  const spans: string[] = [];
-  const masked = body.replace(/(`+)([\s\S]*?)\1/gu, (all) => { spans.push(all); return `\u0000${spans.length - 1}\u0000`; });
-  const rewritten = masked.replace(/(!?\[[^\]]*\])\(([^)\s]+)(\s+[^)]*)?\)/gu, (all, text: string, target: string, suffix: string | undefined) => {
-    if (/^(?:https?:|mailto:|#)/iu.test(target)) return all;
-    if (target.startsWith('/') || target.includes('\\')) throw new Error(`ZCode unsupported absolute resource reference: ${label}`);
-    const absolute = resolve(source, target); const rel = relative(source, absolute);
-    if (rel === '' || rel.startsWith('..') || !existsSync(absolute) || !statSync(absolute).isFile()) throw new Error(`ZCode resource reference escapes or is missing: ${label} (${target})`);
-    return `${text}(${join(resources, rel)}${suffix ?? ''})`;
-  });
-  return rewritten.replace(/\u0000(\d+)\u0000/gu, (_, index: string) => spans[Number(index)] ?? '');
-}
-function validateCommand(raw: string, file: string): void {
-  const fm = frontmatter(raw, file);
-  for (const key of Object.keys(fm.values)) if (!['description', 'argument-hint', 'disable-noninteractive', 'model', 'skills'].includes(key)) throw new Error(`ZCode unsupported command metadata ${key}: ${file}`);
-  if (/(?:^|\n)\s*!|!`/u.test(raw.slice(fm.end))) throw new Error(`ZCode shell command expansion is unsupported: ${file}`);
-}
-function validateRootManifest(root: string): void {
-  const manifest = readJson(join(root, 'plugin.json'));
-  if (manifest === null || typeof manifest['name'] !== 'string') throw new Error(`ZCode projection requires plugin.json name: ${root}`);
-  for (const key of Object.keys(manifest)) if (['hooks', 'mcpServers', 'agents', 'agent', 'executables'].includes(key)) throw new Error(`ZCode root plugin semantic is unsupported: ${key}`);
-}
-function sourceName(root: string): string { const name = readJson(join(root, 'plugin.json'))?.['name']; if (typeof name !== 'string') throw new Error(`ZCode projection requires plugin.json name: ${root}`); return name; }
 function readJson(file: string): Record<string, unknown> | null { try { const value: unknown = JSON.parse(readFileSync(file, 'utf8')); return isObject(value) ? value : null; } catch { return null; } }
-function frontmatter(raw: string, file: string): { values: Record<string, unknown>; end: number } { const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(raw); if (match === null) throw new Error(`ZCode command or user-only skill needs YAML frontmatter: ${file}`); let value: unknown; try { value = yamlParse(match[1] ?? ''); } catch { throw new Error(`ZCode invalid YAML frontmatter: ${file}`); } if (!isObject(value)) throw new Error(`ZCode YAML frontmatter must be a mapping: ${file}`); return { values: value, end: match[0].length }; }
-function hasSkill(root: string): boolean { const dir = join(root, 'skills'); return existsSync(dir) && readdirSync(dir).some(name => existsSync(join(dir, name, 'SKILL.md'))); }
-function hasCommand(root: string): boolean { const dir = join(root, 'commands'); return existsSync(dir) && commandNames(dir).length > 0; }
 function commandNames(dir: string, prefix = ''): string[] { if (!existsSync(dir)) return []; const out: string[] = []; for (const name of readdirSync(dir)) { const path = join(dir, name); if (statSync(path).isDirectory()) out.push(...commandNames(path, prefix === '' ? name : `${prefix}:${name}`)); else if (name.endsWith('.md')) out.push(`${prefix === '' ? '' : `${prefix}:`}${name.slice(0, -3)}`); } return out; }
 function rejectCommandCollisions(stagedMarket: string, nativeId: string, ownPrior?: string): void {
   const candidate = commandNames(join(stagedMarket, 'plugins'));
@@ -258,7 +186,6 @@ function ownedMarketplace(logical: string): string { const h = new CryptoHasher(
 function requireFingerprint(plugin: PluginSource): string { const fp = plugin.contentFingerprint ?? fingerprintTree(plugin.dir); if (!/^[0-9a-f]{16,}$/iu.test(fp)) throw new Error('ZCode requires a content fingerprint'); return fp.toLowerCase(); }
 function moveAside(path: string): { rollback(): void; commit(): void } { if (!existsSync(path)) return { rollback: () => {}, commit: () => {} }; const backup = `${path}.plgnz-backup-${Date.now()}`; renameSync(path, backup); return { rollback: () => { if (!existsSync(path)) renameSync(backup, path); }, commit: () => rmSync(backup, { recursive: true, force: true }) }; }
 function assertName(value: string, label: string): void { if (!/^[a-z0-9][a-z0-9._-]*$/iu.test(value)) throw new Error(`ZCode unsafe ${label}: ${value}`); }
-function argumentHint(value: unknown, file: string): string { if (typeof value === 'string') return JSON.stringify(value); if (Array.isArray(value) && value.every(item => typeof item === 'string')) return `[${value.join(' ')}]`; throw new Error(`ZCode argument-hint must be text or text list: ${file}`); }
 function assertNoSymlinks(root: string): void { const visit = (path: string): void => { const stat = lstatSync(path); if (stat.isSymbolicLink()) throw new Error(`ZCode source contains symlink: ${path}`); if (stat.isDirectory()) for (const child of readdirSync(path)) visit(join(path, child)); }; visit(root); }
 function isObject(value: unknown): value is Record<string, unknown> { return typeof value === 'object' && value !== null && !Array.isArray(value); }
 
