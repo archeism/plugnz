@@ -161,6 +161,86 @@ test('resume refuses contradictory retained phases and purported rollback states
   rejectReport(rollback, 'prior');
 });
 
+function rehashRecord(record: AdoptionRecord): AdoptionRecord {
+  record.legacy.recordDigest = adoptionDigest('plugnz/legacy-record/v1', record.legacy.snapshot);
+  const { admissionId: _admissionId, ...payload } = record.admission;
+  const next = { ...payload, original: record.legacy.original, legacyRecordDigest: record.legacy.recordDigest };
+  record.admission = { ...next, admissionId: adoptionDigest('plugnz/legacy-admission/v1', next) };
+  record.seal!.admissionId = record.admission.admissionId;
+  record.sealDigest = adoptionDigest('plugnz/legacy-adoption-seal/v1', record.seal);
+  const { commitId: _commitId, ...commit } = record.commit!;
+  const committed = { ...commit, admissionId: record.admission.admissionId, sealDigest: record.sealDigest };
+  record.commit = { ...committed, commitId: adoptionDigest('plugnz/legacy-adoption-commit/v1', committed) };
+  return parseAdoptionRecord(record);
+}
+
+test('distinct rehashed legacy originals cannot consume one fresh operation or recovery receipt twice', () => {
+  for (const sameCurrentIdentity of [false, true]) {
+    const report = resumeReport('committed', sameCurrentIdentity);
+    const original = report.adoptions!.receipts[0]!;
+    const record = JSON.parse(JSON.stringify(original.record)) as AdoptionRecord;
+    record.legacy.original = { ...record.legacy.original, operationId: 'different-legacy-operation' };
+    record.legacy.snapshot.journal.operationId = record.legacy.original.operationId;
+    const forged = rehashRecord(record);
+    const receipt = { ...original, original: forged.legacy.original, legacyRecordDigest: forged.legacy.recordDigest,
+      admissionId: forged.admission.admissionId, record: forged };
+    report.adoptions = { schemaVersion: 1, receipts: [original, receipt] };
+    rejectReport(report, 'fresh operation');
+  }
+});
+
+test('a no-write receipt derives its fresh identity from the exact plan and cannot share a retained relation operation', () => {
+  const report = resumeReport('committed', true);
+  const retained = report.adoptions!.receipts[0]!;
+  const record = JSON.parse(JSON.stringify(retained.record)) as AdoptionRecord;
+  record.legacy.original = { ...record.legacy.original, operationId: 'second-legacy-operation' };
+  record.legacy.snapshot.journal.operationId = record.legacy.original.operationId;
+  const rehashed = rehashRecord(record);
+  report.plan[0]!.adoption = rehashed.admission;
+  const reason = createLifecycleReason('internal', 'internal.invariant', 'second original has no independent fresh transaction');
+  report.outcomes[0] = { ...report.plan[0]!, result: 'not-attempted', resourceState: 'unknown', activationState: 'unknown', changed: false, reason };
+  report.summary = { ...report.summary, result: 'incomplete', failureCategory: 'internal', reason };
+  report.adoptions = { schemaVersion: 1, receipts: [retained, {
+    original: rehashed.legacy.original, legacyRecordDigest: rehashed.legacy.recordDigest,
+    admissionId: rehashed.admission.admissionId, status: 'not-attempted', record: null, reason,
+  }] };
+  rejectReport(report, 'fresh operation');
+});
+
+test('distinct legacy originals and distinct fresh operations retain independent current and modern recovery accounting', () => {
+  const report = resumeReport('committed', true);
+  const first = report.adoptions!.receipts[0]!;
+  const record = JSON.parse(JSON.stringify(first.record)) as AdoptionRecord;
+  record.legacy.original = { ...record.legacy.original, operationId: 'toolbox-legacy-operation', package: 'toolbox@catalog', nativeId: 'toolbox@catalog' };
+  Object.assign(record.legacy.snapshot.journal, { operationId: record.legacy.original.operationId, packageId: 'toolbox@catalog', nativeId: 'toolbox@catalog' });
+  Object.assign(record.legacy.snapshot.activation, { packageId: 'toolbox@catalog', nativeId: 'toolbox@catalog' });
+  record.admission.packageName = 'toolbox';
+  Object.assign(record.admission.native, { packageName: 'toolbox', oldLedgerNativeId: 'toolbox@catalog', oldPhysicalNativeId: 'toolbox', newNativeId: 'toolbox' });
+  record.admission.native.marker.pluginId = 'toolbox@catalog';
+  record.admission.native.roots[0]!.path = '/fixtures/home/.cursor/plugins/local/toolbox';
+  // A batch legitimately shares one attempt while each package has its own operation.
+  Object.assign(record.admission.fresh, { operationId: 'toolbox-fresh-operation', packageName: 'toolbox', nativeId: 'toolbox' });
+  Object.assign(record.seal!, { attemptId: record.admission.fresh.attemptId, operationId: record.admission.fresh.operationId,
+    packageName: 'toolbox', nativeId: 'toolbox', affectedNativeIds: ['toolbox'] });
+  for (const readback of [record.seal!.prior, record.seal!.expected]) {
+    Object.assign(readback, { packageName: 'toolbox', nativeId: 'toolbox',
+      contentRoots: [{ ...readback.contentRoots[0]!, path: record.admission.native.roots[0]!.path }] });
+  }
+  record.commit!.verifiedReadback = record.seal!.expected;
+  const second = rehashRecord(record);
+  report.adoptions = { schemaVersion: 1, receipts: [first, { ...first, original: second.legacy.original,
+    legacyRecordDigest: second.legacy.recordDigest, admissionId: second.admission.admissionId, record: second }] };
+  const operation = { ...report.plan[0]!, operationId: second.admission.fresh.operationId, package: 'toolbox', nativeId: 'toolbox', adoption: second.admission };
+  report.plan.push(operation);
+  report.outcomes.push({ ...operation, result: 'succeeded', resourceState: 'present', activationState: 'active-conforming', changed: false, reason: null });
+  const modern = report.recovery!.receipts[0]!;
+  report.recovery = { schemaVersion: 1, receipts: [modern, { ...modern, original: { ...modern.original,
+    attemptId: second.admission.fresh.attemptId, operationId: second.admission.fresh.operationId, package: 'toolbox', nativeId: 'toolbox' } }] };
+  expect(parseLifecycleReport(report)).toEqual(report);
+  expect(report.outcomes.map(row => row.changed)).toEqual([false, false]);
+  expect(report.recovery.receipts.map(row => row.changed)).toEqual([true, true]);
+});
+
 test('receipts reject forgery, unsolicited identities, duplicate and cross-recovery original accounting', () => {
   const { report } = withReceipt('committed');
   const negatives: Array<(value: LifecycleReport) => void> = [

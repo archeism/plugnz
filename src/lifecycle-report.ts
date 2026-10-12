@@ -239,6 +239,15 @@ export function parseLifecycleReport(value: unknown): LifecycleReport {
   }
 
   const adoptions = value['adoptions'] === undefined ? [] : parseAdoptionReceipts(value['adoptions'], command['dryRun'] as boolean);
+  const freshRelations = new Set<string>();
+  for (const receipt of adoptions) {
+    const admission = receipt.record?.admission ?? plan.find(row => isObject(row['adoption'])
+      && row['adoption']['admissionId'] === receipt.admissionId)?.['adoption'] as AdoptionAdmission | undefined;
+    if (admission === undefined) throw contradiction('adoption receipt has no exact requested admission or resumed modern relation');
+    const key = canonicalAdoptionJson([admission.fresh.attemptId, admission.fresh.operationId]);
+    if (freshRelations.has(key)) throw contradiction('adoption receipts cannot reuse one fresh operation');
+    freshRelations.add(key);
+  }
   const seen = new Set<string>();
   for (const outcome of outcomes) {
     const adoption = adoptions.find(receipt => isObject(outcome['adoption']) && outcome['adoption']['admissionId'] === receipt.admissionId);
