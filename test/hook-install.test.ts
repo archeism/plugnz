@@ -13,6 +13,7 @@ import { nativeFixture } from './fixtures/historical-plugnz-75d/runtime';
 
 let root: string, home: string, source: string;
 let env: Record<string, string | undefined>;
+const binaryKeys: Record<string, string> = { 'claude-code': 'CLAUDE_CODE', codex: 'CODEX', omp: 'OMP', pi: 'PI', opencode: 'OPENCODE' };
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'plugnz-hook-install-test-'));
   home = join(root, 'home'); source = join(root, 'source');
@@ -28,21 +29,22 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
-function target(id: string, version?: string): string {
+function target(id: string, version?: string, initializeProfile = true): string {
   const roots: Record<string, string> = {
     'claude-code': join(home, '.claude'), codex: join(home, '.codex'), omp: join(home, '.omp'),
     pi: join(home, '.pi', 'agent'), opencode: join(home, '.config', 'opencode'),
   };
   const path = roots[id]!;
-  mkdirSync(path, { recursive: true });
-  if (id === 'claude-code' || id === 'omp') mkdirSync(join(path, 'plugins'));
+  if (initializeProfile) {
+    mkdirSync(path, { recursive: true });
+    if (id === 'claude-code' || id === 'omp') mkdirSync(join(path, 'plugins'));
+  }
   const binary = join(home, id + '-version');
   const adapter = hookAdapters.find(item => item.id === id)!;
   const value = version ?? adapter.baselineVersion;
   const text = id === 'codex' ? 'codex-cli ' + value : id === 'claude-code' ? value + ' (Claude Code)' : value;
   writeFileSync(binary, "#!/bin/sh\nprintf '%s\\n' '" + text + "'\n"); chmodSync(binary, 0o755);
-  const keys: Record<string, string> = { 'claude-code': 'CLAUDE_CODE', codex: 'CODEX', omp: 'OMP', pi: 'PI', opencode: 'OPENCODE' };
-  env['OPEN_PLUGIN_' + keys[id] + '_BIN'] = binary;
+  env['OPEN_PLUGIN_' + binaryKeys[id] + '_BIN'] = binary;
   return path;
 }
 function cli(args: string[], cwd = source) {
@@ -184,20 +186,34 @@ for (const id of ['pi', 'opencode']) {
   });
 }
 
-test('Codex is detected from its CLI and installs before its native home exists', () => {
-  const native = target('codex');
-  rmSync(native, { recursive: true });
-  const detected = cli(['targets']);
-  expect(detected.status).toBe(0);
-  expect(JSON.parse(detected.stdout)).toContain('codex');
-  expect(existsSync(native)).toBe(false);
-  expect(success(['install', source, '--target', 'codex']).summary.result).toBe('converged');
-  expect(existsSync(join(installedRoot(native), '.codex-plugin', 'plugin.json'))).toBe(true);
-});
+function putCliOnPath(id: string): void {
+  const tools = join(root, 'native-bin'), key = 'OPEN_PLUGIN_' + binaryKeys[id] + '_BIN';
+  mkdirSync(tools);
+  symlinkSync(env[key]!, join(tools, id === 'claude-code' ? 'claude' : id));
+  env.PATH = tools + delimiter + (env.PATH ?? '');
+  delete env[key];
+}
+
+for (const id of ['claude-code', 'codex', 'omp', 'pi', 'opencode']) {
+  test(id + ' is detected on PATH and installs before its native profile exists', () => {
+    const native = target(id, undefined, false), before = fingerprintTree(source);
+    putCliOnPath(id);
+    expect(existsSync(native)).toBe(false);
+    const detected = cli(['targets']);
+    expect(detected.status).toBe(0);
+    expect(JSON.parse(detected.stdout)).toContain(id);
+    expect(existsSync(native)).toBe(false);
+    expect(success(['install', '--target', id]).summary.result).toBe('converged');
+    const installed = installedRoot(native);
+    expect(existsSync(join(installed, 'plugnz.hooks.json'))).toBe(false);
+    expect(readFileSync(join(installed, 'context.mjs'), 'utf8')).toContain('first-context');
+    expect(readFileSync(join(home, 'state.json'), 'utf8')).toContain(source);
+    expect(fingerprintTree(source)).toBe(before);
+  });
+}
 
 test('Codex detection does not accept a nonexecutable CLI or create its native home', () => {
-  const native = target('codex');
-  rmSync(native, { recursive: true });
+  const native = target('codex', undefined, false);
   chmodSync(env.OPEN_PLUGIN_CODEX_BIN!, 0o644);
   const detected = cli(['targets']);
   expect(detected.status).toBe(0);
@@ -256,6 +272,41 @@ for (const form of ['native', 'mixed'] as const) {
     if (form === 'native') rmSync(join(source, 'plugnz.hooks.json'));
     writeFiles(source, { 'hooks/hooks.json': JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ type: 'command', command: 'echo authored-native' }] }] } }) });
     const result = cli(['install', '--target', 'zcode-cli']);
+    expect(result.status).toBe(1);
+    expect(JSON.parse(result.stdout).summary.mutationStarted).toBe(false);
+    expect(existsSync(native)).toBe(false);
+    expect(existsSync(join(home, 'state.json'))).toBe(false);
+  });
+}
+
+for (const id of ['omp', 'pi', 'opencode']) {
+  test(id + ' cold install preserves an explicit native-root override', () => {
+    const defaultNative = target(id, undefined, false), native = join(root, 'selected-native-root');
+    env['OPEN_PLUGIN_' + binaryKeys[id] + '_ROOT'] = native;
+    expect(success(['install', '--target', id]).summary.result).toBe('converged');
+    expect(existsSync(join(installedRoot(native), 'hook-runtime.mjs'))).toBe(true);
+    expect(existsSync(defaultNative)).toBe(false);
+  });
+  for (const kind of ['missing', 'nonexecutable'] as const) {
+    test(id + ' cold detection keeps a ' + kind + ' override exclusive over a valid PATH CLI', () => {
+      const native = target(id, undefined, false);
+      putCliOnPath(id);
+      const invalid = join(root, 'invalid-cli');
+      if (kind === 'nonexecutable') { writeFileSync(invalid, '#!/bin/sh\nexit 0\n'); chmodSync(invalid, 0o644); }
+      env['OPEN_PLUGIN_' + binaryKeys[id] + '_BIN'] = invalid;
+      const detected = cli(['targets']);
+      expect(detected.status).toBe(0);
+      expect(JSON.parse(detected.stdout).includes(id)).toBe(false);
+      const refused = cli(['install', '--target', id]);
+      expect(refused.status).toBe(2);
+      expect(refused.stdout + refused.stderr).toContain('is not present on this machine');
+      expect(existsSync(native)).toBe(false);
+      expect(existsSync(join(home, 'state.json'))).toBe(false);
+    });
+  }
+  test(id + ' cold CLI detection keeps unsupported-version admission closed', () => {
+    const native = target(id, '9.9.9', false);
+    const result = cli(['install', '--target', id]);
     expect(result.status).toBe(1);
     expect(JSON.parse(result.stdout).summary.mutationStarted).toBe(false);
     expect(existsSync(native)).toBe(false);

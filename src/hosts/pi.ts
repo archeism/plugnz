@@ -2,6 +2,7 @@
 import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { HostReader, InstalledPlugin, McpServerEntry } from '../host';
+import { isExecutableFile, which } from '../exec';
 import { listNativeHookPackages, type NativeHookStore } from '../native-hook-store';
 
 const MARKER = '.plgnz-install.json';
@@ -39,7 +40,7 @@ export const piHookStore: NativeHookStore = {
 
 export const pi: HostReader = {
   id: 'pi', gui: false,
-  detect: () => existsSync(piRoot()),
+  detect: () => existsSync(piRoot()) || isExecutableFile(process.env['OPEN_PLUGIN_PI_BIN'] ?? which('pi') ?? ''),
   stores: () => [piHookStore.packages(), skillsDir()],
   listInstalled(): InstalledPlugin[] {
     const result: InstalledPlugin[] = listNativeHookPackages(piHookStore);

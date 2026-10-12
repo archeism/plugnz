@@ -27,6 +27,7 @@
 import { existsSync, lstatSync, readdirSync, readlinkSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import type { HostReader, InstalledPlugin, McpServerEntry } from '../host';
+import { isExecutableFile, which } from '../exec';
 import { ompRoot } from '../paths';
 import { singleInstanceTargetProfile } from '../target-profile';
 
@@ -99,9 +100,9 @@ export const omp: HostReader = {
   id: 'omp',
   gui: false,
 
-  /** omp is present iff its native store is — a stray repo .mcp.json must not conjure the host. */
+  /** The native store or installed CLI establishes presence; repo MCP config does not. */
   detect(): boolean {
-    return existsSync(pluginsDir());
+    return existsSync(pluginsDir()) || isExecutableFile(process.env['OPEN_PLUGIN_OMP_BIN'] ?? which('omp') ?? '');
   },
 
   stores(): string[] {

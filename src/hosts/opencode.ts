@@ -2,6 +2,7 @@
 import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { HostReader, InstalledPlugin, McpServerEntry } from '../host';
+import { isExecutableFile, which } from '../exec';
 import { pathToFileURL } from 'node:url';
 import { hookIdentityKey, listNativeHookPackages, type NativeHookStore } from '../native-hook-store';
 
@@ -30,7 +31,7 @@ export const opencodeHookStore: NativeHookStore = {
 
 export const opencode: HostReader = {
   id: 'opencode', gui: false,
-  detect: () => existsSync(opencodeRoot()),
+  detect: () => existsSync(opencodeRoot()) || isExecutableFile(process.env['OPEN_PLUGIN_OPENCODE_BIN'] ?? which('opencode') ?? ''),
   stores: () => [opencodeHookStore.packages(), opencodePackagesDir(), opencodeSkillsDir(), opencodeCommandsDir()],
   listInstalled(): InstalledPlugin[] {
     const root = opencodePackagesDir();

@@ -51,6 +51,8 @@ export function isolatedHostEnv(home: string): Record<string, string> {
     OPEN_PLUGIN_CLAUDE_CODE_BIN: join(home, 'missing-claude'),
     OPEN_PLUGIN_CODEX_BIN: join(home, 'missing-codex'),
     OPEN_PLUGIN_OMP_BIN: join(home, 'missing-omp'),
+    OPEN_PLUGIN_PI_BIN: join(home, 'missing-pi'),
+    OPEN_PLUGIN_OPENCODE_BIN: join(home, 'missing-opencode'),
     OPEN_PLUGIN_KIMI_BIN: join(home, 'missing-kimi'),
     OPEN_PLUGIN_ZCODE_CLI_BIN: join(home, 'missing-zcode'),
   };
