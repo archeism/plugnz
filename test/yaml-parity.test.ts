@@ -173,8 +173,13 @@ describe("yaml merge-key and adversarial differential coverage", () => {
 
   test("every Basic Multilingual Plane codepoint stringifies byte-identically", () => {
     if (!(/^1\.(4|5|6|7|8|9)\./.test((Bun as unknown as { version: string }).version) || /^2\./.test((Bun as unknown as { version: string }).version))) return; // guarded by the contract test above
-    const probe = [0x00, 0x07, 0x08, 0x0b, 0x0c, 0x1b, 0x7f, 0x85, 0xa0, 0x2028, 0x2029, 0xad, 0xfeff, 0x200b, 0x3000];
-    for (let cp = 0x20; cp < 0x2100; cp++) probe.push(cp);
+    // FEFF diverges WITHIN the allowed Bun range (plain on 1.4.0, quoted on
+    // newer Bun — hit by bunport's CI first). Excluded from the sweep; the
+    // writer follows the derived-against grammar. Same class as U+2028 across
+    // 1.3/1.4.
+    const VERSION_DIVERGENT = new Set([0xfeff]);
+    const probe = [0x00, 0x07, 0x08, 0x0b, 0x0c, 0x1b, 0x7f, 0x85, 0xa0, 0x2028, 0x2029, 0xad, 0x200b, 0x3000];
+    for (let cp = 0x20; cp < 0x2100; cp++) { if (!VERSION_DIVERGENT.has(cp)) probe.push(cp); }
     for (const cp of [0x3000, 0x1f600, 0xfffd, 0x4e2d, 0x1f1fa]) probe.push(cp);
     for (const cp of probe) {
       const ch = String.fromCodePoint(cp);

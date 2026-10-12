@@ -117,8 +117,11 @@ export function resolveSource(source: string): FrozenSource {
     return resolvedSource(sourceUri, sha, isGit, snapshot, targetDir, plugins);
   }
 
-  // 3. Recursive scan (1 level deep)
-  for (const entry of readdirSync(targetDir)) {
+  // 3. Recursive scan (1 level deep). Sorted: plugin discovery order IS the
+  // frozen plan order, which must be deterministic across filesystems (ext4
+  // readdir order is hash-based, APFS tends creation-order — the same source
+  // planned [sibling, demo] on Linux and [demo, sibling] on macOS).
+  for (const entry of [...readdirSync(targetDir)].sort()) {
     const subDir = join(targetDir, entry);
     if (statSync(subDir).isDirectory() && isPluginDir(subDir)) {
       plugins.push(pluginFromDir(subDir, undefined, targetDir, sourceRoot));
