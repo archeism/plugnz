@@ -76,7 +76,10 @@ scratch. At most three failed acquisition cohorts are authorized by the parent;
 measure aggregate local retention before each launch rather than infer it from
 the per-arm cap. Whole-filesystem sampling includes npm/pnpm/DNF caches, source/build
 scratch, temporary directories and archive growth. The image baseline is not
-mistaken for free trial allocation. No snapshots or full-store copies are used.
+mistaken for free trial allocation. This method relies on stopped-state archives
+and budgeted restores, not VM snapshots or full-store replay copies. The earlier
+empty Codex setup's automatically created snapshot remains retained separately;
+see [its independent preservation receipt](evidence/preservation-namespace-independent-20261011.md).
 
 The acquisition cap was raised after a preserved genuine Codex 0.162.0 npm
 attempt exceeded the former 384 MiB retention-stop threshold while unpacking.

@@ -26,11 +26,14 @@ not prove command invocation, a model turn, or native update delivery.
 
 The explicitly owned, nonpersistent Sandbox
 `plugnz-kimi-final-c72-20261012` stopped after preservation with no snapshot.
-The durable local archive is
-`/tmp/plugnz-kimi-final-c72-01/evidence.tar.gz`: 68,443,154 bytes, SHA256
+The permanently retained local archive is
+`/home/charlesfengyc/.local/state/plugnz-evidence/20261012/kimi-final-c72/evidence.tar.gz`:
+68,443,154 bytes, SHA256
 `1ec7c0b6e2bc2c7819cdb262818e7e9e7da8ea075cc4d6fa7ae683e7b24ec90a`.
 Its local controller receipt is
-`/tmp/plugnz-kimi-final-c72-01/receipt.json`; preserved pre/post results are
+`/home/charlesfengyc/.local/state/plugnz-evidence/20261012/kimi-final-c72/receipt.json`;
+configuration, controller sources and checksums are retained alongside it.
+The original temporary archive and restores remain untouched. Preserved pre/post results are
 `trial/kimi-v1.json`, `trial/kimi-v2.json`, and
 `trial/workflow.result.json` inside the archive. The controller archived and
 restored 4,298 entries after namespace-safe hardlink staging; controller exit
@@ -58,6 +61,6 @@ verified the archive digest, all 4,519 retained regular trial/supplier files
 target, and that exactly the prebound supplier identity body was omitted. It
 also rechecked the exact C72/workflow/oracle hashes and every V1/V2 outcome
 above. The verifier is retained at
-`/tmp/plugnz-kimi-c72-independent.mjs`.
+`/home/charlesfengyc/.local/state/plugnz-evidence/20261012/kimi-final-c72/plugnz-kimi-c72-independent.mjs`.
 
 No real home, LLM credential, model turn, or command invocation was used.

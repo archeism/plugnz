@@ -86,3 +86,12 @@ controller/namespace gates; this paragraph does not claim a full-suite result
 for that later tree. Root independent review keeps Native arms at 100 MiB,
 acquisition-only archives at 768 MiB with 896 MiB scratch reserve, the actual
 630-second acquisition preservation reserve, and 3 GiB whole-filesystem growth.
+
+The subsequent exact frozen `cd0a66c` full suite, including those reviewed
+budget-boundary regressions, settled exit 0 (root handle `10147`): 848 passed,
+six existing skips, zero failed, 5880 assertions, 854 tests across 76 files,
+531.56 seconds. Following typecheck and diff check passed; artifact SHA256
+remained `c72c6e`. Log `/tmp/plugnz-cd0a66c-combined-full.log`, SHA256
+`05e0891fbc8146bd67a56348368d173b773b9bbbcf6c4032d758f8ce06a145ed`.
+The later Kimi proof-script/receipt integration is not attributed to this
+earlier frozen full-suite result. Main remains unchanged pending Native gates.
