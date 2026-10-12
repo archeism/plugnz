@@ -9,6 +9,10 @@ test('offline pin repairs a genuine historical Git marker without fetching its S
   await withLifecycleCliHarness(harness => {
     harness.writeHome(Object.fromEntries(Object.entries(captured.files).map(([path, bytes]) => [path, bytes.replaceAll('{{HOME}}', harness.home)])));
     const before = JSON.parse(readFileSync(join(harness.home, 'state.json'), 'utf8'));
+    // The fixture's MCP server runs bare `node`; the harness PATH is hermetic
+    // (fake-bin:/usr/bin:/bin), so install the running node as a PATH shim.
+    const nodeShim = harness.fakeBinPath('node');
+    writeFileSync(nodeShim, `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} "$@"\n`); chmodSync(nodeShim, 0o755);
     const binary = join(harness.home, 'dcode-version');
     const noGit = join(harness.home, 'no-git');
     writeFileSync(binary, '#!/bin/sh\necho "deepagents-code 0.1.83"\n'); chmodSync(binary, 0o755);
