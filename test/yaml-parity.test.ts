@@ -71,13 +71,10 @@ const CROSS_CHECK: unknown[] = [
   ["x\r y"],
   ["a\x7f b"],
   ["null\n"],
-  // Bun 1.4.3 quotes a scalar that starts with (or is) U+FEFF; embedded and
-  // trailing U+FEFF stay plain. 1.4.2 emitted a lone BOM bare (roundtrip loss).
-  "\uFEFF",
-  "\uFEFFx",
-  "a\uFEFFb",
-  "x\uFEFF",
 ];
+// FEFF lives in the roundtrip sweep below, not here: CROSS_CHECK pins byte
+// parity with the RUNNING Bun, and Bun's own bytes for a leading/lone BOM
+// drift across the allowed range (bare ≤1.4.2, quoted ≥1.4.3).
 
 describe("yaml byte parity (capability yaml-parity)", () => {
   test("writer grammar table matches Bun.YAML.stringify exactly", () => {
@@ -185,10 +182,12 @@ describe("yaml merge-key and adversarial differential coverage", () => {
 
   test("every Basic Multilingual Plane codepoint stringifies byte-identically", () => {
     if (!(/^1\.(4|5|6|7|8|9)\./.test((Bun as unknown as { version: string }).version) || /^2\./.test((Bun as unknown as { version: string }).version))) return; // guarded by the contract test above
-    // FEFF diverges WITHIN the allowed Bun range (plain on 1.4.0, quoted on
-    // newer Bun — hit by bunport's CI first). Excluded from the sweep; the
-    // writer follows the derived-against grammar. Same class as U+2028 across
-    // 1.3/1.4.
+    // FEFF diverges WITHIN the allowed Bun range: Bun itself emits a bare BOM
+    // on ≤1.4.2 (which its own parser loses — a lone BOM parses back as null)
+    // and quotes it on ≥1.4.3. Our writer quotes a leading/lone BOM on every
+    // version for roundtrip safety, so byte parity holds only where Bun
+    // ≥1.4.3 (CI pins exactly that). Excluded here; the roundtrip sweep
+    // below guards the data instead, version-independently.
     const VERSION_DIVERGENT = new Set([0xfeff]);
     const probe = [0x00, 0x07, 0x08, 0x0b, 0x0c, 0x1b, 0x7f, 0x85, 0xa0, 0x2028, 0x2029, 0xad, 0x200b, 0x3000];
     for (let cp = 0x20; cp < 0x2100; cp++) { if (!VERSION_DIVERGENT.has(cp)) probe.push(cp); }
@@ -199,6 +198,24 @@ describe("yaml merge-key and adversarial differential coverage", () => {
         const ours = yamlStringify(s);
         const theirs = Bun.YAML.stringify(s);
         if (ours !== theirs) throw new Error(`U+${cp.toString(16)} diverges: ours ${JSON.stringify(ours)} bun ${JSON.stringify(theirs)}`);
+      }
+    }
+  });
+
+  test("every Basic Multilingual Plane codepoint survives write→parse roundtrip", () => {
+    if (!(/^1\.(4|5|6|7|8|9)\./.test((Bun as unknown as { version: string }).version) || /^2\./.test((Bun as unknown as { version: string }).version))) return; // guarded by the contract test above
+    // Byte parity with any one Bun version cannot hold across versions
+    // (FEFF above), but data integrity can: whatever we write must parse
+    // back to the input on every allowed Bun. This is the net the leading-BOM
+    // loss slipped through on ≤1.4.2 (bare BOM -> Bun.YAML.parse -> null).
+    const probe = [0x00, 0x07, 0x08, 0x0b, 0x0c, 0x1b, 0x7f, 0x85, 0xa0, 0x2028, 0x2029, 0xad, 0x200b, 0x3000, 0xfeff];
+    for (let cp = 0x20; cp < 0x2100; cp++) probe.push(cp);
+    for (const cp of [0x3000, 0x1f600, 0xfffd, 0x4e2d, 0x1f1fa]) probe.push(cp);
+    for (const cp of probe) {
+      const ch = String.fromCodePoint(cp);
+      for (const s of [ch, `a${ch}b`, `x${ch}`]) {
+        const back = Bun.YAML.parse(yamlStringify(s));
+        if (back !== s) throw new Error(`U+${cp.toString(16)} does not roundtrip: ${JSON.stringify(s)} -> ${JSON.stringify(back)}`);
       }
     }
   });
