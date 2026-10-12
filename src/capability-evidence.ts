@@ -39,6 +39,8 @@ export interface CapabilityEvidenceProfile {
   evidenceId: string;
   host: string;
   detectedVersion: string;
+  /** Supplemental compiled-hook admission; unrelated package semantics stay on their existing profile. */
+  packageFormat?: 'portable-hooks';
   sourceTypes: readonly SourceType[];
   operations: readonly CapabilityOperation[];
   route: CapabilityRoute;
@@ -187,12 +189,19 @@ export function admitPackageSemanticsFromProfiles(
       ? requiredSemanticsForOperation(undefined, 'disable')
       : requiredSemanticsForOperation(request.inventory, request.operation);
   const version = normalizedDetectedVersion(request.detectedVersion);
-  const matching = version === undefined ? [] : profiles.filter((candidate) =>
+  const candidates = version === undefined ? [] : profiles.filter((candidate) =>
     candidate.host === request.host
     && candidate.detectedVersion === version
     && candidate.sourceTypes.includes(request.sourceType)
     && candidate.operations.includes(request.operation)
     && candidate.route === request.route);
+  const portable = (request.operation === 'install' || request.operation === 'update')
+    && request.inventory.hookDeclarations.some(declaration => declaration.form === 'portable-hooks');
+  const specialized = candidates.filter(candidate => candidate.packageFormat === 'portable-hooks');
+  const ordinary = candidates.filter(candidate => candidate.packageFormat === undefined);
+  const matching = portable && specialized.length > 0 ? specialized
+    : request.operation === 'install' || request.operation === 'update' ? ordinary
+    : ordinary.length > 0 ? ordinary : specialized;
   if (matching.length > 1) {
     throw new Error(`ambiguous capability evidence for ${request.host} ${version} ${request.sourceType} ${request.route} ${request.operation}`);
   }
@@ -315,6 +324,7 @@ export function createCapabilityEvidenceProfile(
     schemaVersion: 1,
     host: input.host,
     detectedVersion: input.detectedVersion,
+    ...(input.packageFormat === undefined ? {} : { packageFormat: input.packageFormat }),
     sourceTypes,
     operations,
     route: input.route,
@@ -331,6 +341,7 @@ export function createCapabilityEvidenceProfile(
     evidenceId,
     host: input.host,
     detectedVersion: input.detectedVersion,
+    ...(input.packageFormat === undefined ? {} : { packageFormat: input.packageFormat }),
     sourceTypes: Object.freeze(sourceTypes),
     operations: Object.freeze(operations),
     route: input.route,

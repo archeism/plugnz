@@ -9,15 +9,15 @@ import { codexWriter } from './codex-writer';
 import { kimiWriter } from './kimi-writer';
 import { cursorWriter } from './cursor-writer';
 import { ompWriter } from './omp-writer';
-import { piWriter } from './pi-writer';
+import { piHookWriter } from './pi-hook-writer';
 import { dcodeWriter } from './dcode-writer';
-import { opencodeWriter } from './opencode-writer';
+import { opencodeHookWriter } from './opencode-hook-writer';
 import { grokWriter } from './grok-writer';
 import { zcodeCliWriter } from './zcode-cli-writer';
 import { hermesWriter } from './hermes-writer';
 
 /** Active mutation routes: native plugin stores only. */
-export const writers: HostWriter[] = [claudeCodeWriter, codexWriter, kimiWriter, cursorWriter, ompWriter, hermesWriter, dcodeWriter, grokWriter, zcodeCliWriter];
+export const writers: HostWriter[] = [claudeCodeWriter, codexWriter, kimiWriter, cursorWriter, ompWriter, hermesWriter, dcodeWriter, grokWriter, zcodeCliWriter, piHookWriter, opencodeHookWriter];
 
-/** Legacy standalone writers are retained solely to remove plgnz-owned installs safely. */
-export const cleanupWriters: HostWriter[] = [...writers, piWriter, opencodeWriter];
+/** The native hook writers delegate removal of historical standalone ownership to the old removers. */
+export const cleanupWriters: HostWriter[] = [...writers];

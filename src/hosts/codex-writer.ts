@@ -1,3 +1,6 @@
+import { hookAdapter as portableHookAdapter } from './codex-hooks';
+import { portableHookProfile } from '../portable-hook-policy';
+import { compilePortableHooksInStage, preflightPortableHooks } from '../hook-install';
 /**
  * codex host writer — add/pin/remove for the store documented in
  * docs/hosts/codex.md.
@@ -483,6 +486,7 @@ const UPDATE_SEMANTICS = ['ordinary-skills', 'resources', 'auto-update-control',
 const MANAGED_SEMANTICS = [...UPDATE_SEMANTICS, 'retirement', 'retention-safety'] as const satisfies readonly PackageSemantic[];
 
 const codexEvidenceProfiles: readonly CapabilityEvidenceProfile[] = [
+  portableHookProfile(portableHookAdapter, 'managed', ['install', 'update', 'retire']),
   codexRouteProfile('native', ['update'], UPDATE_SEMANTICS, ['docs/research/native-plugin-update-capabilities-2026-10-09.md', 'docs/evidence/codex-native-released-20261011.md']),
   codexRouteProfile('managed', ['install', 'update', 'retire'], MANAGED_SEMANTICS, [
     'docs/hosts/codex.md',
@@ -590,6 +594,7 @@ function stageCodexActivation(request: Parameters<LifecycleHostDefinition['stage
   const version = pluginVersion(stagingRoot);
   if (!validVersionSegment(version)) throw new Error(`unsafe Codex plugin version: ${version}`);
   ensureNativeManifest(stagingRoot, request.snapshot.packageName, version);
+  compilePortableHooksInStage(portableHookAdapter, stagingRoot, { retainCanonicalIdentity: true });
   validateStage(stagingRoot);
   const source = request.snapshot.nativeGit?.locator ?? `scope:${request.snapshot.scopeId}`;
   writeFileSync(join(stagingRoot, OWNERSHIP), JSON.stringify({
@@ -1474,6 +1479,7 @@ function installationRecord(plugin: InstalledPlugin): TargetInstallationData {
 }
 
 function nativeProjection(request: NativeProjectionRequest): NativeProjectionData {
+  if ('snapshot' in request) preflightPortableHooks(portableHookAdapter, request.snapshot.packageRoot);
   if ('snapshot' in request) {
     const installed = request.targetObservation.installations.find(row => row.nativeId === request.snapshot.nativeId);
     const destination = cacheDestination(request.snapshot.nativeId, pluginVersion(request.snapshot.packageRoot));

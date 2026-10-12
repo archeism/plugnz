@@ -199,6 +199,15 @@ export async function runUpdate(name?: string, options: UpdateOptions = {}): Pro
       continue;
     }
 
+    try { await host.preflightAdd?.(plugin, resolved); }
+    catch (error) {
+      findings.push(findingFor(record, {
+        mark: '✗', terminalPhase: 'preflight',
+        ...(error instanceof CompatibilityError ? { status: error.status, capabilityId: error.capability, evidenceId: compatibilityEvidenceId(error.evidence) } : {}),
+        message: 're-add preflight for ' + record.id + ' refused — ' + unknownErrorDiagnostic(error),
+      }));
+      continue;
+    }
     let identity = options.nativeIdentitySnapshots?.get(initialRecord);
     if (identity === undefined) {
       const captured = captureNativeIdentity(host, plugin);

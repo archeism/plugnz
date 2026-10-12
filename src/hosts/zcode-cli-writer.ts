@@ -1,3 +1,6 @@
+import { hookAdapter as portableHookAdapter } from './zcode-cli-hooks';
+import { portableHookProfile } from '../portable-hook-policy';
+import { compilePortableHooksInStage, preflightPortableHooks } from '../hook-install';
 /** Official ZCode CLI marketplace writer. */
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
@@ -127,6 +130,7 @@ export function projectZcodePlugin(source: string, destination: string, resource
     for (const [path, entry] of tree) if (entry.kind === 'directory') chmodSync(join(root, path), entry.mode);
   };
   writeTree(projected.payload, target); writeTree(projected.resources, ownedResources);
+  compilePortableHooksInStage(portableHookAdapter, target, { nativeManifestPrepared: true });
   writeFileSync(join(target, MARKER), `${JSON.stringify({ owner: 'plgnz', schema: 1, logicalId, nativeId, fingerprint, source: sourceUri, resourcePath: resourceLinkRoot, resourceFingerprint: fingerprintTree(ownedResources) } satisfies Ownership, null, 2)}\n`);
   assertNoSymlinks(target); assertNoSymlinks(ownedResources);
 }
@@ -257,6 +261,7 @@ export const zcodeCliEvidenceProfiles: readonly CapabilityEvidenceProfile[] = Ob
   zcodeRetireProfile('native', 'unsupported', 'unsupported', 'unsupported'),
   zcodeRetireProfile('managed', 'supported', 'supported', 'supported'),
   zcodeInstallProfile(),
+  portableHookProfile(portableHookAdapter, 'native', ['install', 'update']),
 ]);
 
 function assertZcodeTarget(target: LifecycleTargetIdentity): void {
@@ -719,6 +724,7 @@ const zcodeCliLifecycleDefinition: LifecycleHostDefinition = {
       return { kind: 'unverified', reasonId: 'zcode-native-projection-unverified' };
     }
     if (request.operation === 'retire') return { kind: 'requires-managed', reasonId: 'native-uninstall-drops-retained-state' };
+    if ('snapshot' in request) preflightPortableHooks(portableHookAdapter, request.snapshot.packageRoot);
     return installProjection(request) ?? { kind: 'unverified', reasonId: 'zcode-native-projection-unverified' };
   },
   revalidateTargetPrecondition: async (handle) => {

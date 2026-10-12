@@ -44,6 +44,7 @@ const USAGE = `plugnz — install, diagnose and update agent plugins and MCP con
 usage: plugnz <verb> [options]
 
 verbs:
+  install [source] [--target <host>…] install a plugin (default source: current directory)
   add <source> [--target <host>…] [--adopt-existing] install a plugin into each host's native store
   doctor [--json]                   dead commands, shadowed entries, stale installs (read-only)
   pin [--target <host>] [--all]     rewrite bare commands to absolute paths for GUI hosts
@@ -803,8 +804,9 @@ function inactiveProfileAdd(source: string, profiles: readonly ConsumerProfile[]
   });
 }
 
-async function runAdd(argv: string[], mode: MutationOutputMode): Promise<number> {
+async function runAdd(argv: string[], mode: MutationOutputMode, defaultSource?: string): Promise<number> {
   const flags = parseFlags(argv);
+  if (flags.positionals.length === 0 && defaultSource !== undefined) flags.positionals.push(defaultSource);
   const disallowed = rejectDisallowed(flags, new Set(['target', 'plugin', 'dryRun', 'adoptExisting']));
   if (disallowed !== undefined) return emitAddReport(usageReport('add', flags.dryRun, disallowed), mode);
   if (flags.positionals.length !== 1) {
@@ -942,6 +944,11 @@ async function runWriterAdd(
       ? { writer, plugin, scope, nativeId: identity.identity.nativeId, equivalent: identity.identity.equivalentNativeIds, failure: null as LifecycleReason | null }
       : { writer, plugin, scope, nativeId: identity.nativeId, equivalent: [] as readonly string[], failure: reason('internal', 'internal.defect', unknownErrorDiagnostic(identity.error)) };
   }));
+  for (const pair of captured) {
+    if (pair.failure !== null || pair.writer.preflightAdd === undefined) continue;
+    try { await pair.writer.preflightAdd(pair.plugin, resolved); }
+    catch (error) { pair.failure = reasonForError(error); }
+  }
   const identityFailure = captured.find((pair) => pair.failure !== null)?.failure ?? null;
   if (identityFailure !== null) {
     const plan = freezePlan(captured.map((pair) => planOperation({
@@ -1519,7 +1526,8 @@ export async function main(argv: string[]): Promise<number> {
   const wantsLegacyJson = argv.includes('--legacy-json');
   const args = argv.filter((a) => a !== '--json' && a !== '--legacy-json');
   const json = wantsJson || wantsLegacyJson;
-  const verb = args[0];
+  const requestedVerb = args[0];
+  const verb = requestedVerb === 'install' ? 'add' : requestedVerb;
   const mutationVerb = verb === 'add' || verb === 'update' || verb === 'remove';
   const mutationOutput: MutationOutputMode = wantsLegacyJson ? 'legacy-json' : wantsJson ? 'json' : 'human';
 
@@ -1918,7 +1926,7 @@ export async function main(argv: string[]): Promise<number> {
     printReport(report, mutationOutput);
     return exitCodeForLifecycleReport(report);
   }
-  if (verb === 'add') return runAdd(args.slice(1), mutationOutput);
+  if (verb === 'add') return runAdd(args.slice(1), mutationOutput, requestedVerb === 'install' ? '.' : undefined);
   if (verb === 'pin') {
     const flags = parseFlags(args.slice(1));
     if (rejectDisallowed(flags, new Set(['target', 'all', 'dryRun'])) || flags.positionals.length > 0) fail(`plugnz pin: unexpected argument: ${flags.positionals[0]}`, 2);

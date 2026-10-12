@@ -788,11 +788,12 @@ describe('versioned capability evidence', () => {
 });
 
 
-test('uncompiled portable hooks fail preflight instead of installing inert configuration', () => {
+test('portable hooks retain authored semantic requirements for target compilation', () => {
   const plugin = source('portable-hooks', {
     'plugnz.hooks.json': JSON.stringify({ version: 1, hooks: { 'session.start': [{ command: ['node', 'context.mjs'] }] } }),
   });
-  const failure = semanticFailure(plugin);
-  expect(failure.message).toContain('plugnz hooks build');
-  expect(failure.message).toContain('uncompiled plugnz.hooks.json');
+  const inventory = inventoryPackageSemantics(plugin);
+  expect(inventory.components.hooks).toEqual(['plugnz.hooks.json']);
+  expect(inventory.hookDeclarations[0]?.form).toBe('portable-hooks');
+  expect(inventory.requiredSemantics).toContain('hooks');
 });

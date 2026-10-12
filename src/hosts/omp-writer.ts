@@ -1,3 +1,6 @@
+import { hookAdapter as portableHookAdapter } from './omp-hooks';
+import { portableHookProfile } from '../portable-hook-policy';
+import { compilePortableHooksInStage, preflightPortableHooks, registerProjectedExtension } from '../hook-install';
 /** Transactional writer for OMP's native npm/link extension-package lane. */
 import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -264,12 +267,13 @@ const ompManagedProfile = createCapabilityEvidenceProfile({
 
 const ompLifecycleDefinition: LifecycleHostDefinition = {
   id: 'omp',
-  evidenceProfiles: [ompManagedProfile],
+  evidenceProfiles: [ompManagedProfile, portableHookProfile(portableHookAdapter, 'managed', ['install', 'update', 'disable', 'retire'])],
   probeVersion: (target) => probeOmpVersion(target),
   observeTarget: (target) => observeInventory(target),
   observeNativeMutationScope: (request) => Promise.resolve(ompUpgradeMutationScope(unprovenCandidate(request.nativeId), request.nativeId)),
   observeNativeProjection: async request => {
     if ('snapshot' in request) {
+      preflightPortableHooks(portableHookAdapter, request.snapshot.packageRoot);
       const proof = recordedPriorSource(request.snapshot);
       if (proof !== undefined) {
         const installed = request.targetObservation.installations.find(row => row.nativeId === request.snapshot.nativeId);
@@ -300,6 +304,7 @@ const ompLifecycleDefinition: LifecycleHostDefinition = {
     const stage = join(parent, 'stage');
     rmSync(stage, { recursive: true, force: true });
     projectPluginForOmp(request.snapshot.packageRoot, stage, { packageName: npm, version, activeRoot: managedPackageDir(nativeId), namespace: plugin });
+    if (compilePortableHooksInStage(portableHookAdapter, stage)) registerProjectedExtension(stage, 'omp', './extension.mjs');
     const locator = request.snapshot.sourceType === 'git' ? request.snapshot.nativeGit?.locator ?? null : null;
     writeFileSync(join(stage, MARKER), JSON.stringify({
       source: locator ?? request.snapshot.immutableRevision,

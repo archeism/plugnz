@@ -1,3 +1,6 @@
+import { hookAdapter as portableHookAdapter } from './claude-code-hooks';
+import { portableHookProfile } from '../portable-hook-policy';
+import { compilePortableHooksInStage, preflightPortableHooks } from '../hook-install';
 /** Claude Code's native cache/registry writer. Kept separate from the read-only reader. */
 import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -199,6 +202,7 @@ export const claudeCodeWriter: HostWriter = {
 function stagePlugin(source: string, stage: string, fallbackName: string, fallbackVersion: string): void {
   cpSync(source, stage, { recursive: true });
   assertNoSymlinks(stage);
+  compilePortableHooksInStage(portableHookAdapter, stage);
   const root = join(stage, 'plugin.json');
   const canonical = join(stage, '.plugin', 'plugin.json');
   const manifest = existsSync(canonical) ? canonical : existsSync(root) ? root : undefined;
@@ -730,7 +734,7 @@ function claudeCodeLifecycleDefinition(contracts: readonly ClaudeNativeRemoteUpd
   const detectedVersion = version.kind === 'detected' ? version.version : undefined;
   return {
     id: 'claude-code',
-    evidenceProfiles: claudeEvidenceProfiles(detectedVersion, contracts),
+    evidenceProfiles: [...claudeEvidenceProfiles(detectedVersion, contracts), portableHookProfile(portableHookAdapter, 'managed', ['install', 'update', 'disable', 'retire'])],
     probeVersion: async () => version,
     observeTarget: async (target) => ({ target, installations: observeClaudeInstallations(target, detectedVersion) }),
     observeNativeMutationScope: async (request) => ({
@@ -885,6 +889,7 @@ function nativeProjection(
 }
 
 function routeFacts(request: NativeProjectionRequest, detectedVersion: string | undefined): ClaudeRouteFacts {
+  if ('snapshot' in request) preflightPortableHooks(portableHookAdapter, request.snapshot.packageRoot);
   const activation = 'snapshot' in request ? undefined : request.activation;
   const snapshot = 'snapshot' in request ? request.snapshot : undefined;
   const nativeId = snapshot?.nativeId ?? activation?.nativeId ?? '';

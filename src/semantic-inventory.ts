@@ -1,3 +1,4 @@
+import { HOOK_CONFIG_FILE, readHookConfig } from './hooks';
 import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { parse as parseToml } from 'smol-toml';
@@ -86,6 +87,7 @@ export interface AutoUpdateDeclaration {
 }
 
 export type HookDeclarationForm =
+  | 'portable-hooks'
   | 'default-file'
   | 'manifest-file'
   | 'manifest-directory'
@@ -150,9 +152,9 @@ export class SemanticInventoryError extends Error {
  */
 export function inventoryPackageSemantics(plugin: PluginSource): PackageSemanticInventory {
   const files = walkFiles(plugin.dir);
-  if (files.includes('plugnz.hooks.json')) {
-    invalid('Portable hooks must be compiled before installation: use plugnz hooks build <source> --target <host> --out <directory>, then load the generated native package. add/sync do not execute an uncompiled plugnz.hooks.json.');
-  }
+  let portableHooks: ReturnType<typeof readHookConfig>;
+  try { portableHooks = readHookConfig(plugin.dir); }
+  catch (error) { invalid(errorDiagnostic(error)); }
   const skills = files.filter((path) => path.startsWith('skills/') && path.endsWith('/SKILL.md'));
   const componentInventory = inventoryComponentRoots(plugin.dir);
   const commands = componentInventory.definitions
@@ -167,6 +169,15 @@ export function inventoryPackageSemantics(plugin: PluginSource): PackageSemantic
   const sidecars = new Set(skills.map((path) => `${dirname(path)}/agents/openai.yaml`));
   const manifests = readSemanticManifests(plugin.dir);
   const hookInventory = inventoryHooks(plugin.dir, files, manifests);
+  if (portableHooks !== undefined) {
+    const events = Object.keys(portableHooks.hooks);
+    hookInventory.components.push(HOOK_CONFIG_FILE);
+    hookInventory.declarations.push({
+      source: HOOK_CONFIG_FILE, manifestPath: null, form: 'portable-hooks', events,
+      handlerTypes: ['command'], handlerFacets: [],
+      groups: events.map(event => ({ event, matcher: null, matcherKind: 'all', handlerTypes: ['command'], handlerFacets: [] })),
+    });
+  }
   const resources = files.filter((path) =>
     (['assets/', 'references/', 'resources/'].some((root) => path.startsWith(root))
       || (path.startsWith('skills/') && !path.endsWith('/SKILL.md'))

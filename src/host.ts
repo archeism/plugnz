@@ -119,6 +119,8 @@ export interface HostWriter extends HostReader {
   readonly legacyNativeIds?: (plugin: PluginSource) => readonly string[];
   /** Pure, conservative relation used to select a persisted ID before dynamic identity capture. */
   readonly persistedNativeIdMayAlias?: (persistedNativeId: string, requestedIdentity: string) => boolean;
+  /** Optional read-only package/version/compiler validation before durable install intent. */
+  preflightAdd?(plugin: PluginSource, resolved: ResolvedSource): Promise<void>;
   add(plugin: PluginSource, resolved: ResolvedSource, opts?: AddOptions): Promise<void | 'unchanged'>;
   remove(id: string, opts?: RemoveOptions): Promise<void>;
   /**
