@@ -118,6 +118,27 @@ focused GREEN `plugnz-admission-native-host-focused.log` SHA-256
 `fb708645effa3e7f9e0e1b9424da7bd4cebca43e6f3e2a965a1cbe37b5b1f0d9`.
 Skill instructions were used unchanged; independent review remains required.
 
+Corrected producer `b56c69b9e65a53a920c5e0a1ce5aad2f0afb3240` subsequently
+received bounded independent LGTM on both axes. Spec reran 48 tests with 555
+assertions in 24.70 seconds; Standards independently reran the same 48 tests
+in 22.57 seconds. Both typechecks and diff checks passed with the frozen tree
+unchanged. The retained independent Spec log has SHA-256
+`c233e7a1353402d79a850d151195db81871f19c69f8386631d1884dd520bea2e`.
+After the history-preserving integration merge, root reran the seven-file command
+on Bun 1.3.14: **48 passed, zero failed, 555 assertions, 20.21 seconds**
+(terminal handle `21040`); typecheck terminated successfully (handle `8278`).
+
+The Personal mirror is frozen at
+`c41141bd46827272eac768585bd78f215fcd710d` on
+`finish/personal-admission-reader`. Its strict optional plan/outcome reader includes
+both native-payload fingerprint and native-adapter/target correlation. Root
+independently read the complete candidate and ran its 31 consumer tests on Bun
+1.3.14 (114 assertions, zero failures); independent Standards re-reviewed that
+immutable correction. This prerequisite adds no adoption expectation, durable
+receipt/history accounting, pin advancement or deployment. Producer and consumer
+main/release acceptance, actual adoption execution and the known full-suite
+repair failure remain unfinished requirements, not exclusions.
+
 ## Corrected candidate and combined verification
 
 Corrected candidate `2a7ca8b084e50927f1b0facf3808e97a61fab1ed` received
