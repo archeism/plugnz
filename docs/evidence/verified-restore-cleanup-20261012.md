@@ -1,6 +1,6 @@
 # Verified duplicate restore cleanup, 2026-10-12
 
-Only five generated duplicate restore directories were removed. Original trial
+Only the exact generated duplicate restore directories listed below were removed. Original trial
 archives, durable copies, metadata, verifier scripts, and failed attempts remain.
 No installed plugin, user backup, source checkout, or original trial was removed.
 
@@ -80,3 +80,35 @@ immediately afterward: **8,322,068,480 bytes**. Other machine activity can chang
 free space, so this difference is not attributed entirely to this cleanup and
 the launch-time floor must still be rechecked. No throughput or capability claim
 is added by deleting these verified duplicate copies.
+
+## ZCode acquisition 01 duplicate restores
+
+Independent reviewers `/root/native_git_standards` and `/root/finish_sync`
+verified both complete restore inventories against the permanent archive:
+28,673 regular files, 2,695 directories, five links, 921,576,867 logical file
+bytes, full content hashes and modes, no extras, and only the previously
+declared 41-byte acquisition identity omission. Both confirmed canonical
+non-symlink roots, no nested mounts and no live process users.
+
+Root immediately rechecked canonical identities, mountinfo, process
+cwd/root/exe/FD/maps and the permanent archive digest, then removed only:
+
+1. `/tmp/plugnz-zcode-acquisition-01/restored`
+2. `/tmp/plugnz-zcode-acquisition-01-independent-AbGdjr`
+
+Allocated duplicate bytes removed: **2,045,112,320**. Preserve the original
+`/tmp/plugnz-zcode-acquisition-01/` parent and its archive, helpers, config,
+receipt and logs. The permanent recovery archive is:
+`/home/charlesfengyc/.local/state/plugnz-evidence/20261012/zcode-acquisition-01/controller-output/evidence.tar.gz`.
+SHA-256: `0dcbff1a305fc936f80c4f411164cdee89b4f6fda28b9db1be0922ba441db143`.
+Permanent metadata and verifier outputs remain under the same cohort's
+`controller-output/`, `launcher-setup/` and `independent-verification/` directories.
+Restore to a fresh empty directory using the command above, then run the
+retained verifier; the two removed paths are historical receipts, not current
+restore locations. This does not delete or reclassify the failed acquisition.
+
+Before cleanup, free space was **449,605,632 bytes**, insufficient for a new
+acquisition. The independently reviewed cohort-02 launcher at `917e6ad` is
+prepared, not executed. Recheck the unchanged **6,442,450,944-byte** free-space
+floor before authorizing any new VM; removing these duplicates does not itself
+meet that floor. No real installation or user backup was touched.
