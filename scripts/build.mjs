@@ -11,6 +11,15 @@ import { join } from "node:path";
 const root = join(import.meta.dir, "..");
 const entry = join(root, "scripts", "cli-entry.ts");
 const outdir = join(root, "dist");
+const hookRuntime = await build({
+  entrypoints: [join(root, "src", "hooks.ts")],
+  target: "node",
+  format: "esm",
+  naming: "hook-runtime.mjs",
+  outdir,
+  sourcemap: "none",
+});
+if (!hookRuntime.success || hookRuntime.outputs.length === 0) throw new Error("hook runtime bundle failed");
 const result = await build({
   entrypoints: [entry],
   target: "node",
@@ -19,7 +28,7 @@ const result = await build({
   outdir,
   sourcemap: "none",
 });
-if (result.outputs.length === 0) throw new Error("bundle produced no outputs");
+if (!result.success || result.outputs.length === 0) throw new Error("CLI bundle failed");
 const bundled = readFileSync(join(outdir, "plugnz.mjs"), "utf8");
 writeFileSync(join(outdir, "plugnz.mjs"), `#!/usr/bin/env node\n${bundled}`);
 chmodSync(join(outdir, "plugnz.mjs"), 0o755);

@@ -28,6 +28,7 @@ declare module 'node:fs' {
   export function mkdirSync(path: string, options?: { recursive?: boolean }): string | undefined;
   export function rmSync(path: string, options?: { recursive?: boolean; force?: boolean }): void;
   export function cpSync(src: string, dest: string, options?: { recursive?: boolean }): void;
+  export function copyFileSync(src: string, dest: string): void;
   export function writeFileSync(path: string, data: string): void;
   export function chmodSync(path: string, mode: number): void;
   export function mkdtempSync(prefix: string): string;
@@ -57,7 +58,7 @@ declare module 'node:child_process' {
   export function spawnSync(
     command: string,
     args: string[],
-    options?: { cwd?: string; encoding?: string; env?: Record<string, string | undefined> },
+    options?: { cwd?: string; encoding?: string; env?: Record<string, string | undefined>; input?: string; timeout?: number; maxBuffer?: number },
   ): SpawnSyncResult;
 }
 
@@ -94,6 +95,7 @@ declare module 'bun:test' {
     toBeGreaterThan(expected: number): void;
     toBeLessThan(expected: number): void;
     toBeUndefined(): void;
+    toThrow(expected?: string | RegExp): void;
   };
 }
 
@@ -104,6 +106,8 @@ declare const process: {
   argv: string[];
   platform: string;
   execPath: string;
+  versions: Record<string, string | undefined>;
+  kill(pid: number, signal: 'SIGKILL'): void;
   exitCode?: number;
   exit(code?: number): never;
 };
@@ -165,4 +169,33 @@ declare module 'node:net' {
 }
 declare class TextDecoder {
   decode(input?: Uint8Array): string;
+}
+
+
+/** Pipe surfaces used by the portable, shell-free hook runner. */
+declare module 'node:child_process' {
+  export interface HookChildProcess {
+    pid?: number;
+    stdin: {
+      end(data: string): void;
+      destroy(): void;
+      on(event: 'error', listener: (error: Error) => void): void;
+    };
+    stdout: { on(event: 'data', listener: (chunk: Uint8Array) => void): void; destroy(): void };
+    stderr: { on(event: 'data', listener: (chunk: Uint8Array) => void): void; destroy(): void };
+    once(event: 'error', listener: (error: Error) => void): void;
+    once(event: 'close', listener: (code: number | null, signal: string | null) => void): void;
+    kill(signal: 'SIGKILL'): boolean;
+  }
+  export function spawn(
+    command: string,
+    args: string[],
+    options: { cwd: string; env: Record<string, string | undefined>; shell: false; detached: boolean; stdio: ['pipe', 'pipe', 'pipe'] },
+  ): HookChildProcess;
+  /** Keep the general signature last for existing ReturnType<typeof spawn> consumers. */
+  export function spawn(command: string, args: string[], options: { env?: Record<string, string | undefined>; cwd?: string; stdio?: unknown }): ChildProcessLike;
+}
+declare module 'node:url' {
+  export function fileURLToPath(url: string): string;
+  export function pathToFileURL(path: string): { href: string };
 }

@@ -786,3 +786,13 @@ describe('versioned capability evidence', () => {
     ]);
   });
 });
+
+
+test('uncompiled portable hooks fail preflight instead of installing inert configuration', () => {
+  const plugin = source('portable-hooks', {
+    'plugnz.hooks.json': JSON.stringify({ version: 1, hooks: { 'session.start': [{ command: ['node', 'context.mjs'] }] } }),
+  });
+  const failure = semanticFailure(plugin);
+  expect(failure.message).toContain('plugnz hooks build');
+  expect(failure.message).toContain('uncompiled plugnz.hooks.json');
+});

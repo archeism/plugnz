@@ -58,6 +58,8 @@ verbs:
   retire-source <source-or-scope>   end one recorded scope [--target <host>] [--instance <id>] [--dry-run]
   scopes [source-or-scope]          read recorded scopes [--target <host>] [--instance <id>] [--json]
   targets [--all]                   list detected agent hosts; --all includes frozen consumer profiles
+  hooks build <dir> --target <id>... --out <dir>  compile portable hooks into native artifacts
+  hooks targets                    print portable hook capabilities as JSON
 
 mutation output:
   --json                            schema-v1 lifecycle report
@@ -1540,6 +1542,10 @@ export async function main(argv: string[]): Promise<number> {
   if (verb === undefined || verb === 'help' || verb === '--help' || verb === '-h') {
     console.log(USAGE);
     return verb === undefined ? 2 : 0;
+  }
+  if (verb === 'hooks') {
+    const { runHookCli } = await import('./hook-cli');
+    return runHookCli(args.slice(1));
   }
   if (verb === 'doctor') {
     const flags = parseFlags(args.slice(1));

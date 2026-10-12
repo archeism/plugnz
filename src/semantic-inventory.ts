@@ -150,6 +150,9 @@ export class SemanticInventoryError extends Error {
  */
 export function inventoryPackageSemantics(plugin: PluginSource): PackageSemanticInventory {
   const files = walkFiles(plugin.dir);
+  if (files.includes('plugnz.hooks.json')) {
+    invalid('Portable hooks must be compiled before installation: use plugnz hooks build <source> --target <host> --out <directory>, then load the generated native package. add/sync do not execute an uncompiled plugnz.hooks.json.');
+  }
   const skills = files.filter((path) => path.startsWith('skills/') && path.endsWith('/SKILL.md'));
   const componentInventory = inventoryComponentRoots(plugin.dir);
   const commands = componentInventory.definitions
