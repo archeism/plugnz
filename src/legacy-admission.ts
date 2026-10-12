@@ -8,10 +8,14 @@ export interface LegacyAdoptionProofRequest {
   readonly legacy: LegacyRecordProof;
   readonly snapshot: FrozenPackageSnapshot;
   readonly source: SourceSnapshotReference;
-  readonly pins: readonly ResolvedLifecyclePin[];
   readonly version: TargetVersionObservation;
   readonly evidenceId: AdoptionDigest;
 }
 
-/** null means this original is not the adapter-enumerated selected identity. */
-export type ProveLegacyAdoption = (request: LegacyAdoptionProofRequest) => AdoptionNativeProof | null;
+/** A candidate correlates identity only; it grants no mutation/recovery authority. */
+export interface LegacyAdoptionCandidate {
+  readonly prove: (pins: readonly ResolvedLifecyclePin[]) => AdoptionNativeProof;
+}
+
+/** Filter identity before resolving pins; null means an unrelated original. */
+export type ProveLegacyAdoption = (request: LegacyAdoptionProofRequest) => LegacyAdoptionCandidate | null;

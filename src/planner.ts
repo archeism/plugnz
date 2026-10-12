@@ -390,11 +390,12 @@ async function composeLegacyAdmissions(
         ...(item.scope.source.kind === 'git' ? { nativeGit: { locator: item.scope.source.locator, resolvedRevision: item.frozen.snapshot.revision } } : {}) });
       const matches: AdoptionAdmission[] = [];
       for (const legacy of proofs) {
+        const candidate = item.host.proveLegacyAdoption({ legacy, snapshot, source: item.frozen.snapshot,
+          version, evidenceId: decision.evidenceId as AdoptionDigest });
+        if (candidate === null) continue;
         const resolved = resolveRecordedPinExecutables(plugin.dir, legacy.snapshot.activation.pins);
         if (resolved.kind === 'refused') return defect(resolved.reason);
-        const native = item.host.proveLegacyAdoption({ legacy, snapshot, source: item.frozen.snapshot,
-          pins: createResolvedLifecyclePins(resolved.pins), version, evidenceId: decision.evidenceId as AdoptionDigest });
-        if (native === null) continue;
+        const native = candidate.prove(createResolvedLifecyclePins(resolved.pins));
         if (native.adapterId !== item.host.adapter.id || canonicalAdoptionJson(native.version) !== canonicalAdoptionJson(version)) {
           throw new Error('adapter legacy proof differs from the exact target version/evidence binding');
         }

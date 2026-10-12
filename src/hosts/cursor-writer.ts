@@ -36,7 +36,7 @@ export const proveCursorSelectedLegacyAdoption: ProveLegacyAdoption = request =>
   const aliases = collection === undefined ? [name] : [name, `${name}@${collection}`];
   if (!aliases.includes(request.legacy.original.package ?? '')
     || !aliases.includes(request.legacy.original.nativeId ?? '')) return null;
-  return proveCursorLegacyAdoption(request);
+  return { prove: pins => proveCursorLegacyAdoption({ ...request, pins }) };
 };
 
 const OWNERSHIP = '.plgnz-install.json';

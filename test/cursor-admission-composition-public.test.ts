@@ -68,6 +68,56 @@ test('Cursor composes exact legacy admission through the public preview but hard
   });
 }, 20_000);
 
+test('Cursor ignores an unrelated original pin before resolving the selected package MCP commands', async () => {
+  await withLifecycleCliHarness(harness => {
+    harness.writeHome({ '.cursor/.keep': '' });
+    const launcher = join(harness.source('runtime', { cursor: '#!/bin/sh\nprintf "2.4.0\\n"\n' }), 'cursor');
+    chmodSync(launcher, 0o755);
+    const env = { OPEN_PLUGIN_CURSOR_BIN: launcher };
+    const source = harness.source('catalog', {
+      '.claude-plugin/marketplace.json': JSON.stringify({ name: 'personal', plugins: [
+        { source: './plugins/other' }, { source: './plugins/demo' },
+      ] }),
+      'plugins/other/plugin.json': '{"name":"other","version":"1.0.0"}\n',
+      'plugins/other/.mcp.json': '{"mcpServers":{"server":{"command":"true","args":[]}}}\n',
+      'plugins/demo/plugin.json': '{"name":"demo","version":"1.0.0"}\n',
+      'plugins/demo/.mcp.json': '{"mcpServers":{"server":{"command":"plugnz-fixture-missing-executable","args":[]}}}\n',
+    });
+    expect(harness.run(['add', source, '--target', 'cursor', '--plugin', 'other', '--json'], { env }).exitCode).toBe(0);
+    expect(harness.run(['pin', '--target', 'cursor', '--json']).exitCode).toBe(0);
+    expect(harness.run(['add', source, '--target', 'cursor', '--plugin', 'demo', '--json'], { env }).exitCode).toBe(0);
+    const rows = readState(join(harness.home, 'state.json'));
+    expect(rows.find(row => row.id === 'other')?.pins).toEqual(['server']);
+    for (const row of rows) {
+      writeFileSync(join(harness.storePath('cursor'), `plugins/local/${row.id}/.plgnz-install.json`),
+        JSON.stringify({ source, pluginId: `${row.id}@personal`, fingerprint: row.fingerprint }));
+    }
+    writeFileSync(join(harness.home, 'state.json'), JSON.stringify({ version: 1, installs: rows.map(row => ({
+      ...row, id: `${row.id}@personal`, pending: 'install',
+    })) }));
+    for (const dryRun of [true, false]) {
+      const result = harness.run(['sync', source, '--target', 'cursor', '--plugin', 'demo', '--adopt-existing',
+        ...(dryRun ? ['--dry-run'] : []), '--json'], { env });
+      const report = parseLifecycleReport(JSON.parse(result.stdout));
+      expect(report.plan[0]?.adoption?.original.nativeId).toBe('demo@personal');
+      expect(report.plan[0]?.adoption?.native.pins).toEqual([]);
+      expect(report.summary.reason?.diagnostic).toContain('mutation fence');
+      expect(result.exitCode).toBe(1);
+      expect(result.state.after).toEqual(result.state.before);
+      expect(result.stores.cursor.after).toEqual(result.stores.cursor.before);
+    }
+    writeFileSync(join(source, 'plugins/other/.mcp.json'),
+      '{"mcpServers":{"server":{"command":"plugnz-fixture-missing-executable","args":[]}}}\n');
+    const selectedPin = harness.run(['sync', source, '--target', 'cursor', '--plugin', 'other', '--adopt-existing', '--json'], { env });
+    const selectedReport = parseLifecycleReport(JSON.parse(selectedPin.stdout));
+    expect(selectedPin.exitCode).toBe(1);
+    expect(selectedReport.summary.reason?.code).toBe('runtime.operation-failed');
+    expect(selectedReport.summary.reason?.diagnostic).toContain('does not resolve');
+    expect(selectedPin.state.after).toEqual(selectedPin.state.before);
+    expect(selectedPin.stores.cursor.after).toEqual(selectedPin.stores.cursor.before);
+  });
+}, 20_000);
+
 function reportRefusal(value: unknown): string {
   try { parseLifecycleReport(value); return 'accepted'; }
   catch (error) { return error instanceof Error ? error.message : String(error); }

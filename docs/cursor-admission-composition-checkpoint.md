@@ -58,3 +58,28 @@ Failed attempts remain in `/tmp/plugnz-cursor-admission-composition-red.log`,
 test omitted the required explicit `--plugin demo` selector; correcting that
 invocation did not relax production behavior. Skill instructions were used
 unchanged; no skill improvement or benchmark attribution is claimed.
+
+## Independent Spec finding: unrelated original pins
+
+Review of `1427335` proved that resolving every scope original's pins before the
+adapter's identity filter could veto selected `demo` using unrelated `other` pins.
+The permanent public regression installs both packages through the CLI, pins only
+`other`, then retains both qualified legacy originals. Selected `demo` has no
+retained pins but an unresolved unpinned MCP command: its admission must reach the
+same internal fence refusal without inspecting the unrelated original's pins.
+
+The adapter seam now returns an identity-filtered read-only candidate before pin
+resolution. Only a matched candidate receives resolved pins for the full native
+proof. This does not infer aliases in the planner or supply mutation authority.
+The same regression selects `other` after its own pinned command becomes missing
+and requires the existing `runtime.operation-failed` diagnostic and zero writes.
+
+The focused command above now passes 90 tests, 913 assertions, in 23.91 seconds;
+typecheck and diff check exit zero. Durable raw RED, initial GREEN and focused logs
+are retained in
+`/home/charlesfengyc/.local/state/plugnz-evidence/20261012/cursor-admission-pin-filter/`.
+The RED log is `plugnz-cursor-admission-unrelated-pin-red-exact.log`, SHA-256
+`90f9eb1cc4760c1d934027a4391d42e24c3a4d942568bc7ddd60137f4d5b77d1`.
+Both independent axes must re-review this corrected frozen checkpoint; actual
+adoption execution, durable mutation recovery and full-suite acceptance remain
+unfinished, not excluded.
