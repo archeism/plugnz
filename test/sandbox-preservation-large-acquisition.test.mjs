@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync,
   symlinkSync, truncateSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { inventoryArchiveSource, measureRetainedArchive, preservationProfile,
   retentionStopReason, validatePreservationBudget } from '../scripts/sandbox-preservation-budget.mjs';
@@ -19,6 +19,19 @@ function archiveAndRestore(temp, sources, compressed = true) {
   const extract = compressed ? ['-xzf', archive, '-C', restored] : ['-xf', archive, '-C', restored];
   expect(spawnSync('tar', extract).status).toBe(0);
   return { archive, restored };
+}
+
+async function waitForFile(path, timeoutMs = 2_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!existsSync(path)) {
+    if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${path}`);
+    await new Promise(resolveWait => setTimeout(resolveWait, 10));
+  }
+}
+
+function largeMonitorConfig() {
+  return { diskGrowthBytes: 6 * 1024 ** 3, diskReserveBytes: 2944 * 1024 ** 2,
+    retainedBodyBytes: 256 * 1024 ** 2 + 1, archiveBytes: 258 * 1024 ** 2 };
 }
 
 test('same-inode trial and supplier aliases consume one body and both restore', () => {
@@ -122,6 +135,76 @@ test('closing the private supervisor after producer exit does not manufacture a 
     await close();
     await new Promise(resolveWait => setTimeout(resolveWait, 20));
     expect(reasons).toEqual([]);
+  } finally { rmSync(temp, { recursive: true, force: true }); }
+});
+
+test('private supervisor completely rescans after a live rename/delete race under its original deadline', async () => {
+  const temp = mkdtempSync('/tmp/plugnz-preservation-large-');
+  const root = join(temp, 'trial-source'), removed = join(temp, 'removed-source'), ready = join(temp, 'writer-ready');
+  mkdirSync(root); writeFileSync(join(root, 'before'), 'x');
+  const writer = spawn(process.execPath, ['-e', `
+    const {mkdirSync,renameSync,rmSync,writeFileSync}=require('node:fs');
+    const [root,removed,ready]=process.argv.slice(1);
+    renameSync(root,removed); writeFileSync(ready,'ready');
+    setTimeout(()=>{rmSync(removed,{recursive:true});mkdirSync(root);writeFileSync(root+'/after','x')},120);
+  `, root, removed, ready], { stdio: 'ignore' });
+  const writerDone = new Promise(resolveExit => writer.once('close', resolveExit));
+  try {
+    await waitForFile(ready);
+    let resolveStop;
+    const stopped = new Promise(resolve => { resolveStop = resolve; });
+    const started = Date.now();
+    const close = startLargeRetentionSupervisor({ root, suppliers: [], config: largeMonitorConfig(),
+      profile: preservationProfile('private-large-acquisition'), baseline: 1, used: () => 1,
+      intervalMs: 20, measurementDeadlineMs: 750, stop: resolveStop });
+    const reason = await Promise.race([stopped, new Promise((_, reject) => setTimeout(() => reject(new Error('No stop')), 2_000))]);
+    await writerDone;
+    await close();
+    expect(reason).toBe('retained-body-budget');
+    expect(Date.now() - started).toBeLessThan(750);
+    expect(readFileSync(join(root, 'after'), 'utf8')).toBe('x');
+  } finally { if (writer.exitCode === null) writer.kill('SIGKILL'); rmSync(temp, { recursive: true, force: true }); }
+});
+
+test('continuous rename/delete churn reaches the same measurement deadline while whole-FS sampling stays responsive', async () => {
+  const temp = mkdtempSync('/tmp/plugnz-preservation-large-');
+  const root = join(temp, 'trial-source'), removed = join(temp, 'removed-source'), ready = join(temp, 'writer-ready');
+  mkdirSync(root); writeFileSync(join(root, 'before'), 'x');
+  const writer = spawn(process.execPath, ['-e', `
+    const {renameSync,writeFileSync,unlinkSync}=require('node:fs');
+    const [root,removed,ready]=process.argv.slice(1);
+    renameSync(root,removed); writeFileSync(ready,'ready');
+    let sequence=0; for(;;){const a=removed+'/hot-'+sequence++,b=a+'-moved';writeFileSync(a,'x');renameSync(a,b);unlinkSync(b)}
+  `, root, removed, ready], { stdio: 'ignore' });
+  const writerDone = new Promise(resolveExit => writer.once('close', resolveExit));
+  try {
+    await waitForFile(ready);
+    let resolveStop, usedCalls = 0;
+    const stopped = new Promise(resolve => { resolveStop = resolve; });
+    const close = startLargeRetentionSupervisor({ root, suppliers: [], config: largeMonitorConfig(),
+      profile: preservationProfile('private-large-acquisition'), baseline: 1, used: () => { usedCalls++; return 1; },
+      intervalMs: 20, measurementDeadlineMs: 180,
+      stop: reason => { writer.kill('SIGKILL'); resolveStop(reason); } });
+    const reason = await Promise.race([stopped, new Promise((_, reject) => setTimeout(() => reject(new Error('No stop')), 2_000))]);
+    await writerDone;
+    await close();
+    expect(reason).toBe('retention-measurement-deadline');
+    expect(usedCalls).toBeGreaterThan(1);
+  } finally { if (writer.exitCode === null) writer.kill('SIGKILL'); rmSync(temp, { recursive: true, force: true }); }
+});
+
+test('private supervisor still hard-stops a non-ENOENT special-file measurement failure', async () => {
+  const temp = mkdtempSync('/tmp/plugnz-preservation-large-');
+  try {
+    expect(spawnSync('mkfifo', [join(temp, 'unarchivable')]).status).toBe(0);
+    let resolveStop;
+    const stopped = new Promise(resolve => { resolveStop = resolve; });
+    const close = startLargeRetentionSupervisor({ root: temp, suppliers: [], config: largeMonitorConfig(),
+      profile: preservationProfile('private-large-acquisition'), baseline: 1, used: () => 1,
+      intervalMs: 20, measurementDeadlineMs: 750, stop: resolveStop });
+    const reason = await Promise.race([stopped, new Promise((_, reject) => setTimeout(() => reject(new Error('No stop')), 2_000))]);
+    await close();
+    expect(reason).toMatch(/^measurement-failed: AssertionError.*special file/u);
   } finally { rmSync(temp, { recursive: true, force: true }); }
 });
 

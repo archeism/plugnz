@@ -27,4 +27,10 @@ try {
     inventory: inventoryArchiveSource(workerData.root, { hashFiles: false }), omittedPaths: [] },
   ...(workerData.suppliers ?? []).map(retainedSupplier)];
   parentPort.postMessage({ measurement: measureRetainedArchive(sources) });
-} catch (error) { parentPort.postMessage({ error: String(error) }); }
+} catch (error) {
+  // A live package store can remove or rename an entry between readdir/lstat.
+  // Never turn that partial walk into a capacity measurement: the supervisor
+  // restarts the entire worker under its already-running deadline.
+  if (error?.code === 'ENOENT') parentPort.postMessage({ unstable: 'ENOENT' });
+  else parentPort.postMessage({ error: String(error) });
+}
