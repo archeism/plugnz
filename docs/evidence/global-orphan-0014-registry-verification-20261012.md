@@ -23,8 +23,8 @@ Root copied that downloaded CLI into this isolated proof worktree's ignored
 dist directory, without building. With Node 22.23.1 and Bun 1.4.0:
 `OPEN_PLUGIN_TEST_PACKED_NODE=/home/charlesfengyc/.local/bin/node bun test
 test/orphan-ownership-public.test.ts test/lifecycle-public-commands.test.ts`
-completed **44 pass / 0 fail / 206 assertions / 60.81s**. This covers all public
-lifecycle scenarios and both new ownership-refusal paths against registry bytes.
+completed **44 pass / 0 fail / 206 assertions / 60.81s**. This covers the complete
+existing public-command test file and both new ownership-refusal paths against registry bytes.
 Independent verification checked metadata, SRI/SHA-1, archive/bin declarations,
 direct archive CLI hash and version; its focused actual-artifact gate passed
 **3 tests / 43 assertions / 9.85s**, including genuine capability continuation.
@@ -37,5 +37,6 @@ The failed probe remains in the tool transcript. The direct verifier retry after
 
 Root raw public log is retained under
 `~/.local/state/plugnz-evidence/20261012/global-orphan-ownership/root-registry-public.log`.
+Log SHA256: `aed712302790e30435a3e0637e46352525099bc6a7e75f5de0d082fe1ee81e05`.
 This proof does not claim a fleet upgrade, real-home mutation, legacy-adoption
 executor/fence, production writer lease or new Native capability. Skills unchanged.
