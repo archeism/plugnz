@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { proveZcodeHistoricalIdentity } from '../src/hosts/zcode-cli-historical-identity';
 import { resolveSource } from '../src/source';
@@ -8,7 +8,7 @@ import { historicalCli, nativeFixture } from './fixtures/historical-plugnz-75d/r
 
 function refusal(run: () => unknown): string { try { run(); } catch (error) { return String(error); } return 'unexpected acceptance'; }
 
-test('authentic 75d completed modern activation has a read-only two-ID prerequisite, never mutation authority', async () => {
+for (const executableCommand of [false, true]) test(`authentic 75d completed modern activation has a read-only two-ID prerequisite, executableCommand=${executableCommand}`, async () => {
   await withLifecycleCliHarness(h => {
     h.writeHome({ '.zcode/cli/.keep': '' });
     const source = h.source('catalog', {
@@ -18,6 +18,10 @@ test('authentic 75d completed modern activation has a read-only two-ID prerequis
       'plugins/demo/skills/demo/notes.txt': 'authentic old resource\n',
       'plugins/demo/commands/test.toml': 'description = "Historical TOML"\nprompt = "Historical command body"\n',
     });
+    if (executableCommand) {
+      const command = join(source, 'plugins/demo/commands/run.md');
+      writeFileSync(command, '---\ndescription: Executable authored command\n---\nHistorical command body\n'); chmodSync(command, 0o755);
+    }
     const old = h.run(['sync', source, '--target', 'zcode-cli', '--json'], { env: { OPEN_PLUGIN_ZCODE_CLI_BIN: nativeFixture(h.home) }, cliArtifact: historicalCli(h.home) });
     if (old.exitCode !== 0) throw new Error(old.stderr || old.stdout);
     expect(old.exitCode).toBe(0);

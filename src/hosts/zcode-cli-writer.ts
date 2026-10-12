@@ -103,6 +103,14 @@ export function projectZcodePlugin(source: string, destination: string, resource
   const input = resolve(source); const target = resolve(destination); const ownedResources = resolve(resourceCopy); const links = resolve(resourceLinkRoot);
   if (!existsSync(input) || !statSync(input).isDirectory()) throw new Error(`ZCode plugin source is not a directory: ${input}`);
   if (target === input || ownedResources === input || target.startsWith(`${input}/`) || ownedResources.startsWith(`${input}/`)) throw new Error('ZCode projected outputs must not be inside the source');
+  // Missing leaves must be resolved through their nearest existing ancestor.
+  // Stable declared native-root links remain supported; only an output that
+  // physically enters this Source is refused, before either output is written.
+  const physicalInput = realpathSync(input);
+  for (const output of [target, ownedResources]) {
+    const physicalOutput = canonicalExistingPath(output);
+    if (physicalOutput === physicalInput || physicalOutput.startsWith(`${physicalInput}/`)) throw new Error('ZCode projected outputs must not be inside the source');
+  }
   for (const output of [target, ownedResources]) {
     try { lstatSync(output); assertNoSymlinks(output); }
     catch (error) { if ((error as { code?: string }).code !== 'ENOENT') throw error; }

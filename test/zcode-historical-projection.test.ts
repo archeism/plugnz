@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, lstatSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { projectZcodePayload } from '../src/hosts/zcode-cli-projection';
@@ -25,6 +25,37 @@ test('pure historical payload matches staging including empty command directorie
     delete actual.files['.plgnz-install.json'];
     expect([...expected.payload].filter(([, entry]) => entry.kind === 'directory').map(([path]) => path).sort()).toEqual(actual.directories.sort());
     expect(Object.fromEntries([...expected.payload].filter(([, entry]) => entry.kind === 'file').map(([path, entry]) => [path, entry.kind === 'file' ? Array.from(entry.bytes) : []]))).toEqual(actual.files);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('authored executable Markdown commands project to historical regular nonexecutable command mode', () => {
+  const root = mkdtempSync(join(tmpdir(), 'plugnz-zcode-projection-'));
+  try {
+    const source = join(root, 'source'); mkdirSync(join(source, 'commands'), { recursive: true });
+    writeFileSync(join(source, 'plugin.json'), '{"name":"demo","version":"1.0.0"}');
+    const command = join(source, 'commands/run.md'); writeFileSync(command, '---\ndescription: Run\n---\nRun it.\n'); chmodSync(command, 0o755);
+    const projected = projectZcodePayload(source, '/captured/resources', '1.0.0');
+    expect(projected.payload.get('commands/demo/run.md')?.mode).toBe(0o644);
+    projectZcodePlugin(source, join(root, 'stage'), join(root, 'resources'), '/captured/resources', 'demo', 'demo', '1.0.0', 'a'.repeat(64), 'b'.repeat(64));
+    expect(lstatSync(join(root, 'stage/commands/demo/run.md')).mode & 0o777).toBe(0o644);
+    expect(lstatSync(command).mode & 0o777).toBe(0o755);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+for (const escaped of ['destination', 'resources']) test(`missing ${escaped} leaf under a symlink ancestor cannot write into Source`, () => {
+  const root = mkdtempSync(join(tmpdir(), 'plugnz-zcode-projection-'));
+  try {
+    const source = join(root, 'source'); mkdirSync(source);
+    writeFileSync(join(source, 'plugin.json'), '{"name":"demo","version":"1.0.0"}');
+    const alias = join(root, 'alias'); symlinkSync(source, alias);
+    const before = snapshotTree(root);
+    const destination = escaped === 'destination' ? join(alias, 'stage') : join(root, 'stage');
+    const resources = escaped === 'resources' ? join(alias, 'resources') : join(root, 'resources');
+    let refusal = '';
+    try { projectZcodePlugin(source, destination, resources, '/captured/resources', 'demo', 'demo', '1.0.0', 'a'.repeat(64), 'b'.repeat(64)); }
+    catch (error) { refusal = String(error); }
+    expect(refusal).toContain('must not be inside the source');
+    expect(snapshotTree(root)).toEqual(before);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

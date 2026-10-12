@@ -73,7 +73,9 @@ export function projectZcodePayload(source: string, resourceLinks: string, nativ
       if (entry.kind === 'directory') continue;
       const siblingsHaveMarkdown = commandTree.some(([sibling, candidate]) => candidate.kind === 'file' && dirname(sibling) === dirname(path) && sibling.endsWith('.md'));
       if (path.endsWith('.toml') && siblingsHaveMarkdown) continue;
-      let projectedPath = path.slice('commands/'.length), bytes = entry.bytes, mode = entry.mode;
+      // The historical writer wrote command text into a fresh regular file;
+      // executable Source command permissions are not native command semantics.
+      let projectedPath = path.slice('commands/'.length), bytes = entry.bytes, mode = 0o644;
       if (path.endsWith('.toml')) { const projected = tomlCommandMarkdown(join(source, path)); projectedPath = `${projectedPath.slice(0, -5)}.md`; bytes = encode(projected.text); mode = 0o644; }
       if (!projectedPath.endsWith('.md')) throw new Error(`ZCode command source must be Markdown: ${path}`);
       validateCommand(decode(bytes), path);
