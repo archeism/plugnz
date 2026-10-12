@@ -1,5 +1,25 @@
 # Cursor adoption: read-only projection checkpoint
 
+## Independent alias correction verification
+
+Root reviewed frozen `7998909cf95268cfef0ca93b177683a5abb2b814` against
+`8a2f23c` and the exact wire contract's requirement that competing physical
+aliases fail globally. The constructor now enumerates every adapter-approved
+logical alias other than the canonical physical ID, independently of the alias
+used by the retained legacy ledger. It introduces no new alias authority.
+The public-store regression checks both bare and qualified legacy records and
+verifies the competing alias sentinel remains byte-identical.
+
+Root independently reran the same six-file command below using pinned Bun 1.4:
+18 passed, zero failed, 475 assertions, 13.96 seconds; terminal handle `84189`
+exited 0. Production/test SHA256 matched the frozen author checkpoint:
+`5e308391135c7e6421cd4c3ba95152f4cdc900df4f49c7fae979ae7007fd37d2` /
+`07727e87edc64106a6897ff48c51664ee3ea8d0619651df5b5e3040008991a75`.
+Diff check also passed. This is bounded independent LGTM for the alias
+correction, not admission, native-fence, ledger-CAS, full-suite, or released
+Cursor acceptance. The retained author RED and GREEN logs remain authoritative
+regression evidence; no skill change or native deployment occurred.
+
 Base: `d995192`, following the reviewed foundation `75c07bf` and
 [exact adoption contract](legacy-adoption-wire-contract.md) (`97b411d`).
 This checkpoint implements a precondition constructor, **not adoption delivery**.
