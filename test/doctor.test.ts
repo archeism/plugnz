@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runDoctor, type DoctorFinding } from '../src/doctor';
+import { runDoctor, sameSha, type DoctorFinding } from '../src/doctor';
 import { gitRemoteHead, isGitUrl } from '../src/exec';
 import { claudeCode } from '../src/hosts/claude-code';
 import { codex } from '../src/hosts/codex';
@@ -387,5 +387,26 @@ describe('doctor · output shape', () => {
       expect(marks(result)).toMatch(/^[✓✗!]*$/);
       expect(result.findings.length).toBeGreaterThan(0);
     });
+  });
+});
+
+describe('sameSha staleness guard (issue #2)', () => {
+  const FULL = 'a'.repeat(40);
+  test('identical full shas and legit short prefixes read fresh', () => {
+    expect(sameSha(FULL, FULL)).toBe(true);
+    expect(sameSha(FULL.slice(0, 12), FULL)).toBe(true);
+    expect(sameSha(FULL, FULL.slice(0, 12))).toBe(true);
+    expect(sameSha(FULL.slice(0, 7), FULL)).toBe(true);
+  });
+  test('empty, tiny, and too-short shas read stale, never fresh', () => {
+    expect(sameSha('', FULL)).toBe(false);
+    expect(sameSha(FULL.slice(0, 1), FULL)).toBe(false);
+    expect(sameSha(FULL.slice(0, 6), FULL)).toBe(false);
+    expect(sameSha('', '')).toBe(false);
+  });
+  test('prefix-match only when one side is a full sha', () => {
+    expect(sameSha(FULL.slice(0, 12), FULL.slice(0, 13))).toBe(false);
+    expect(sameSha('a'.repeat(8), 'a'.repeat(8))).toBe(true);
+    expect(sameSha('a'.repeat(8), 'b'.repeat(8))).toBe(false);
   });
 });

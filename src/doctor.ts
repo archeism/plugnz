@@ -114,12 +114,18 @@ function shortSha(sha: string): string {
   return sha.slice(0, 8);
 }
 
-/** sha equality tolerant of the host recording a short sha (claude-code records 12 chars). */
-function sameSha(installed: string, head: string): boolean {
+/** sha equality tolerant of the host recording a short sha (claude-code records 12 chars).
+ * A prefix only counts when it is meaningful: at least 7 chars on the short side,
+ * and one side a full-length sha — an empty or tiny recorded sha must read stale,
+ * never fresh. */
+export function sameSha(installed: string, head: string): boolean {
   const a = installed.toLowerCase();
   const b = head.toLowerCase();
-  const n = Math.min(a.length, b.length);
-  return a.slice(0, n) === b.slice(0, n);
+  if (a === b && a.length > 0) return true;
+  const short = a.length < b.length ? a : b;
+  const full = a.length < b.length ? b : a;
+  if (short.length < 7 || full.length < 40) return false;
+  return full.startsWith(short);
 }
 
 /** Check (1): every stdio command resolves and is executable. */
