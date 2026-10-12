@@ -1,0 +1,188 @@
+# Cursor adoption: read-only projection checkpoint
+
+## Independent alias correction verification
+
+Root reviewed frozen `7998909cf95268cfef0ca93b177683a5abb2b814` against
+`8a2f23c` and the exact wire contract's requirement that competing physical
+aliases fail globally. The constructor now enumerates every adapter-approved
+logical alias other than the canonical physical ID, independently of the alias
+used by the retained legacy ledger. It introduces no new alias authority.
+The public-store regression checks both bare and qualified legacy records and
+verifies the competing alias sentinel remains byte-identical.
+
+Root independently reran the same six-file command below using pinned Bun 1.4:
+18 passed, zero failed, 475 assertions, 13.96 seconds; terminal handle `84189`
+exited 0. Production/test SHA256 matched the frozen author checkpoint:
+`5e308391135c7e6421cd4c3ba95152f4cdc900df4f49c7fae979ae7007fd37d2` /
+`07727e87edc64106a6897ff48c51664ee3ea8d0619651df5b5e3040008991a75`.
+Diff check also passed. This is bounded independent LGTM for the alias
+correction, not admission, native-fence, ledger-CAS, full-suite, or released
+Cursor acceptance. The retained author RED and GREEN logs remain authoritative
+regression evidence; no skill change or native deployment occurred.
+
+Base: `d995192`, following the reviewed foundation `75c07bf` and
+[exact adoption contract](legacy-adoption-wire-contract.md) (`97b411d`).
+This checkpoint implements a precondition constructor, **not adoption delivery**.
+No planner admission, generic lifecycle SPI extension, lease, native fence,
+ledger CAS, runtime floor, dependency, consumer wire or pin changed.
+The existing Cursor pending-repair acceptance remains outstanding.
+
+## Bounded public contract seam
+
+`proveCursorLegacyAdoption` in `src/hosts/cursor-adoption.ts` takes the validated
+retained `LegacyRecordProof`, frozen package handle, exact Source reference,
+resolved pins and caller-observed version/evidence. It returns the existing
+`CursorAdoptionNativeProof` wire shape. The constructor revalidates the retained
+record rather than accepting an asserted ownership shape.
+
+It compares Source/target/scope, exact package path and adapter-owned collection
+alias, current Source fingerprints, strict three-field legacy marker and native
+payload. The original qualified ledger identity is retained; the physical Cursor
+directory remains the canonical package name. A second physical alias is refused.
+Collection metadata follows existing resolver precedence: Claude, OMP, then root
+marketplace manifest, with the exact selected package path independently bound.
+
+Projection stays entirely in memory: copied manifest bytes/mode, command precedence
+and conversion into skills, recorded MCP pin JSON serialization, all resources,
+empty directories and executable bits. Fingerprinting uses the existing framed
+tree algorithm's hierarchical traversal, not flat path order. Payload proof omits
+only the root ownership marker; full-root proof includes its exact bytes/mode.
+Retained data/metadata are observed without editing them. Symlinks (including
+broken retained-parent symlinks), unsupported resources and foreign evidence fail.
+
+No stage, backup, ledger or native write is performed by the constructor. It does
+not execute Cursor, model sessions, pin executables or an updater. Observations
+are not atomic native authority: the later admission/executor must revalidate
+the exact precondition under the approved native fence before writes. Constructor
+success must never skip global expected-admission verification or ledger CAS.
+
+The in-memory recipe is intentionally checked against the existing writer rather
+than changing it in this slice. Changes to Cursor writer projection must preserve
+this parity gate; a future shared recipe must preserve the same independent public
+writer oracle and zero-staging proof, not reduce the gate to self-comparison.
+
+## Evidence and limits
+
+`test/cursor-adoption-projection-public.test.ts` uses actual public CLI `add` and
+`pin` to produce the native store independently of the constructor. A fixture
+shell launcher reports Cursor 2.4.0; **no actual installed Cursor runtime or native
+capability is proven**. The test then restores the legacy three-field marker and
+qualified pending v1 ledger fixture used by the established repair acceptance.
+The Source/frozen-package handle is validated by existing APIs; no fake branded
+handle is cast into authority.
+
+All three marketplace layouts are exercised. Known literal generated skill and
+manifest bytes are checked. Negative controls cover Source/collection/alias drift,
+missing or changed pins, marker fields, foreign payload bytes, executable-bit
+changes, extra/missing empty directories, a second physical alias and symlinks.
+For ordinary negatives the state bytes plus complete native/Source fingerprints
+remain unchanged. Final public `scopes` state and every Cursor store byte/shape
+match the pre-constructor snapshot. The retained-parent symlink RED specifically
+caught an incorrect `absent` observation; the final constructor refuses it.
+
+Authoring runtime: `/tmp/plugnz-pr62-deps.0msIJO/node_modules/.bin/bun` 1.4.0.
+Homes, Sources, launcher and native stores are isolated fixtures; no real home or
+installed host launcher is used. Worktree allocated size stayed approximately
+26 MiB with reused dependencies. This is a behavior gate, not a throughput or
+skill A/B experiment; tokens/cache/RSS were not measured.
+
+Retained logs:
+
+| Gate | Result | Log SHA256 |
+| --- | --- | --- |
+| Initial missing-constructor RED | import failure | `b513757bbb4d6bd08854f59b3091ecb45ba27fe0bb892958a8639ab40d056223` |
+| Command/pin parity RED | 0 pass / 1 fail / 2 assertions | `081511880fbec8f3e4b87a29d442431b44f0ed701fc1f5f9dbf030c9bccef9bf` |
+| Collection-binding RED | 0 pass / 1 fail / 54 assertions; altered collection accepted | `0e66df0c4997eff81777ee59b6b6ce83d6d9b1e2c4ad5227ab630657e15ee734` |
+| Broken-retention-parent RED | 0 pass / 1 fail / 69 assertions; symlink accepted as absent | `134b05fdc6ef7c0d03e54a4965a774826ab19c6e7fddf7ed79abba0efe301c9f` |
+| Frozen focused gate | 18 pass / 0 fail / 412 assertions / 8.92s | `a792a5017319b7416c57b007ad7b2ab8884ddc89b127b8b08d04f49de63eb70d` |
+
+Raw logs live in `/tmp/plugnz-cursor-projection-{red,commands-pins-red,negatives-red,retention-red,freeze}.log`
+and durable copies under
+`/home/charlesfengyc/.local/state/plugnz-evidence/20261011/cursor-adoption-projection/`.
+
+Frozen focused command:
+
+```sh
+bun test test/cursor-adoption-projection-public.test.ts test/cursor-managed-lifecycle.test.ts test/legacy-adoption-public.test.ts test/legacy-adoption-proof.test.ts test/legacy-adoption-record-public.test.ts test/doctor-imports.test.ts
+bun run check
+git diff --check
+```
+
+Typecheck and diff check exit 0. The new public projection case is 3.424s,
+216 assertions, with an explicit 20-second multi-CLI test budget; production
+timeouts and assertions are unchanged. This is not a full-suite, packed artifact,
+cross-process native fence, process-kill adoption, A/B/A-history or consumer-golden
+acceptance. Main remains root-owned and unchanged by this lane.
+
+Skills unchanged: Matt TDD SHA256
+`712be9536b9e3d29e7baf5a80937a7ce3c6d85eaca796bdfa6079e24bc80cabc`,
+Addy API SHA256 `5dafd0c44a3aabf11cae5bcb34f6fcc24dfa5c01ba6e0d3176bce997f4d68bc8`.
+The observed misses became product negative gates; no method-improvement or
+causal skill-quality claim is made.
+
+## Logical-identity correction after independent review
+
+Independent review blocked `3fbe67d`: the constructor checked the old native
+alias but not the historical logical package identity. A valid record whose
+original/journal/activation package was `foreign` could retain native `demo`
+and incorrectly receive a proof for selected package `demo`.
+
+The corrected constructor requires both `original.package` and
+`activation.packageId` to belong to the exact evidenced bare/collection-qualified
+mapping, separately from the native-ID check. All identity checks precede Source
+fingerprinting and native reads. No generic namespace stripping is introduced.
+
+The public-store test now imports both actual bare and qualified v1 record shapes.
+Their successful proofs retain the original IDs. Counterexamples are constructed
+with fully consistent original/journal/activation logical IDs and recomputed
+digests, admitted by `parseLegacyRecordProof` without shape casts. Both native
+alias variants are refused. Temporarily moving Source and native directories
+away proves the exact logical-identity diagnostic occurs before any byte reads;
+the directories are restored in finally. Existing foreign-alias diagnostics,
+all old negatives and zero-write assertions remain intact.
+
+- Exact counterexample RED: `/tmp/plugnz-cursor-logical-identity-both-red.log`,
+  SHA256 `9837e2d5e0491aa0d5872b58f28b46aceae9c9c5c885372ca1de68151c20322b`.
+- Initial corrected focused run retained a diagnostic-order regression:
+  `/tmp/plugnz-cursor-logical-identity-freeze.log`, 17 pass / 1 fail / 235
+  assertions. Moving the new check after the existing native-alias check preserves
+  the prior diagnostic; both still run before filesystem reads.
+- Final same six-file gate: 18 pass / 0 fail / 457 assertions / 10.05s;
+  `/tmp/plugnz-cursor-logical-identity-freeze-green.log`, SHA256
+  `516a755e6fafffbe838305387e6e5a5ebebf2f802dd11dd8f5f5b5d8aafad679`.
+- Final typecheck and diff check exit 0. Raw logs are copied to the same durable
+  evidence directory above. Skills and the broader delivery limitations are
+  unchanged; this is a correction checkpoint awaiting independent re-review.
+
+## Competing physical-alias correction
+
+Independent review found that the second-physical-alias check depended on the
+old ledger native ID being qualified. A genuine bare legacy record could therefore
+receive a proof while `plugins/local/demo@personal` also existed. The constructor
+now checks every adapter-approved logical alias other than the selected physical
+native ID, independently of the old ledger spelling. This does not expand alias
+authority or change the wire, admission, planner, CAS, or runtime floor.
+
+The public-store regression exercises both bare and qualified legacy records.
+Each must refuse the competing directory while retaining its sentinel and exact
+fingerprint, as well as unchanged selected native bytes, Source bytes and state.
+Existing positive proofs and all three marketplace layouts remain covered.
+
+- RED: `plugnz-cursor-alias-red.log`, 0 pass / 1 fail / 75 assertions / 1.20s;
+  SHA256 `4859dcdd02656efd9572c69a2405ca56cbc4a6bf99972eb483c2574271f22c08`.
+  The bare-record counterexample returned accepted rather than refusing.
+- Focused GREEN: `plugnz-cursor-alias-green.log`, 1 pass / 279 assertions / 4.33s;
+  SHA256 `ca9f27aa3eb9c47987f6d4acf26892ec91a1ebc9a7a2ec62362593aeeef350b6`.
+- Exact six-file command documented above: `plugnz-cursor-alias-six-suite.log`,
+  18 pass / 0 fail / 475 assertions / 12.48s; SHA256
+  `a1fccb049a4814dedc92d5ecdb7452c44c6ca6333019fa058a515ac152f22404`.
+- Typecheck and diff check exit 0; `plugnz-cursor-alias-check.log` SHA256
+  `8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92`.
+- Frozen source SHA256:
+  `5e308391135c7e6421cd4c3ba95152f4cdc900df4f49c7fae979ae7007fd37d2`;
+  public test SHA256:
+  `07727e87edc64106a6897ff48c51664ee3ea8d0619651df5b5e3040008991a75`.
+
+Raw logs are retained in the durable evidence directory above. Skills are
+unchanged. This scoped correction awaits independent review; it is not native
+runtime certification or delivery of the remaining adoption transaction.

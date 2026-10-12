@@ -1,10 +1,11 @@
 import { executeLifecycle } from './executor';
-import { createLifecycleReason, exitCodeForLifecycleReport, parseLifecycleReport, type LifecycleReport } from './lifecycle-report';
+import { createLifecycleReason, exitCodeForLifecycleReport, parseLifecycleReport, type LifecycleReport, type LifecycleRecoveryReceipt, type LifecycleReason } from './lifecycle-report';
 import type { PlannerHost } from './planner';
 import { planLifecycle } from './planner';
 import type { SyncManifest } from './sync-manifest';
 import { recoverLifecycleJournals } from './lifecycle-recovery';
 import type { FrozenSource } from './source';
+import { readLifecycleState } from './state';
 
 export interface FrozenLifecycleCommand {
   readonly manifest: SyncManifest;
@@ -33,31 +34,78 @@ export async function runFrozenLifecycle(command: FrozenLifecycleCommand): Promi
     retainedSources,
   };
   let plan = await planLifecycle({ ...input, recoveryPreflight: !command.dryRun });
+  const retirementObligations = plan.kind === 'frozen' ? plan.report.plan.filter(row => row.coverage === 'retirement') : [];
+  let recoveryReceipts: readonly LifecycleRecoveryReceipt[] = [];
+  let preExecutionDefect: LifecycleReason | null = null;
   if (!command.dryRun && plan.kind === 'frozen') {
     const recovery = await recoverLifecycleJournals(plan, command.hosts, command.now);
-    if (typeof recovery !== 'boolean') {
-      const { reason, operation, changed, settled } = recovery;
+    recoveryReceipts = recovery.receipts;
+    if (recovery.reason !== null) {
+      const { reason } = recovery;
       const blocked = createLifecycleReason('runtime', 'runtime.operation-failed', `not attempted while recovery remains unresolved: ${reason.diagnostic}`);
       const operations = plan.report.plan
-        .filter(row => ![...settled, ...(operation === null ? [] : [operation])].some(recovered => row.scope.id === recovered.scope.id && row.package === recovered.package && row.nativeId === recovered.nativeId && row.coverage === recovered.coverage))
         // Retain-prior claims verified containment, which recovery has not executed.
         .map(row => row.action === 'retain-prior' ? { ...row, action: 'not-attempted' as const, route: 'none' as const } : row);
-      const outcomes = operations.map(row => ({ ...row, result: 'not-attempted' as const, resourceState: 'unknown' as const, activationState: 'unknown' as const, changed: false, reason: operation === null ? reason : blocked }));
-      if (operation === null) {
-        const report = parseLifecycleReport({ ...plan.report, plan: operations, outcomes, summary: { result: 'incomplete', terminalPhase: 'preflight', mutationStarted: false, changed: false, failureCategory: reason.category, reason, recoveryId: null, readbackId: null } });
-        return { report, exitCode: exitCodeForLifecycleReport(report) };
-      }
-      const recoveredOutcomes = [{ ...operation, result: 'pending' as const, resourceState: changed ? 'potentially-changed' as const : 'unknown' as const, activationState: 'unknown' as const, changed, reason }, ...settled];
-      const report = parseLifecycleReport({ ...plan.report, plan: [operation, ...settled.map(({ result: _result, resourceState: _resource, activationState: _activation, changed: _changed, reason: _reason, ...row }) => row), ...operations], outcomes: [...recoveredOutcomes, ...outcomes], summary: { result: 'incomplete', terminalPhase: 'finalize', mutationStarted: true, changed: recoveredOutcomes.some(row => row.changed), failureCategory: 'recovery', reason, recoveryId: operation.operationId, readbackId: recoveredOutcomes.find(row => row.changed && row.action === 'disable-nonconforming')?.operationId ?? null } });
+      const outcomes = operations.map(row => ({ ...row, result: 'not-attempted' as const, resourceState: 'unknown' as const, activationState: 'unknown' as const, changed: false, reason: blocked }));
+      const pending = recoveryReceipts.find(row => row.status === 'pending');
+      const report = parseLifecycleReport({ ...plan.report, plan: operations, outcomes,
+        recovery: { schemaVersion: 1, receipts: recoveryReceipts },
+        summary: { result: 'incomplete', terminalPhase: pending === undefined ? 'preflight' : 'finalize',
+          mutationStarted: recoveryReceipts.some(row => row.mutationStarted), changed: recoveryReceipts.some(row => row.changed),
+          failureCategory: reason.category, reason, recoveryId: pending?.original.operationId ?? null,
+          readbackId: recoveryReceipts.find(row => row.changed && row.readbackVerified && row.original.action === 'disable-nonconforming')?.original.operationId ?? null } });
       return { report, exitCode: exitCodeForLifecycleReport(report) };
     }
-    if (recovery) plan = await planLifecycle(input);
+    if (recoveryReceipts.length > 0) {
+      plan = await planLifecycle(input);
+      if (plan.kind === 'frozen') {
+        const tombstones = readLifecycleState().state.tombstones;
+        for (const obligation of retirementObligations) {
+          if (plan.report.plan.some(row => row.scope.id === obligation.scope.id && row.package === obligation.package)) continue;
+          const committed = recoveryReceipts.find(row => row.status === 'completed' && row.settlement === 'commit'
+            && (row.original.action === 'retire-orphan' || row.original.action === 'remove')
+            && row.original.scope.id === obligation.scope.id && row.original.package === obligation.package && row.original.nativeId === obligation.nativeId);
+          if (committed === undefined) continue;
+          const tombstone = tombstones.find(row => row.scopeId === obligation.scope.id && row.packageId === obligation.package
+            && row.nativeId === obligation.nativeId && row.route.kind === committed.original.route);
+          if (tombstone === undefined) {
+            const reason = createLifecycleReason('internal', 'internal.invariant', 'completed retirement has no exact retained tombstone proof');
+            preExecutionDefect = reason;
+            const operation = { ...obligation, action: 'not-attempted' as const, route: 'none' as const };
+            plan = { ...plan, operations: [...plan.operations, { operation, reason, journal: { kind: 'none' } }],
+              report: { ...plan.report, plan: [...plan.report.plan, operation], outcomes: [...plan.report.outcomes,
+                { ...operation, result: 'failed', resourceState: 'unknown', activationState: 'unknown', changed: false, reason }] } };
+            continue;
+          }
+          const operation = { ...obligation, action: 'retire-orphan' as const, route: tombstone.route.kind };
+          plan = { ...plan, operations: [...plan.operations, { operation, reason: null, completedRetirement: tombstone, journal: { kind: 'none' } }],
+            report: { ...plan.report, plan: [...plan.report.plan, operation], outcomes: [...plan.report.outcomes,
+              { ...operation, result: 'succeeded', resourceState: 'absent', activationState: 'inactive', changed: false, reason: null }] } };
+        }
+      }
+    }
+  }
+  if (preExecutionDefect !== null) {
+    const operations = plan.report.plan.map(row => row.action === 'retain-prior' ? { ...row, action: 'not-attempted' as const, route: 'none' as const } : row);
+    const report = parseLifecycleReport({ ...plan.report, plan: operations,
+      outcomes: operations.map(row => ({ ...row, result: 'not-attempted', resourceState: 'unknown', activationState: 'unknown', changed: false, reason: preExecutionDefect })),
+      recovery: { schemaVersion: 1, receipts: recoveryReceipts },
+      summary: { result: 'incomplete', terminalPhase: 'finalize', mutationStarted: recoveryReceipts.some(row => row.mutationStarted),
+        changed: recoveryReceipts.some(row => row.changed), failureCategory: preExecutionDefect.category, reason: preExecutionDefect, recoveryId: null, readbackId: null },
+    });
+    return { report, exitCode: exitCodeForLifecycleReport(report) };
   }
   const executed = await executeLifecycle({
     plan,
     hosts: command.hosts,
     now: command.now,
   });
-  const report = parseLifecycleReport(executed.report);
+  const report = parseLifecycleReport(recoveryReceipts.length === 0 ? executed.report : { ...executed.report,
+    recovery: { schemaVersion: 1, receipts: recoveryReceipts },
+    summary: { ...executed.report.summary,
+      ...((recoveryReceipts.some(row => row.changed || row.mutationStarted) && ['parse', 'resolve', 'freeze', 'preflight'].includes(executed.report.summary.terminalPhase)) ? { terminalPhase: 'finalize' as const } : {}),
+      changed: executed.report.summary.changed || recoveryReceipts.some(row => row.changed),
+      mutationStarted: executed.report.summary.mutationStarted || recoveryReceipts.some(row => row.mutationStarted) },
+  });
   return { report, exitCode: exitCodeForLifecycleReport(report) };
 }
