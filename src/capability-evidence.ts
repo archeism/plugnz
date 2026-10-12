@@ -242,9 +242,12 @@ export function admitPackageSemanticsFromProfiles(
   }
 
   const gaps = requirements.flatMap((semantic) => {
-    const hookProblem = semantic === 'hooks' && (request.operation === 'install' || request.operation === 'update')
+    const sourceOperation = request.operation === 'install' || request.operation === 'update';
+    const hookProblem = semantic === 'hooks' && sourceOperation
       ? unsupportedHookDeclaration(request.inventory, profile.hookPolicy)
-      : null;
+      : semantic === 'auto-update-control' && sourceOperation && profile.packageFormat === 'portable-hooks' && request.inventory.autoUpdate.length > 0
+        ? unsupportedHookProblem('portable hook installation does not project authored native auto-update directives')
+        : null;
     const status = profile.semantics[semantic] === 'supported' && hookProblem !== null
       ? hookProblem.status
       : profile.semantics[semantic];

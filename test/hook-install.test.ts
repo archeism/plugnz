@@ -155,3 +155,30 @@ test('portable profiles do not admit native hooks or unrelated semantics at the 
     expect(admitPackageSemanticsFromProfiles({ ...request, inventory: mixed }, [profile]).status).toBe('refused');
   }
 });
+
+for (const id of ['pi', 'opencode']) {
+  test(id + ' refuses a historical standalone identity before portable install intent', () => {
+    const native = target(id);
+    const legacy = id === 'pi' ? join(native, 'skills', 'local___automatic-hooks') : join(native, '.plgnz', 'packages', 'local___automatic-hooks');
+    writeFiles(legacy, {
+      '.plgnz-install.json': JSON.stringify({ pluginId: 'automatic-hooks@local', source, fingerprint: 'historical' }),
+      'SKILL.md': 'historical owned skill\n',
+    });
+    const before = fingerprintTree(native);
+    const result = cli(['install', source, '--target', id]);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('historical standalone install');
+    expect(existsSync(join(home, 'state.json'))).toBe(false);
+    expect(fingerprintTree(native)).toBe(before);
+  });
+  test(id + ' refuses authored auto-update policy without native projection', () => {
+    target(id);
+    for (const enabled of [true, false]) {
+      writeFileSync(join(source, 'plugin.json'), JSON.stringify({ name: 'automatic-hooks', version: '1.0.0', extensions: { 'com.langchain.deepagents.code': { autoUpdate: enabled } } }));
+      const result = cli(['install', source, '--target', id]);
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain('does not project authored native auto-update directives');
+      expect(existsSync(join(home, 'state.json'))).toBe(false);
+    }
+  });
+}

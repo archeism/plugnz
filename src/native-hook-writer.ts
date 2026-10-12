@@ -44,6 +44,9 @@ export function createNativeHookWriter(options: NativeHookWriterOptions): HostWr
   const checkTarget = (id: string, source: string): void => {
     const target = hookPackagePath(store, id), registration = hookRegistration(store, id);
     assertHookPath(store, target); assertHookPath(store, registration.path);
+    if (reader.listInstalled().some(item => item.id === id && item.path !== target)) {
+      throw new Error('Native hook identity already belongs to a historical standalone install; remove that owned install before retrying: ' + id);
+    }
     const owner = existsSync(target) ? readHookOwner(target) : null;
     if (existsSync(target) && (owner === null || owner.pluginId !== id || owner.source !== source)) {
       throw new Error('Native hook package is not owned for this source: ' + target);
