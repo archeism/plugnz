@@ -345,8 +345,35 @@ test('killing the public CLI at cache rename leaves only a complete candidate or
     const priorSkill = readFileSync(join(priorPath, 'skills/demo/SKILL.md'), 'utf8');
     const nextSkill = '---\nname: demo\ndescription: demo\n---\ntwo\n';
     writeFileSync(join(source, 'skills/demo/SKILL.md'), nextSkill);
+    // A parent fs.watch notification can arrive after committed cleanup. Hold
+    // the child immediately after the real cache rename, before apply resumes.
+    const pauseAtRename = join(root, 'pause-at-cache-rename.mjs');
+    writeFileSync(pauseAtRename, [
+      "const actual = { ...await import('node:fs') };",
+      "const { dirname } = await import('node:path');",
+      'const cacheRoot = ' + JSON.stringify(join(native, 'plugins/cache/plgnz')) + ';',
+      'const priorPath = ' + JSON.stringify(priorPath) + ';',
+      'const actualRename = actual.renameSync;',
+      'const wrappedRename = (from, to) => {',
+      '  const result = actualRename(from, to);',
+      '  if (dirname(String(to)) === cacheRoot && String(to) !== priorPath) {',
+      '    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10000);',
+      '    process.exit(79); // Fail boundedly if the observer never kills us.',
+      '  }',
+      '  return result;',
+      '};',
+      'if (process.versions.bun) {',
+      "  const { mock } = await import('bun:test');",
+      "  mock.module('node:fs', () => ({ ...actual, default: { ...actual.default, renameSync: wrappedRename }, renameSync: wrappedRename }));",
+      '} else {',
+      '  actual.default.renameSync = wrappedRename;',
+      "  const { syncBuiltinESMExports } = await import('node:module');",
+      '  syncBuiltinESMExports();',
+      '}',
+    ].join('\n'));
     let candidate: string | undefined, observationError: unknown, stopped = false;
-    let child: { kill(signal: string): void; on(event: 'exit', callback: () => void): void; on(event: 'error', callback: (error: Error) => void): void };
+    let exitSignal: string | null = null;
+    let child: { kill(signal: string): void; on(event: 'exit', callback: (code: number | null, signal: string | null) => void): void; on(event: 'error', callback: (error: Error) => void): void };
     const watcher = watch(join(native, 'plugins/cache/plgnz'), (event, name) => {
       if (event !== 'rename' || !name || candidate !== undefined) return;
       const path = join(native, 'plugins/cache/plgnz', name);
@@ -363,9 +390,11 @@ test('killing the public CLI at cache rename leaves only a complete candidate or
       child.kill('SIGKILL');
     });
     try {
-      child = spawnChild(cliExecutable, args, { env, cwd: root, stdio: 'ignore' }) as unknown as typeof child;
-      await new Promise<void>((resolveExit, rejectExit) => { child.on('exit', () => resolveExit()); child.on('error', rejectExit); });
+      const preloadFlag = process.env['OPEN_PLUGIN_TEST_PACKED_NODE'] ? '--import' : '--preload';
+      child = spawnChild(cliExecutable, [preloadFlag, pauseAtRename, ...args], { env, cwd: root, stdio: 'ignore' }) as unknown as typeof child;
+      await new Promise<void>((resolveExit, rejectExit) => { child.on('exit', (_code, signal) => { exitSignal = signal; resolveExit(); }); child.on('error', rejectExit); });
       if (observationError !== undefined) throw observationError;
+      expect(exitSignal).toBe('SIGKILL');
       expect(stopped).toBe(true);
       expect(candidate === undefined).toBe(false);
     } finally { watcher.close(); }
