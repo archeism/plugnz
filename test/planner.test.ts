@@ -434,7 +434,7 @@ describe('lifecycle planner', () => {
     });
   });
 
-  test('an omission without host revalidation is a refusal row and blocks prune', async () => {
+  test('an authoritative omission without host revalidation blocks the whole plan', async () => {
     const root = temp('omission-refusal');
     const home = join(root, 'home');
     mkdirSync(home);
@@ -445,18 +445,20 @@ describe('lifecycle planner', () => {
       writeAuthoritative(alpha, 'codex', 'alpha', '.', [
         ownedActivation({ scopeId, packageId: 'stale', sourceRelativeDir: 'stale' }),
       ]);
-      const plan = expectFrozen(await planLifecycle({
+      const before = readFileSync(stateFile(), 'utf8');
+      const hostBefore = host.fake.hostMutationState();
+      const plan = await planLifecycle({
         manifest: manifest([syncEntry(alpha, 'codex')]),
         dryRun: false,
         validatedAt: now,
         hosts: [host.planner],
-      }));
-      expect(actionOf(plan, 'alpha')).toBe('install');
-      expect(actionOf(plan, 'stale')).toBe('not-attempted');
-      expect(plan.operations.find((row) => row.operation.package === 'stale')?.operation.coverage).toBe('retirement');
-      expect(plan.operations.some((row) => row.operation.action === 'retire-orphan')).toBe(false);
-      expect(plan.scopes[0]?.prune).toBe('blocked');
-      expect(reasonOf(plan, 'stale')?.diagnostic).toBe("ownership of 'stale' was not revalidated");
+      });
+      expect(plan.kind).toBe('zero-write-failure');
+      expect(plan.report.plan).toEqual([]);
+      expect(plan.report.summary.reason?.diagnostic).toBe("ownership of 'stale' was not revalidated");
+      expect(plan.report.summary.mutationStarted).toBe(false);
+      expect(readFileSync(stateFile(), 'utf8')).toBe(before);
+      expect(host.fake.hostMutationState()).toBe(hostBefore);
     });
   });
 
@@ -566,7 +568,7 @@ describe('lifecycle planner', () => {
     });
   });
 
-  test('retire-source plans prune only when every activation is retire-orphan', async () => {
+  test('retire-source refuses globally when one recorded activation is not revalidated', async () => {
     const root = temp('retire-mixed');
     const home = join(root, 'home');
     mkdirSync(home);
@@ -579,15 +581,20 @@ describe('lifecycle planner', () => {
         ownedActivation({ scopeId, packageId: 'alpha', installedFingerprint: installed, sourceRevision: 'recorded-local-revision' }),
         ownedActivation({ scopeId, packageId: 'beta', sourceRelativeDir: 'beta', sourceRevision: 'recorded-local-revision' }),
       ]);
-      const plan = expectFrozen(await planLifecycle({
+      const before = readFileSync(stateFile(), 'utf8');
+      const hostBefore = host.fake.hostMutationState();
+      const plan = await planLifecycle({
         manifest: manifest([{ operation: 'retire-source', scopeId, target: { kind: 'codex', instance: 'default' } }]),
         dryRun: false,
         validatedAt: now,
         hosts: [host.planner],
-      }));
-      expect(actionOf(plan, 'alpha')).toBe('retire-orphan');
-      expect(actionOf(plan, 'beta')).toBe('not-attempted');
-      expect(plan.scopes[0]?.prune).toBe('blocked');
+      });
+      expect(plan.kind).toBe('zero-write-failure');
+      expect(plan.report.plan).toEqual([]);
+      expect(plan.report.summary.reason?.diagnostic).toBe("ownership of 'beta' was not revalidated");
+      expect(plan.report.summary.mutationStarted).toBe(false);
+      expect(readFileSync(stateFile(), 'utf8')).toBe(before);
+      expect(host.fake.hostMutationState()).toBe(hostBefore);
     });
   });
 });
