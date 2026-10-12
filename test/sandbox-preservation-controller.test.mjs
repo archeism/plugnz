@@ -40,6 +40,10 @@ for (const mode of ['fail', 'wait', 'partial']) test(`preservation controller re
 function withBudgetConfig(overrides, check) {
   const root = mkdtempSync('/tmp/plugnz-preservation-test-');
   try {
+    const bin = join(root, 'bin'); mkdirSync(bin);
+    const df = join(bin, 'df');
+    writeFileSync(df, '#!/bin/sh\nprintf "Filesystem 1024-blocks Used Available Capacity Mounted on\\nfixture 10000000 1000 7340032 1%% /\\n"\n');
+    chmodSync(df, 0o755);
     const cli = join(root, 'cli');
     writeFileSync(cli, `#!${process.execPath}\n${readFileSync(resolve('test/fixtures/preservation-transport.mjs'), 'utf8')}`); chmodSync(cli, 0o755);
     const settings = typeof overrides === 'function' ? overrides() : overrides;
@@ -52,8 +56,8 @@ function withBudgetConfig(overrides, check) {
     writeFileSync(join(config.sdkRoot, 'dist/auth/index.js'), 'export const getAuth=()=>({});');
     const configPath = join(root, 'config.json'); writeFileSync(configPath, JSON.stringify(config));
     const result = spawnSync(process.execPath, [resolve('scripts/sandbox-preservation-controller.mjs'), configPath], {
-      env: { ...process.env, OPEN_PLUGIN_PRESERVATION_TRANSPORT_ROOT: root }, encoding: 'utf8', timeout: 10_000 });
-    check(result, config);
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, OPEN_PLUGIN_PRESERVATION_TRANSPORT_ROOT: root }, encoding: 'utf8', timeout: 10_000 });
+    check(result, config, root);
   } finally { rmSync(root, { recursive: true, force: true }); }
 }
 
@@ -62,6 +66,22 @@ test('acquisition accepts the measured 768 MiB cap with 896 MiB scratch reserve 
     expect(result.status).toBe(1); // transport's intentional supplier failure
     expect(existsSync(join(config.output, 'receipt.json'))).toBe(true);
     expect(readFileSync(join(config.output, 'restored/trial/sentinel'), 'utf8')).toBe('retained fixture');
+  });
+});
+
+for (const [label, budgets] of [
+  ['raw equal to headroom', { retainedBodyBytes: 256 * 1024 ** 2, archiveBytes: 258 * 1024 ** 2 }],
+  ['raw below headroom', { retainedBodyBytes: 256 * 1024 ** 2 - 1, archiveBytes: 258 * 1024 ** 2 }],
+  ['archive equal to headroom', { retainedBodyBytes: 257 * 1024 ** 2, archiveBytes: 256 * 1024 ** 2 }],
+  ['archive below headroom', { retainedBodyBytes: 257 * 1024 ** 2, archiveBytes: 256 * 1024 ** 2 - 1 }],
+]) test(`private large acquisition rejects ${label} before output or transport`, () => {
+  withBudgetConfig(() => { const now = Date.now(); return { operation: 'private-large-acquisition',
+    archiveAt: now + 5000, expiresAt: now + 800_000, diskGrowthBytes: 6 * 1024 ** 3,
+    diskReserveBytes: 2944 * 1024 ** 2, ...budgets }; }, (result, config, root) => {
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('must exceed monitor headroom');
+    expect(existsSync(config.output)).toBe(false);
+    expect(existsSync(join(root, 'transport-called'))).toBe(false);
   });
 });
 

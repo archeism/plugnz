@@ -40,7 +40,13 @@ export function validatePreservationBudget(config, availableBytes) {
   assert.ok(config.archiveBytes > 0 && config.archiveBytes <= profile.maxArchiveBytes);
   if (profile.maxRetainedBodyBytes === undefined) assert.equal(config.retainedBodyBytes, undefined,
     'Raw retained-body ceiling is private to large acquisition');
-  else assert.ok(config.retainedBodyBytes > 0 && config.retainedBodyBytes <= profile.maxRetainedBodyBytes);
+  else {
+    assert.ok(config.retainedBodyBytes > profile.monitorHeadroomBytes &&
+      config.retainedBodyBytes <= profile.maxRetainedBodyBytes,
+    'Private retained-body budget must exceed monitor headroom');
+    assert.ok(config.archiveBytes > profile.monitorHeadroomBytes,
+      'Private archive budget must exceed monitor headroom');
+  }
   if (profile.minLocalFreeBytes > 0) assert.ok(availableBytes >= profile.minLocalFreeBytes,
     `${config.operation === 'acquisition' ? 'Acquisition' : 'Private large acquisition'} requires ${profile.minLocalFreeBytes / GiB} GiB local archive/restore headroom`);
   return { ...profile, reserveMs };

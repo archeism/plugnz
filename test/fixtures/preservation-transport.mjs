@@ -6,6 +6,7 @@ import { basename, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 const root = process.env.OPEN_PLUGIN_PRESERVATION_TRANSPORT_ROOT;
 if (!root?.startsWith('/tmp/plugnz-preservation-test-')) throw new Error('Isolated transport required');
+writeFileSync(join(root, 'transport-called'), `${process.argv.slice(2).join(' ')}\n`, { flag: 'a' });
 const [verb, ...args] = process.argv.slice(2);
 const path = value => join(root, basename(value.slice(value.indexOf(':') + 1)));
 if (verb === 'copy') {
