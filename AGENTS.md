@@ -3,6 +3,7 @@
 `plugnz` installs, diagnoses and updates agent plugins (Agent Plugins / "OpenPlugin" spec 1.0.0) and MCP configs across coding-agent hosts. It is the open-source counterpart of `npx plugins`, plus the verbs that tool lacks: `doctor`, `pin`, `update`.
 
 ## Verbs
+- `install [source] [--target <host>…]` — use the same native installation lifecycle as `add`; default the source to the current directory and compile `plugnz.hooks.json` automatically.
 - `add <source> [--target <host>…]` — install a plugin from a marketplace dir or git URL into each host's **native** store.
 - `doctor` — read-only. (1) every configured stdio `command` resolves to an executable; (2) no hand-written entry shadows/duplicates a plugin-provided server of the same name; (3) installs are at the marketplace head. Prints findings, exits non-zero on ✗, never edits.
 - `pin [--target <host>…|--all] [--dry-run]` — rewrite a plugin-provided bare `command` to its absolute path for GUI hosts (macOS GUI apps have no shell PATH). Refuses (✗) a command that does not resolve; never touches a host's user-level config.
@@ -10,7 +11,7 @@
 - `list`, `remove`, `targets`.
 
 ## Hosts and approved scope
-The current implemented native adapters are claude-code, codex, kimi, cursor, omp, hermes, grok, dcode, and zcode-cli. The approved migration scope is native plugin-compatible routes documented in `SPEC.md`; each additional route requires its own evidence-backed adapter or visible unsupported/unverified result. Standalone skill/command distribution is excluded: Pi and OpenCode readers/removers remain only for safe cleanup of old plugnz-owned installs, and no standalone route may be added or updated. Gemini CLI's possible native extension surface remains unverified and is not classified as standalone. Bare-MCP configuration remains the separate `add-mcp` API boundary.
+The current implemented native adapters are claude-code, codex, kimi, cursor, omp, hermes, grok, dcode, and zcode-cli. The approved migration scope is native plugin-compatible routes documented in `SPEC.md`; each additional route requires its own evidence-backed adapter or visible unsupported/unverified result. The owner-approved portable-hook increment adds native Pi extension and OpenCode plugin routes for install, update, and remove; those routes accept portable hook packages only, and their `sync` route remains unsupported. Standalone skill/command distribution is excluded: historical standalone Pi and OpenCode installs may only be read or removed safely, and no standalone route may be added or updated. Gemini CLI's possible native extension surface remains unverified and is not classified as standalone. Bare-MCP configuration remains the separate `add-mcp` API boundary.
 
 ## Rules
 - Bun + TypeScript. Run the relevant focused check for each increment and save its command/result; run `bun test` and `bun run check` before a direct push to `main`. Direct pushes are the authorized integration path; do not create a PR unless later directed.

@@ -2,7 +2,7 @@
 
 One definition runs command handlers across Claude Code, Codex, OMP, Pi, OpenCode, and ZCode. Handlers receive the same JSON input and return optional context. The host adapter translates the lifecycle event and delivers that context through the harness’s native API.
 
-This first API compiles hook packages with `plugnz hooks build`. The generated files run through native plugin or extension loaders. `add`, `update`, and `sync` keep their existing version and capability admission rules; an uncompiled portable hook definition is refused instead of being installed as inert data. This does not re-enable the retired Pi/OpenCode skill and command distribution routes.
+`plugnz install` detects `plugnz.hooks.json`, compiles the package for the selected harnesses, and registers the generated files with their native plugin or extension loaders. The authored package remains the recorded source for future updates. Native version, capability, and trust checks still apply; the installer reports a capability it cannot activate.
 
 ## Author one hook package
 
@@ -47,9 +47,27 @@ Use `tools: ["Read", "read"]` on a tool handler to select exact native tool name
 
 The default command timeout is 10 seconds. `timeoutMs` accepts 1–60,000 milliseconds. Combined stdout and stderr are bounded to 1 MiB per handler. Matching handlers run in declaration order and their context is joined with blank lines. The POSIX runtime terminates a timed-out handler’s process group.
 
-## Build and load
+## Install
 
-From a checkout:
+Inside the authored package, run:
+
+```sh
+npx plugnz install
+```
+
+The current directory is the default source. Without `--target`, installation uses the existing detection of active native writers. A detected target that cannot consume the package receives an explicit unsupported or unverified result; the installer does not silently narrow selection to the six hook adapters. To install another local package or a supported repository source, supply it explicitly. Use `--target` to choose harnesses:
+
+```sh
+npx plugnz install ./my-hook-package --target claude-code --target pi
+```
+
+`install <source>` uses the same lifecycle as `add <source>`. Compilation happens in the target's staging area before activation. Handlers run when the harness emits their events; installation does not execute them. Updates start from the recorded authored source and compile again. Native enablement and hook trust remain native decisions.
+
+Claude Code, Codex, OMP, and ZCode use their native plugin stores. Pi receives an owned extension package registered in its extension settings. OpenCode receives an owned package and a native plugin loader file. The Pi and OpenCode routes support portable hook packages for install, update, and remove; their `sync` route is unsupported. Ordinary standalone skill/command distribution remains excluded.
+
+## Build and load explicitly
+
+`hooks build` remains available when you want to inspect or distribute the generated native artifacts. From a checkout:
 
 ```sh
 bun bin/plugnz.mjs hooks build ./my-hook-package \
@@ -107,7 +125,7 @@ interface HookResult {
 
 `session.start` means the adapter can supply context before the next agent prompt. Startup/resume/new-session distinctions are reported in `reason` only when available. OpenCode initializes lazily before the first model request and caches by session ID within the plugin instance; it does not treat plugin factory creation as a session.
 
-Tool handlers execute at the native before/after boundary. Context is consumed by a later model request; returning pre-tool context does not cause the model to reconsider an already selected call before that call executes. Post-tool failure coverage differs by harness and is listed below. Missing native identifiers and native metadata remain absent.
+Tool handlers execute at the native before/after boundary. Context is consumed by a later model request; returning pre-tool context does not cause the model to reconsider an already selected call before that call executes. Post-tool failure coverage differs by harness and is listed below. The tool error flag follows the native harness's interpretation; a tool may return a failed shell command's output without marking the tool invocation itself as an error. Inspect the native result when that distinction matters. Missing native identifiers and native metadata remain absent.
 
 ### Stop is explicit
 
@@ -147,7 +165,9 @@ These are explicit implementation baselines, not a promise that every earlier/la
 - Compiler and public map: `src/hook-build.ts`, `src/hook-cli.ts`.
 - Native translation: `src/hosts/*-hooks.ts`.
 - Contract and generated-wrapper checks: `test/hooks.test.ts`, `test/hook-build.test.ts`, `test/command-hooks.test.ts`, `test/{omp,pi,opencode}-hooks.test.ts`.
-- Native run receipts and exact commands: [hooks verification](hooks-verification.md).
+- Initial native runtime receipts and exact commands: [hooks verification](hooks-verification.md).
+- Automatic installation and real Gemini runs in fresh Docker containers: [live verification](hooks-live-verification.md).
+- Reproduction helpers and image recipes: [real-model cleanroom](../test/cleanroom/README.md).
 
 Primary native contracts:
 
