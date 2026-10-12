@@ -2,6 +2,7 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync,
 import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
+import { which } from '../src/exec';
 import { readState } from '../src/state';
 
 declare const TextDecoder: { new (): { decode(input?: Uint8Array): string } };
@@ -204,6 +205,12 @@ class LifecycleCliHarnessImpl implements LifecycleCliHarness {
     this.sources = join(this.root, 'sources');
     this.fakeBin = join(this.root, 'fake-bin');
     for (const path of [this.home, this.ambientHome, this.sources, this.fakeBin]) mkdirSync(path, { recursive: true });
+    // Isolated PATH is fakeBin:/usr/bin:/bin. Historical MCP fixtures use a
+    // bare `node` command; runners often keep node outside those two dirs
+    // (/usr/local/bin, nvm, hostedtoolcache). Plant the parent-PATH node so
+    // pin/which resolution does not depend on the host layout. PATH itself
+    // stays locked.
+    plantIsolatedBareCommand(this.fakeBin, 'node');
   }
 
   writeHome(files: Record<string, string>): void {
@@ -329,6 +336,13 @@ export async function withLifecycleCliHarness<T>(run: (harness: LifecycleCliHarn
   } finally {
     harness.cleanup();
   }
+}
+
+/** Put a parent-PATH executable onto the isolated fakeBin as `name`. */
+function plantIsolatedBareCommand(fakeBin: string, name: string): void {
+  const resolved = which(name) ?? process.execPath;
+  writeFileSync(join(fakeBin, name), `#!/bin/sh\nexec ${JSON.stringify(resolved)} "$@"\n`);
+  chmodSync(join(fakeBin, name), 0o755);
 }
 
 function writeTree(root: string, files: Record<string, string>): void {

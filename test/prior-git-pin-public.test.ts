@@ -15,6 +15,7 @@ test('offline pin repairs a genuine historical Git marker without fetching its S
     writeFileSync(noGit, '#!/bin/sh\necho "unexpected Source fetch" >&2\nexit 73\n'); chmodSync(noGit, 0o755);
     const env = { OPEN_PLUGIN_DCODE_BIN: binary, OPEN_PLUGIN_DCODE_PYTHON_BIN: fakeDcodeLockInterpreter(harness.root), OPEN_PLUGIN_GIT_BIN: noGit };
     const preview = harness.run(['pin', '--target', 'dcode', '--dry-run', '--json'], { env });
+    if (preview.exitCode !== 0) throw new Error(preview.stdout + preview.stderr);
     expect(preview.exitCode).toBe(0);
     expect(preview.state.after).toEqual(preview.state.before);
     expect(preview.stores.dcode.after).toEqual(preview.stores.dcode.before);
