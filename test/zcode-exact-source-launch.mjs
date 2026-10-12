@@ -11,13 +11,13 @@ import { pathToFileURL } from 'node:url';
 const repo = resolve(import.meta.dirname, '..');
 const sdkRoot = '/tmp/bunx-1005-sandbox@latest/node_modules/@vercel/sandbox';
 const cli = '/tmp/bunx-1005-sandbox@latest/node_modules/.bin/sandbox';
-const output = '/tmp/plugnz-zcode-acquisition-01';
-const sandboxName = 'plugnz-zcode-acquire-20261012-01';
-const evidenceRoot = '/vercel/sandbox/proof/zcode-acquire-01';
+const output = '/tmp/plugnz-zcode-acquisition-02';
+const sandboxName = 'plugnz-zcode-acquire-20261012-02';
+const evidenceRoot = '/vercel/sandbox/proof/zcode-acquire-02';
 const supplierScratchRoot = '/vercel/sandbox/native';
 const sourceRevision = '872ad960de7ec172591f7e1952f7849229f94521';
 const workflowCommit = '9b0ce4ccd2a48e2c31ddd9305f875543a2fc40bc';
-const methodCommit = '78034fa7bb6b74401305434b6336b5d8989a391f';
+const methodCommit = '4499573de4452cbbe7fb8afecd30f5e71de095c0';
 const localFloorBytes = 6 * 1024 ** 3;
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const frozenFiles = Object.freeze({
@@ -27,8 +27,8 @@ const frozenFiles = Object.freeze({
   'scripts/sandbox-preservation-budget.mjs': '3853812ede9ebad87e6409c64b33f3c619b38b89de316bada741de148b9e2938',
   'scripts/sandbox-preservation-remote.mjs': '0d063025d01da8d0f25f92534c08d0eb1de53ff751ef58e79b2160356ed9a2bc',
   'scripts/sandbox-preservation-stage.mjs': 'fbd9e5a6464167eaed63777e4159edb3107994484213574bd7e54af963bc7d46',
-  'scripts/sandbox-preservation-monitor.mjs': '4ce983c1a2aec8ef77cc8f1eed5a1ebb063d28b44eeccd1485265373408f901e',
-  'scripts/sandbox-preservation-supervisor.mjs': 'c369b791a596c4f6b0dc01b6c335fc3aedc772f36b8c71635461a0b97a83324a',
+  'scripts/sandbox-preservation-monitor.mjs': '7bf2734eb90ac363f47310e6979b2910c59647fa022a930b36ebf8ce6f8fe46a',
+  'scripts/sandbox-preservation-supervisor.mjs': '600a15db721c2812a69d984b34301e419a52ba949a3c829b636518254fd36418',
 });
 
 assert.equal(existsSync(output), false, `Refuse existing output ${output}`);
@@ -45,13 +45,16 @@ const cliVersion = spawnSync(cli, ['--version'], { encoding: 'utf8' });
 assert.equal(cliVersion.status, 0, cliVersion.stderr);
 assert.equal(cliVersion.stdout.trim(), '4.7.1');
 
-const setup = mkdtempSync('/tmp/plugnz-zcode-acquisition-setup-');
+const setup = mkdtempSync('/tmp/plugnz-zcode-acquisition-02-setup-');
 const configPath = `${setup}/config.json`;
 const controllerLog = `${setup}/controller.log`;
 const { Sandbox } = await import(pathToFileURL(`${sdkRoot}/dist/index.js`).href);
 const { getAuth } = await import(pathToFileURL(`${sdkRoot}/dist/auth/index.js`).href);
 const token = getAuth()?.token;
 assert.ok(token, 'Vercel Sandbox CLI authentication is required');
+const authScope = await Sandbox.list({ projectId: 'workspace-agent-lab', teamId: 'charfeng1s-projects', token,
+  limit: 1, signal: AbortSignal.timeout(10_000) });
+assert.ok(Array.isArray(authScope.sandboxes), 'Vercel Sandbox project/team authentication scope is required');
 
 // This is deliberately the final local operation before remote allocation.
 const localDf = spawnSync('df', ['-PB1', '/tmp'], { encoding: 'utf8' });
@@ -78,7 +81,7 @@ const readable = await sandbox.runCommand({ cmd: 'sudo', args: ['chmod', 'a=rX',
   '/vercel/sandbox/proof/zcode-exact-source-acquire.mjs', '/vercel/sandbox/proof/zcode-exact-source-contract.mjs'] });
 assert.equal(readable.exitCode, 0, await readable.stderr());
 const preflight = await sandbox.runCommand({ cmd: 'sh', args: ['-c',
-  'set -eu; for name in tar xz curl git setpriv node; do command -v "$name"; done; test ! -e /vercel/sandbox/native; test ! -e /vercel/sandbox/proof/zcode-acquire-01'] });
+  'set -eu; for name in tar xz curl git setpriv node; do command -v "$name"; done; test ! -e /vercel/sandbox/native; test ! -e /vercel/sandbox/proof/zcode-acquire-02'] });
 assert.equal(preflight.exitCode, 0, await preflight.stderr());
 const remoteDf = await sandbox.runCommand({ cmd: 'df', args: ['-Pk', '/'] });
 assert.equal(remoteDf.exitCode, 0, await remoteDf.stderr());
@@ -90,7 +93,7 @@ const archiveAt = expiresAt - 780_000;
 assert.ok(archiveAt > Date.now(), 'Setup consumed the source-build window');
 const config = {
   sandbox: sandboxName, project: 'workspace-agent-lab', team: 'charfeng1s-projects', cli, sdkRoot,
-  expiresAt, baselineUsedBytes, operation: 'private-large-acquisition', experimentUid: 21071,
+  expiresAt, baselineUsedBytes, operation: 'private-large-acquisition', experimentUid: 21072,
   evidenceRoot, supplierScratchRoot, output, archiveAt,
   diskGrowthBytes: 6 * 1024 ** 3, diskReserveBytes: 2_944 * 1024 ** 2,
   retainedBodyBytes: 2_560 * 1024 ** 2, archiveBytes: 2_816 * 1024 ** 2,
