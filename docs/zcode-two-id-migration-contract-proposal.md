@@ -498,19 +498,32 @@ Node artifact and fresh official pinned ZCode loader/native-update/failure proof
 
 ## Fresh NativeGit proof budget (separate acceptance)
 
-Machine measured before launch: `/dev/root` has 8.7 GiB available; active checkout
-allocated 5.7 MiB, retained Codex evidence 20 MiB, authentic historical home 2 MiB.
-Existing retained large native snapshots must also be counted, not recopied per
-arm. No Sandbox is launched by this document.
+The original 1-GiB source-build/100-MiB archive plan below this heading was
+insufficient and is superseded, not an approved current launch configuration.
+Its failed acquisition did not yield a complete stopped archive and cannot count
+as a genuine supplier or Native proof. Historical free-space measurements are
+not current capacity evidence.
 
-Plan: one 2-vCPU/4-GiB Sandbox, 30 minutes, at most 1 GiB newly allocated total
-source/build/store/probe scratch and 100 MiB compressed retained archive. Measure
-allocated bytes after each install/build/attempt; refuse a build before exceeding
-the budget. Use a verified existing official artifact if its pinned source/hash
-and supported runtime can be proved; do not mislabel a community CLI or an old
-Node-26 source build as supported-runtime certification. Keep separate Source and
-homes for Kimi and ZCode, no real installation/credentials/model turn. Freeze the
-controlled HTTPS Source V1/V2 hashes and built producer artifact before each gate.
+The [exact-source supplier workflow](evidence/zcode-exact-source-workflow-20261012.md)
+pins official Source `872ad960`, Node 24.14.0, pnpm 10.33.2, the root frozen lock,
+and upstream's Node/esbuild/Turbo build. It distinguishes private package version
+0.1.0 from actual CLI version 0.16.9. The all-platform optional-dependency policy
+means the prior Linux-only package-size measurement is only a lower bound.
+No community wrapper, desktop asset, lock relaxation or upstream patch is a
+substitute. The workflow itself has not established a successful build.
+
+Supplier acquisition requires the separately reviewed private large-preservation
+profile: 2.5-GiB retained bodies, 2.75-GiB archive, 6-GiB whole-filesystem growth,
+2.875-GiB remote reserve, 6-GiB local free-space floor and 780-second preservation
+reserve. Profile review and an actual launch-time capacity/expiry check are
+mandatory; stating these bounds does not approve an unreviewed controller or
+guarantee the build fits. Preserve every failed prefix and independently restore
+the entire accepted supplier before a Native arm. Existing raw evidence and
+durable archives count toward disk use; do not duplicate complete suppliers per
+arm. The later Native arm has its own bounded budget and distinct unprivileged
+UID. Freeze controlled HTTPS Source V1/V2 and the rebuilt combined producer
+artifact before each gate; earlier C72 proofs belong only to their own producer.
+No real installation, user credentials or model turn is in this proof scope.
 
 Proofs: canonical Git Source install, same-HEAD zero-write preview/apply, changed
 SHA/content convergence where supported, actual loader skill/command/resource
