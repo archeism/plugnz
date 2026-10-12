@@ -10,6 +10,13 @@ const [arm, source, v1, v2, v3, baseline] = process.argv.slice(2);
 assert(['rollback', 'foreign', 'cache', 'inactive', 'sparse', 'malformed'].includes(arm));
 const root = process.cwd();
 assert.match(root, /^\/vercel\/sandbox\/proof\/codex-native-b029c54-[a-z0-9-]+$/);
+// Preserve exact workflow and immutable inputs even if an admission guard fails.
+for (const name of ['probe', 'boundary', 'surfaces', 'preflight', 'run', 'inventory']) {
+  copyFileSync(`/vercel/sandbox/proof/codex-preserved-native-${name}.mjs`, join(root, `codex-preserved-native-${name}.mjs`));
+}
+copyFileSync('/vercel/sandbox/proof/plugnz-frozen-b029c54.mjs', join(root, 'plugnz-candidate.mjs'));
+copyFileSync('/vercel/sandbox/proof/codex-acquisition03-input.json', join(root, 'acquisition-input.json'));
+writeFileSync(join(root, 'frozen-inputs.json'), JSON.stringify({ arm, source, v1, v2, v3, baseline: Number(baseline), artifactSha256: 'c72c6e9674c454bc6a54e68c0b89f8670a2017fd54c9d76131234d619fafd606' }, null, 2), { flag: 'wx' });
 const caps = readFileSync('/proc/self/status', 'utf8');
 assert.match(caps, /^NoNewPrivs:\s+1$/m);
 for (const field of ['Inh', 'Prm', 'Eff', 'Bnd', 'Amb']) assert.match(caps, new RegExp(`^Cap${field}:\\s+0+$`, 'm'));
@@ -36,21 +43,21 @@ function verifySupplier() {
     try { accessSync(path, constants.W_OK); writable = true; } catch (error) { assert.equal(error.code, 'EACCES'); }
     assert.equal(writable, false, `Existing supplier input is writable by Native case: ${path}`);
   }
-  for (const row of supplierInput.inventory) verifySupplierEntry(supplier, row);
+  const unreadable = [];
+  for (const row of supplierInput.inventory) {
+    try { verifySupplierEntry(supplier, row); }
+    catch (error) { if (error.code !== 'EACCES') throw error; unreadable.push(row.path); }
+  }
   assert.equal(binarySha(), '50ed828f357c655a3c82054d346cab8434f24901f14ec19b8267571bdd008b38');
+  return unreadable;
 }
-verifySupplier();
-writeFileSync(join(root, 'supplier-provenance.json'), JSON.stringify({ ...supplierInput, supplierRoot: supplier, caseUid: process.getuid(), groups: process.getgroups(), caps, binaryBefore: binarySha() }, null, 2), { flag: 'wx' });
+const unreadableBefore = verifySupplier();
+writeFileSync(join(root, 'supplier-provenance.json'), JSON.stringify({ ...supplierInput, supplierRoot: supplier, caseUid: process.getuid(), groups: process.getgroups(), caps, binaryBefore: binarySha(), unreadableBefore, requiresPrivilegedFullAttestation: true }, null, 2), { flag: 'wx' });
 assert.match(source, /^https:\/\/github\.com\/archeism\/plugnz\.git#proof\/codex-b029c54-source-20261011(?:-[a-z0-9-]+)?$/);
 for (const revision of [v1, v2, v3]) assert.match(revision, /^[a-f0-9]{40}$/);
-for (const name of ['probe', 'boundary', 'surfaces', 'preflight', 'run', 'inventory']) {
-  copyFileSync(`/vercel/sandbox/proof/codex-preserved-native-${name}.mjs`, join(root, `codex-preserved-native-${name}.mjs`));
-}
-copyFileSync('/vercel/sandbox/proof/plugnz-frozen-b029c54.mjs', join(root, 'plugnz-candidate.mjs'));
 assert.equal(createHash('sha256').update(readFileSync(join(root, 'plugnz-candidate.mjs'))).digest('hex'), 'c72c6e9674c454bc6a54e68c0b89f8670a2017fd54c9d76131234d619fafd606');
 assert(Number.isSafeInteger(Number(baseline)) && Number(baseline) > 0);
 writeFileSync(join(root, 'baseline-disk.json'), JSON.stringify({ usedKiB: Number(baseline) / 1024 }), { flag: 'wx' });
-writeFileSync(join(root, 'frozen-inputs.json'), JSON.stringify({ arm, source, v1, v2, v3, baseline: Number(baseline), artifactSha256: 'c72c6e9674c454bc6a54e68c0b89f8670a2017fd54c9d76131234d619fafd606' }, null, 2), { flag: 'wx' });
 mkdirSync(join(root, 'tmp'));
 const env = { ...process.env, TMPDIR: join(root, 'tmp'), TMP: join(root, 'tmp'), TEMP: join(root, 'tmp'), PLGNZ_PROOF_BASE: root, PLGNZ_PROOF_SOURCE: source };
 function run(label, script, args) {
@@ -80,6 +87,7 @@ if (['inactive', 'sparse', 'malformed'].includes(arm)) {
   const phase = { rollback: 'native-exit', foreign: 'foreign-checkout', cache: 'foreign-cache' }[arm];
   run('fault', 'codex-preserved-native-probe.mjs', [phase, arm, v3]);
 }
-verifySupplier();
-writeFileSync(join(root, 'complete.json'), JSON.stringify({ arm, source, binaryAfter: binarySha(), at: Date.now() }), { flag: 'wx' });
-console.log(JSON.stringify({ arm, source, result: 'verified' }));
+const unreadableAfter = verifySupplier();
+assert.deepEqual(unreadableAfter, unreadableBefore);
+writeFileSync(join(root, 'complete.json'), JSON.stringify({ arm, source, binaryAfter: binarySha(), unreadableAfter, requiresPrivilegedFullAttestation: true, at: Date.now() }), { flag: 'wx' });
+console.log(JSON.stringify({ arm, source, result: 'case-oracles-passed-pending-privileged-post-attestation' }));
