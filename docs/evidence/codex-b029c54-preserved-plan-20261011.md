@@ -1,8 +1,8 @@
 # Frozen combined Codex native proof
 
-Status: prepared; no supplier acquisition or native lifecycle arm has run.
-Supplier acquisition waits for independent acceptance of preservation controller
-`2a38c822c0b3427026065db9a1a4b4a9c6fa1690`.
+Status: completed; superseded by the six independently accepted cases in
+`codex-b029c54-native-accepted-20261012.md`. Historical setup and planning facts
+below remain preserved; the accepted receipt records later budgets and guards.
 
 Product input is frozen at `b029c5446f1308ea4b49ab6b2da8763ee12959d2`;
 artifact SHA256 is

@@ -5,7 +5,7 @@ restoration, privileged supplier attestations and independent fresh-restoration
 review. This is bounded Codex evidence, not another host's delivery or proof of
 Native updates over an arbitrary multi-version slot.
 
-Product Source is `b029c5446f1308ea4b49ab6b2da8763ee12959d2`; the exact artifact is
+Product snapshot is `b029c5446f1308ea4b49ab6b2da8763ee12959d2`; the exact artifact is
 SHA256 `c72c6e9674c454bc6a54e68c0b89f8670a2017fd54c9d76131234d619fafd606`.
 The artifact's `0.0.12` label identifies this frozen proof build. No release or
 fleet change was performed by this proof worker.
