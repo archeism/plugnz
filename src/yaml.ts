@@ -110,7 +110,14 @@ export function yamlStringify(value: unknown): string {
   if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "number") return renderNumber(value);
   if (typeof value === "string") return renderScalar(value);
-  if (Array.isArray(value)) return `[${value.map((entry) => yamlStringify(entry === undefined ? null : entry)).join(",")}]`;
+  if (Array.isArray(value)) {
+    const entries: string[] = [];
+    for (const entry of value) {
+      if (entry === undefined) continue; // observed: undefined array elements are dropped
+      entries.push(yamlStringify(entry));
+    }
+    return `[${entries.join(",")}]`;
+  }
   if (typeof value === "object") {
     const entries: string[] = [];
     for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
