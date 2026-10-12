@@ -76,3 +76,21 @@ default log SHA-256
 No full-suite, ledger CAS, native-root fence, adoption execution or public pending
 repair completion is claimed. Independent Standards and Spec reviews are required
 before further wiring. Skills were used unchanged; no skill improvement claim.
+
+## Independent approval and combined integration
+
+Both independent review axes approved immutable candidate
+`9ae6276280fcc856047462bb435db7bfc73fccd4`: Standards ran 10 tests / 117
+assertions in 4.94 seconds; Spec ran the same gate in 4.35 seconds and separately
+verified awaited `throw undefined` preservation and subsequent reacquisition.
+Spec log SHA-256:
+`955d34a81730fc546fc080d164870e8ee1ed66579bc9e70cf9fbd9597447c652`.
+
+Merged without squashing into the combined source integration branch at
+`53e167c149296fa6fb43cb64c0f2346d45d6c0a4`. Root repeated the documented pinned
+matrix with actual Bun 1.3.14 and Node 22.23.1: 10 passed, zero failed, 117
+assertions, 5.37 seconds. `bun run check` exited zero. All four contention legs
+refused while held, then reacquired the same persistent inode after actual
+SIGKILL. This checkpoint still does not wire the helper into production or
+change the public Node minimum. The known combined end-to-end adoption failure
+remains unresolved; these focused gates do not claim a green full suite.
