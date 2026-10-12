@@ -72,6 +72,11 @@ jobs:
           package-manager-cache: false
           registry-url: https://registry.npmjs.org
       - uses: oven-sh/setup-bun@v2
+        with:
+          # Same pin as tests.yml: releases must build under the Bun the
+          # bundle's grammar and suite were verified against, not whatever
+          # setup-bun floats on merge day.
+          bun-version: "1.4.3"
       - name: Resolve the release version
         id: version
         env:

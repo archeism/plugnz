@@ -213,7 +213,9 @@ describe("yaml merge-key and adversarial differential coverage", () => {
     for (const cp of [0x3000, 0x1f600, 0xfffd, 0x4e2d, 0x1f1fa]) probe.push(cp);
     for (const cp of probe) {
       const ch = String.fromCodePoint(cp);
-      for (const s of [ch, `a${ch}b`, `x${ch}`]) {
+      // `${ch}x` (leading-with-suffix) matters most: it is the position where
+      // Bun <=1.4.2's bare BOM silently dropped the character on parse.
+      for (const s of [ch, `${ch}x`, `a${ch}b`, `x${ch}`]) {
         const back = Bun.YAML.parse(yamlStringify(s));
         if (back !== s) throw new Error(`U+${cp.toString(16)} does not roundtrip: ${JSON.stringify(s)} -> ${JSON.stringify(back)}`);
       }
