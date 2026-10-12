@@ -105,3 +105,12 @@ not the older genuine native proof attribution or full adoption acceptance.
 Read-only Sandbox SDK authentication to the exact project/team also succeeded;
 the retained first ZCode acquisition and nine other returned proof sandboxes
 were stopped. No retry or new allocation was performed.
+
+Root also reproduced the required adoption failure on source `4c1cadd`, rather
+than relying only on the older full-suite result:
+`bun test test/add.test.ts --test-name-pattern 'marketplace collection survives'`
+under actual Bun 1.3.14 exited one: zero passed, one failed, 33 filtered, ten
+assertions, 540 ms. The unchanged assertion at `test/add.test.ts:350` requires
+zero from explicit legacy Cursor adoption and received one. Filtering selected
+the existing test only; no skip, assertion or timeout changed. Actual adoption
+execution remains mandatory before main integration/full delivery.
