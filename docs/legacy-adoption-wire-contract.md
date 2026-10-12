@@ -253,7 +253,12 @@ removes exactly the proven active alias, writes immutable commit/readback and
 committed relation, and marks the fresh journal COMMIT/cleanup-pending. There is
 no interval where ownership is upgraded without durable supersession and verified
 fresh commit. The commit generation is this atomic replacement's generation.
-Cleanup/fence release precede final journal close; failures retain cleanup-pending.
+Verified cleanup and Native-fence release precede final journal close. The ledger
+writer lease stays held through that final generation/commit CAS and releases
+only after the last ledger write. Native release or closure failures retain
+cleanup-pending; a ledger-lease release failure is a distinct loud nonzero result,
+never authority for rollback or a repair write outside a reacquired, revalidated
+lease.
 
 Reader validation requires the retained fresh journal/handle and COMMIT settlement
 in cleanup-pending or completed state, with exact identity and seal projection.
