@@ -7,15 +7,23 @@ No runtime floor, lock dependency, native capability or production pin changed.
 
 ## Decision awaiting the owner
 
-Recommend a private SQLite file lease **if** the owner accepts Node >=22.13.
+Recommend a private SQLite file lease **if** the owner accepts the unflagged
+runtime range `>=22.13.0 <23.0.0 || >=23.4.0`.
 Keep Bun 1.3.14 supported through its native `bun:sqlite` provider. Current
 `engines.node: >=22` includes versions without this unflagged builtin; changing
 that public promise is an explicit policy choice, not implementation detail.
-Node SQLite was introduced in 22.5 and unflagged in 22.13.
+Node SQLite was introduced in 22.5 and unflagged in 22.13 on the 22.x branch.
+Node 23.0–23.3 still require `--experimental-sqlite`; the 23.x branch unflagged
+it in 23.4. A bare `>=22.13` promise would incorrectly include that gap.
 Unflagged is not stable: the versioned API is marked active development, so the
 small supported-version/artifact gate remains necessary.
 ([Node API](https://nodejs.org/download/release/v22.13.0/docs/api/sqlite.html),
-[22.13 release](https://nodejs.org/en/blog/release/v22.13.0))
+[22.13 release](https://nodejs.org/en/blog/release/v22.13.0),
+[23.3 flag requirement](https://nodejs.org/download/release/v23.3.0/docs/api/sqlite.html),
+[23.4 unflagging release](https://nodejs.org/en/blog/release/v23.4.0))
+This is the precise proposed range, not an approved change to `engines.node`.
+Native availability and the packed artifact still require runtime checks; the
+proposal does not silently restart Node with flags or claim future API stability.
 
 Keeping Node 22.0 requires another proven cross-platform lease. An external
 `flock` executable exists on this Linux machine, but is not a universal shipped
