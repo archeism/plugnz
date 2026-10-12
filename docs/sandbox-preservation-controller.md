@@ -21,12 +21,13 @@ Required JSON fields:
 | `cli` | Absolute pinned Sandbox CLI executable |
 | `sdkRoot` | Installed official `@vercel/sandbox` package root; current proof uses SDK 3.6.1 with CLI 4.7.1 |
 | `expiresAt` | Actual running session expiry, milliseconds since epoch; must exactly match SDK `Sandbox.get`, with `resume:false` |
-| `archiveAt` | Absolute preservation deadline, at least 170 seconds before expiry; acquisition needs 630 seconds |
+| `archiveAt` | Absolute preservation deadline, at least 170 seconds before expiry; acquisition needs 630 seconds; private large acquisition needs 780 seconds |
 | `baselineUsedBytes` | Fresh whole-filesystem `df -Pk /` used-byte measurement **before any supplier acquisition** |
-| `diskGrowthBytes` | Whole-filesystem additional allocation ceiling, at most 3 GiB |
-| `operation` | Optional `method-probe` / `native-proof`; explicit `acquisition` permits the separately approved acquisition budget |
-| `diskReserveBytes` | At least 128 MiB; acquisition requires 896 MiB (768 MiB archive plus 128 MiB growth margin) |
-| `archiveBytes` | At most 100 MiB for Native arms; acquisition alone permits at most 768 MiB |
+| `diskGrowthBytes` | Whole-filesystem additional allocation ceiling: at most 3 GiB normally; 6 GiB only for private large acquisition |
+| `operation` | Optional `method-probe` / `native-proof`; `acquisition` selects the reviewed Codex budget; `private-large-acquisition` selects only the bounded ZCode supplier-acquisition profile below |
+| `diskReserveBytes` | At least 128 MiB; acquisition requires 896 MiB; private large acquisition requires 2.875 GiB |
+| `archiveBytes` | At most 100 MiB for Native arms, 768 MiB for acquisition, or 2.75 GiB for private large acquisition |
+| `retainedBodyBytes` | Private large acquisition only: raw logical regular-file bodies at most 2.5 GiB |
 | `experimentUid` | Empty dedicated UID, 2000–60000, used only by this experiment inside this exact Sandbox |
 | `evidenceRoot` | Single owned child of `/vercel/sandbox/proof`; complete mutable trial state must be inside it |
 | `output` | New local evidence directory outside Git |
@@ -43,8 +44,15 @@ total), including a 180-second remote compression bound. These are conservative
 configured bounds, not a claim tiny probes measured 768 MiB throughput. Download must finish before actual
 expiry; local restore can finish afterward. Remote artifact SHA256, size, every
 trial file hash/mode and every symlink target are verified after a real local
-restore. Source snapshots and SHA256 files for both controller helpers accompany
-each local result. No complete receipt is written when preservation fails.
+restore. Source snapshots and SHA256 files accompany each local result: the
+controller snapshots itself plus every copied remote helper. No complete receipt
+is written when preservation fails.
+
+The private large-acquisition pipeline reserves 15 seconds to stop, 15 to settle,
+360 for inventory/archive (including a 300-second compression bound), 300 for
+download and 90 margin: 780 seconds total. Its 45-minute session and the linear
+projections from one completed 218,988,131-byte acquisition are planning inputs,
+not a throughput certification for 2.75 GiB.
 
 ## Writer containment and authority
 
@@ -94,6 +102,39 @@ product behavior or Native eligibility. The previous controller/configuration
 remain immutable in that failed attempt's evidence. The 630-second acquisition
 preservation deadline and 3 GiB whole-filesystem growth cap remain unchanged.
 
+The separate `private-large-acquisition` operation is proof tooling for the
+measured ZCode supplier only. It permits at most 2.5 GiB of unique retained
+regular-file bodies, a 2.75 GiB archive, 6 GiB whole-filesystem growth, 2.875 GiB
+remote reserve and requires 6 GiB local free space before setup mutates output.
+Those limits do not widen the Native 100 MiB or Codex acquisition 768 MiB
+profiles. No acquisition may launch until this profile is independently reviewed
+and the actual local free-space floor is met.
+
+For this private profile, every trial and non-omitted supplier path remains in
+the inventory. Capacity counts a regular body once per filesystem `(device,
+inode)` while still staging every hardlink path. Node defines `fs.Stats.dev` as
+the containing device identifier and `fs.Stats.ino` as the filesystem inode;
+the helper requests bigint stats to avoid lossy identity keys. Bun documents its
+`node:fs` implementation and the focused suite executes the same provider under
+Bun 1.4. Sources: [Node `Stats.dev`](https://nodejs.org/api/fs.html#statsdev),
+[Node `Stats.ino`](https://nodejs.org/api/fs.html#statsino), and
+[Bun Node compatibility](https://bun.com/docs/runtime/nodejs-compat#nodefs).
+
+The monitor includes trial bodies, supplier bodies, logical sparse-file sizes,
+tar headers, long names/link targets, block/end-record padding and a conservative
+gzip expansion bound. The synchronous inventory and integrity work runs in a
+worker, leaving the root supervisor free to enforce the whole-filesystem guard
+and kill timer. A new projection begins immediately after the prior one, and a
+projection that has not completed within 750 milliseconds stops the producer
+instead of extending the blind interval. It stops at either ceiling with 256 MiB
+headroom. This headroom is grounded in the prior attempt's observed 79,128 KiB
+maximum half-second growth; 750 milliseconds would project about 119 MiB at that
+rate, still below the reserved headroom. These numbers remain a measured budget
+hypothesis, not throughput certification. The final stopped inventory is measured
+again and cannot archive when either exact ceiling is crossed. Whole-filesystem
+sampling continues to include caches, compiler output, tooling, build metadata
+and archive growth outside declared supplier roots.
+
 Native homes, resources, journals and failed-operation snapshots are trial state:
 they must be inside `evidenceRoot` and archived intact. Each supplier declaration
 contains `root` under
@@ -105,11 +146,13 @@ Missing/wrong integrity files mark the acquisition incomplete; all other actual
 supplier bytes are archived under `suppliers/<index>/` and checked after restore.
 Complete stopped supplier path/type/mode/size/hash/link inventory is retained.
 Hash-only inventories do not prove unknown/partial/generated bytes reconstructible.
-The monitor stops unknown supplier growth at 75% of the raw retention budget,
-reserving diagnostics/settlement growth; an overshoot or oversized archive remains
-a loud preservation failure, not an omitted-body claim. Supplier roots must be
-declared to include caches/build scratch; undeclared bytes are not accounted as
-preserved. Do not classify mutable native state as a supplier to fit the cap.
+The Native/Codex monitor stops unknown supplier growth at 75% of its archive
+budget, reserving diagnostics/settlement growth; the private large profile uses
+the filesystem-identity and archive-projection guard above. An overshoot or
+oversized archive remains a loud preservation failure, not an omitted-body claim.
+Supplier roots must be declared to include caches/build scratch; undeclared bytes
+are not accounted as preserved. Do not classify mutable native state as a supplier
+to fit the cap.
 
 The Kimi/ZCode helpers still need workflow-specific contained paths and the
 final frozen producer wired before another Native arm. Controller tests do not

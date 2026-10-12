@@ -1,13 +1,16 @@
 // Isolated experiment helper. Never run against a real installation.
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { chownSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readlinkSync, readSync, readdirSync, writeFileSync } from 'node:fs';
+import { chownSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { stageBundle } from './sandbox-preservation-stage.mjs';
+import { fileHash, inventoryArchiveSource, measureRetainedArchive, preservationProfile } from './sandbox-preservation-budget.mjs';
+import { startLargeRetentionSupervisor } from './sandbox-preservation-supervisor.mjs';
 
 const [action, configPath] = process.argv.slice(2);
 const config = JSON.parse(readFileSync(configPath, 'utf8'));
+const profile = preservationProfile(config.operation);
+const largeAcquisition = config.operation === 'private-large-acquisition';
 const root = resolve(config.evidenceRoot);
 assert.ok(root !== '/' && root.startsWith('/vercel/sandbox/proof/'));
 assert.equal(process.getuid(), 0, 'Supervisor/transport must not share experiment UID');
@@ -47,27 +50,8 @@ const used = () => {
   assert.equal(r.status, 0);
   return Number(r.stdout.trim().split('\n').at(-1).trim().split(/\s+/u)[2]) * 1024;
 };
-function fileHash(path) {
-  const hash = createHash('sha256'), fd = openSync(path, 'r'), buffer = Buffer.alloc(64 * 1024);
-  try { let count; while ((count = readSync(fd, buffer)) > 0) hash.update(buffer.subarray(0, count)); }
-  finally { closeSync(fd); }
-  return hash.digest('hex');
-}
 function inventoryFor(base, hashFiles = true) {
-  const inventory = [];
-  const walk = (relative = '') => {
-    for (const name of readdirSync(join(base, relative)).sort()) {
-      assert.ok(!/[\r\n]/u.test(name), 'Ambiguous archive filename');
-      const path = join(relative, name), absolute = join(base, path), stat = lstatSync(absolute);
-      if (stat.isDirectory()) { inventory.push({ path, kind: 'directory', mode: stat.mode & 0o777 }); walk(path); }
-      else if (stat.isSymbolicLink()) inventory.push({ path, kind: 'symlink', target: readlinkSync(absolute) });
-      else {
-        assert.ok(stat.isFile(), `Archive boundary contains a special file: ${path}`);
-        inventory.push({ path, kind: 'file', bytes: stat.size, mode: stat.mode & 0o777, ...(hashFiles ? { sha256: fileHash(absolute) } : {}) });
-      }
-    }
-  };
-  walk(); return inventory;
+  return inventoryArchiveSource(base, { hashFiles, recordIdentity: largeAcquisition });
 }
 function supplierState(supplier, hashFiles = true) {
   assert.ok(resolve(supplier.root).startsWith('/vercel/sandbox/native/'));
@@ -134,20 +118,26 @@ if (action === 'run') {
   child.stdout.on('data', chunk => consume('stdout', chunk));
   child.stderr.on('data', chunk => consume('stderr', chunk));
   const measurements = [];
-  const monitor = setInterval(() => {
+  const sample = () => {
     try {
       const allocated = used(); measurements.push({ at: Date.now(), allocated });
       // Whole filesystem includes package caches, compiler scratch and archives.
       if (allocated - baseline >= config.diskGrowthBytes - config.diskReserveBytes) stop('disk-budget');
-      const suppliers = (config.suppliers ?? []).map(supplier => supplierState(supplier, false));
-      const unknownBytes = suppliers.reduce((sum, supplier) => sum + supplier.inventory
-        .filter(row => row.kind === 'file' && !supplier.omittedPaths.includes(row.path))
-        .reduce((bytes, row) => bytes + row.bytes, 0), 0);
-      // Reserve space for trial diagnostics and one interval's growth. Never
-      // grow unknown supplier bodies beyond a recoverable archive budget.
-      if (unknownBytes >= config.archiveBytes * 0.75) stop('supplier-retention-budget');
+      if (!largeAcquisition) {
+        const suppliers = (config.suppliers ?? []).map(supplier => supplierState(supplier, false));
+        const unknownBytes = suppliers.reduce((sum, supplier) => sum + supplier.inventory
+          .filter(row => row.kind === 'file' && !supplier.omittedPaths.includes(row.path))
+          .reduce((bytes, row) => bytes + row.bytes, 0), 0);
+        // Preserve the reviewed Native/Codex monitor exactly; the private large
+        // profile alone uses filesystem-identity and tar-projection accounting.
+        if (unknownBytes >= config.archiveBytes * 0.75) stop('supplier-retention-budget');
+      }
     } catch (error) { stopped = String(error); stop('measurement-failed'); }
-  }, 500);
+  };
+  const closeLargeMonitor = largeAcquisition ? startLargeRetentionSupervisor({ root, suppliers: config.suppliers ?? [],
+    config, profile, baseline, used, stop, recordAllocated: allocated => measurements.push({ at: Date.now(), allocated }) }) : null;
+  if (!largeAcquisition) sample();
+  const monitor = largeAcquisition ? null : setInterval(sample, 500);
   let result;
   try {
     result = await new Promise(resolveExit => {
@@ -155,7 +145,12 @@ if (action === 'run') {
       child.once('exit', () => stop(null));
       child.once('close', (code, signal) => resolveExit({ code, signal }));
     });
-  } finally { clearInterval(monitor); await stop(null); clearTimeout(settleTimer); }
+  } finally {
+    if (monitor !== null) clearInterval(monitor);
+    if (closeLargeMonitor !== null) await closeLargeMonitor();
+    await stop(null);
+    clearTimeout(settleTimer);
+  }
   write('finished.json', { ...result, stopped, stopFailure, outputBytes, stdout, stderr, measurements, finalUsed: used() });
   process.exitCode = result.code === 0 && stopped === null && stopFailure === null ? 0 : 1;
 } else if (action === 'stop') {
@@ -172,29 +167,40 @@ if (action === 'run') {
   const suppliers = (config.suppliers ?? []).map(supplier => supplierState(supplier));
   write('reconstructible-suppliers.json', suppliers);
   const inventory = inventoryFor(root);
-  const retainedSupplierBytes = suppliers.reduce((sum, supplier) => sum + supplier.inventory
-    .filter(row => row.kind === 'file' && !supplier.omittedPaths.includes(row.path))
-    .reduce((bytes, row) => bytes + row.bytes, 0), 0);
-  assert.ok(inventory.reduce((sum, row) => sum + (row.bytes ?? 0), 0) + retainedSupplierBytes <= config.archiveBytes,
-    'Evidence exceeds archive budget; never silently omit trial files');
   write('inventory.json', inventory);
+  const archiveSources = [{ namespace: 'trial', root, inventory, omittedPaths: [] },
+    { namespace: 'control', root: control, inventory: inventoryFor(control), omittedPaths: [] },
+    ...suppliers.flatMap((supplier, index) => existsSync(supplier.root)
+      ? [{ namespace: `suppliers/${index}`, root: supplier.root, inventory: supplier.inventory, omittedPaths: supplier.omittedPaths }]
+      : [])];
+  let archiveProjection;
+  if (largeAcquisition) {
+    archiveProjection = measureRetainedArchive(archiveSources);
+    assert.ok(archiveProjection.bodyBytes <= config.retainedBodyBytes,
+      'Stopped retained bodies exceed the recoverable raw budget');
+    assert.ok(archiveProjection.archiveBytes <= config.archiveBytes,
+      'Conservative stopped archive projection exceeds the downloadable archive budget');
+  } else {
+    const retainedSupplierBytes = suppliers.reduce((sum, supplier) => sum + supplier.inventory
+      .filter(row => row.kind === 'file' && !supplier.omittedPaths.includes(row.path))
+      .reduce((bytes, row) => bytes + row.bytes, 0), 0);
+    assert.ok(inventory.reduce((sum, row) => sum + (row.bytes ?? 0), 0) + retainedSupplierBytes <= config.archiveBytes,
+      'Evidence exceeds archive budget; never silently omit trial files');
+  }
   const archive = `${root}.tar.gz`;
   assert.ok(!existsSync(archive), 'Archive cannot be overwritten');
   // Two explicit namespaces prevent trial-controlled files replacing privileged
   // metadata, without following or deleting any trial-created link.
   const bundle = join(controlParent, 'bundle');
   const stagingBefore = used();
-  const staged = stageBundle(bundle, [{ namespace: 'trial', root, inventory, omittedPaths: [] },
-    { namespace: 'control', root: control, inventory: inventoryFor(control), omittedPaths: [] },
-    ...suppliers.flatMap((supplier, index) => existsSync(supplier.root)
-      ? [{ namespace: `suppliers/${index}`, root: supplier.root, inventory: supplier.inventory, omittedPaths: supplier.omittedPaths }]
-      : [])]);
+  const staged = stageBundle(bundle, archiveSources);
   const stagingAllocatedGrowthBytes = used() - stagingBefore;
   assert.ok(stagingAllocatedGrowthBytes <= 128 * 1024 ** 2, 'Hardlink metadata exceeded declared scratch margin');
   const tar = spawnSync('tar', ['-czf', archive,
-    '-C', bundle, '.'], { encoding: 'utf8', timeout: config.operation === 'acquisition' ? 180_000 : 40_000 });
+    '-C', bundle, '.'], { encoding: 'utf8', timeout: largeAcquisition ? 300_000 : config.operation === 'acquisition' ? 180_000 : 40_000 });
   assert.equal(tar.status, 0, tar.stderr);
   assert.ok(lstatSync(archive).size <= config.archiveBytes);
   console.log(JSON.stringify({ archive, bytes: lstatSync(archive).size,
-    sha256: fileHash(archive), files: inventory.length, staging: { ...staged, allocatedGrowthBytes: stagingAllocatedGrowthBytes } }));
+    sha256: fileHash(archive), files: inventory.length, staging: { ...staged, allocatedGrowthBytes: stagingAllocatedGrowthBytes },
+    ...(archiveProjection === undefined ? {} : { archiveProjection }) }));
 }
