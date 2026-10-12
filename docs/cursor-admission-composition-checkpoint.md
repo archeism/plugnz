@@ -83,3 +83,27 @@ The RED log is `plugnz-cursor-admission-unrelated-pin-red-exact.log`, SHA-256
 Both independent axes must re-review this corrected frozen checkpoint; actual
 adoption execution, durable mutation recovery and full-suite acceptance remain
 unfinished, not excluded.
+
+## Corrected candidate and combined verification
+
+Corrected candidate `2a7ca8b084e50927f1b0facf3808e97a61fab1ed` received
+independent bounded LGTM on both axes. Spec reran the ten focused files:
+90 passed, zero failed, 913 assertions, 19.43 seconds; typecheck and diff check
+passed. Its log `/tmp/plugnz-cursor-admission-spec-independent-2a7.log` has
+SHA-256 `49757cd25383ca958a0e704c7a876aa0be9f282f0c40e2b1b44e40a929f84383`.
+Standards independently ran admission, executor, pin and doctor-import checks:
+47 passed, zero failed, 405 assertions, 9.05 seconds; typecheck and diff check
+passed. Neither reviewer edited the frozen candidate.
+
+Integration merge `7e89b008841cd415ab9ea9458bffa014d9df345d` retained all
+candidate commits and the previous combined recovery/ZCode work. Root reran the
+ten-file command above on the actual installed **Bun 1.3.14**: 90 passed,
+zero failed, 913 assertions, 20.19 seconds (terminal test handle `14160`,
+exit zero). `bun run check` terminated successfully (handle `28920`).
+This focused check verifies the preserved Bun runtime floor for this slice,
+not the separate Bun 1.4 differential YAML development gate.
+
+This remains an integration-branch checkpoint, not a main merge or release.
+The known full-suite marketplace adoption execution failure remains required
+work. Read-only admission approval does not certify the missing fence,
+atomic executor, interruption/retry, final receipts or Personal cutover.
