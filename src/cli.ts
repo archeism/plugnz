@@ -1275,7 +1275,7 @@ async function runRecordedLifecycleUpdate(flags: VerbFlags, state: LifecycleStat
       const writer = present.selected.find(candidate => candidate.id === scope.target.kind)!;
       const identity = preparedNativeIdentity(writer, records[activationIndex]!, activation.packageId, activation.sourceRelativeDir);
       importedIdentities.set(activationIndex, identity);
-      if (!identity.adapterResolved || identity.failure !== null || !identity.equivalentNativeIds.has(requested)) return [];
+      if (!identity.adapterResolved || identity.failure !== null || (requested !== identity.package && !identity.equivalentNativeIds.has(requested))) return [];
     }
     return [{ scope, packageId: activation.packageId, activationIndex }];
   });

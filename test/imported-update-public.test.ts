@@ -38,6 +38,38 @@ test('v1 bare ledger accepts only its adapter-proven qualified selector', async 
   });
 });
 
+test('v1 qualified dcode ledger accepts its adapter-proven bare package selector', async () => {
+  await withLifecycleCliHarness(harness => {
+    harness.writeHome({ '.deepagents/.keep': '' });
+    const source = harness.source('dcode-qualified', {
+      'marketplace.json': '{"name":"personal","plugins":[{"name":"demo","source":"./demo"}]}',
+      'demo/plugin.json': '{"name":"demo","version":"1.0.0"}',
+    });
+    const dcode = harness.fakeNative('dcode', Array.from({ length: 32 }, () => ({ args: ['--version'], stdout: 'deepagents-code 0.1.83\n' })));
+    const env = { OPEN_PLUGIN_DCODE_BIN: dcode.path, OPEN_PLUGIN_DCODE_PYTHON_BIN: fakeDcodeLockInterpreter(harness.root) };
+    expect(harness.run(['add', source, '--target', 'dcode', '--json'], { env }).exitCode).toBe(0);
+    writeFileSync(join(harness.home, 'state.json'), JSON.stringify({ version: 1, installs: [
+      { host: 'dcode', id: 'demo@personal', source, sourceSha: 'legacy', sourceDir: join(source, 'demo'), ownership: 'plgnz' },
+    ] }));
+    const foreign = harness.run(['update', 'demo@foreign', '--target', 'dcode', '--json'], { env });
+    const refused = parseLifecycleReport(JSON.parse(foreign.stdout));
+    expect(foreign.exitCode).toBe(1); expect(refused.plan).toEqual([]);
+    expect(refused.summary.reason?.code).toBe('internal.ambiguous-ownership');
+    expect(refused.summary.reason?.diagnostic).toBe("no install record for 'demo@foreign' in state.json — not installed by plgnz; refusing to modify it");
+    expect(foreign.state.after).toEqual(foreign.state.before); expect(foreign.stores.dcode.after).toEqual(foreign.stores.dcode.before);
+    writeFileSync(join(source, 'demo/plugin.json'), '{"name":"demo","version":"1.0.0","description":"bare selected"}');
+    const selected = harness.run(['update', 'demo', '--target', 'dcode', '--json'], { env });
+    const report = parseLifecycleReport(JSON.parse(selected.stdout));
+    expect(selected.exitCode).toBe(0);
+    expect(report.outcomes.map(row => ({ package: row.package, nativeId: row.nativeId, result: row.result }))).toEqual([
+      { package: 'demo', nativeId: 'demo@personal', result: 'succeeded' },
+    ]);
+    expect(Object.entries(selected.stores.dcode.after.files).some(([path, bytes]) =>
+      path.endsWith('/plugin.json') && bytesToText(bytes).includes('bare selected'))).toBe(true);
+    expect(dcode.invocations().every(row => JSON.stringify(row.args) === '["--version"]')).toBe(true);
+  });
+});
+
 test('v1 update refuses a renamed marketplace before any mutation', async () => {
   await withLifecycleCliHarness(harness => {
     harness.writeHome({ '.cursor/.keep': '' });

@@ -127,3 +127,44 @@ compatibility requirement remain unchanged.
 
 `8fe0303` and its failed correction replay remain preserved; root review and
 the combined built-first full gate are required before integration/publication.
+
+## Follow-up: adapter-proven bare selector for a qualified dcode record
+
+Checkpoint `03388b5b968e1fd0938578bd9f7e10083f3b658c` incorrectly rejected
+`update demo` for a persisted `demo@personal` dcode record. The regression starts
+from a modern scoped install and downgrades only the ledger; it is not authentic
+pre-core marker compatibility evidence. On that same candidate, the qualified
+selector succeeds. Release `890e03b` resolves the bare selector but subsequently
+fails with `recovery.required` after a pending write; it is not a successful
+baseline. Ancestor `8fe0303` also accepted the logical selector.
+
+The correction accepts the captured authored package name OR captured exact
+equivalent native IDs, only after adapter resolution proves the persisted ID.
+No raw prefix matching or ownership relaxation was added. The positive verifies
+successful exact native ID and updated native plugin bytes. The foreign selector
+requires exact `internal.ambiguous-ownership`, empty plan, and byte retention.
+
+- RED: new bare dcode case **0 pass / 1 fail / 8 assertions / 1.92s**.
+- First GREEN attempts exposed an incorrect test expectation that the retained
+  historical activation must be the new activation; those failed logs remain.
+  Replaced that assertion with actual updated native bytes; retention unchanged.
+- Focused: `bun test test/imported-update-public.test.ts test/update.test.ts`:
+  **23 pass / 162 assertions / 30.38s**.
+- Built Node 22.23.1: `OPEN_PLUGIN_TEST_PACKED_NODE=/home/charlesfengyc/.local/bin/node bun test test/imported-update-public.test.ts`:
+  **7 pass / 60 assertions / 11.24s**.
+- Pinned Bun 1.4.0 check/build exit 0. CLI SHA256:
+  `33ec0b247a869c5323952396cc743a9fdd62b31184b676eccd787f25fee3ffcf`.
+
+Logs remain in the evidence directory above: RED SHA256
+`8b10092abe20dd6426993d29cc56724be1ba406fb835303d7f6156e81f0ac88c`;
+focused final `204400c4492cfa8815972e9123ca4a0126f9b7d0d2bf311acd01c09f3d13c8fb`;
+packed final `316da38f890a3b806e38e16f8bbd1d525fda2dbc0438f5d4cd41a3531f13a276`;
+check final `8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92`;
+build `d849db55076862347a28cd71f1468ad8c3f101f921620f1f4df5d898f7710dfa`.
+Failed first GREEN logs have SHA256
+`9b709d96464e1b2b28a92edd2631c7e90c9ed1b5bd2ede93982582876f686350`
+and `53f09a4c2081a80ad1dcc8ace4a330aa4a13bc2d400efcccd4c24664ed25f6d9`.
+Root's previous full gate was interrupted (exit 130), NOT passed: `root/full-03388b5-interrupted.log`,
+SHA256 `d948b91fa1325b37513dc34d8ab541f329a5ef5d312b498e4f668249e5f4269f`.
+P11's authentic legacy compatibility limitation remains open. No real native
+execution, integration or publication occurred in this correction.
