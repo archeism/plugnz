@@ -19,15 +19,51 @@ on:
 permissions:
   contents: write
   id-token: write
+  actions: read
 
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+      - name: Refuse to publish past a red Tests suite
+        # Merge-to-main is the release authorization, but the release must not
+        # outrun the regression net added in tests.yml: wait for the Tests run
+        # of this exact commit and publish only on success. A red (or absent)
+        # suite fails this step, so a regression can never ride a merge out.
+        # Dispatch releases skip the gate — dispatch is already a deliberate
+        # human action on a commit that passed its own push's Tests run.
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DEADLINE=$((SECONDS + 1200))
+          while [ "$SECONDS" -lt "$DEADLINE" ]; do
+            RESP=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs?event=push&head_sha=${GITHUB_SHA}&per_page=100" || true)
+            RUN=$(printf '%s' "$RESP" | jq -r '[.workflow_runs[]? | select(.path == ".github/workflows/tests.yml")][0] // empty' 2>/dev/null || true)
+            if [ -n "$RUN" ]; then
+              STATUS=$(printf '%s' "$RUN" | jq -r .status)
+              if [ "$STATUS" = "completed" ]; then
+                CONCLUSION=$(printf '%s' "$RUN" | jq -r .conclusion)
+                if [ "$CONCLUSION" = "success" ]; then
+                  echo "Tests suite green on $GITHUB_SHA — proceeding."
+                  exit 0
+                fi
+                echo "Tests suite concluded: $CONCLUSION — refusing to publish."
+                exit 1
+              fi
+              echo "Tests suite $STATUS on $GITHUB_SHA — waiting…"
+            else
+              echo "No Tests run for $GITHUB_SHA yet — waiting…"
+            fi
+            sleep 20
+          done
+          echo "Timed out waiting for the Tests suite on $GITHUB_SHA — refusing to publish."
+          exit 1
       - uses: actions/setup-node@v6
         with:
           node-version: '24'

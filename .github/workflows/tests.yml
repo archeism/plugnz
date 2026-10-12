@@ -33,5 +33,5 @@ jobs:
         run: |
           bun install --frozen-lockfile
           bun test
-      - name: Typecheck
-        run: bunx tsc --noEmit
+      # No separate typecheck here: node-compat.yml already typechecks every
+      # PR and push in its matrix; this job is the suite net only.
