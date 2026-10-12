@@ -5,7 +5,7 @@ import type { PluginSource } from './source';
 import { createClaudeCodeLifecycleHost, claudeCodeWriter } from './hosts/claude-code-writer';
 import { codexLifecycle, codexWriter } from './hosts/codex-writer';
 import { dcodeLifecycle, dcodeWriter } from './hosts/dcode-writer';
-import { announceCursorDryRun, cursorManagedLifecycle, cursorWriter } from './hosts/cursor-writer';
+import { announceCursorDryRun, cursorManagedLifecycle, cursorWriter, proveCursorSelectedLegacyAdoption } from './hosts/cursor-writer';
 import { createGrokLifecycleAdapter, grokWriter } from './hosts/grok-writer';
 import { hermesLifecycle, hermesWriter } from './hosts/hermes-writer';
 import { kimiLifecycle, kimiWriter, samePhysicalKimiNativeIdentity } from './hosts/kimi-writer';
@@ -45,7 +45,7 @@ export function createLifecyclePlannerHosts(): readonly PlannerHost[] {
     plannerHost('codex', codexLifecycle, codexWriter.plannedNativeId),
     plannerHost('dcode', dcodeLifecycle, dcodeWriter.plannedNativeId),
     { ...plannerHost('kimi', createLifecycleHostAdapter(kimiLifecycle), kimiWriter.plannedNativeId), samePhysicalNativeIdentity: samePhysicalKimiNativeIdentity },
-    plannerHost('cursor', cursorManagedLifecycle, cursorWriter.plannedNativeId, announceCursorDryRun),
+    { ...plannerHost('cursor', cursorManagedLifecycle, cursorWriter.plannedNativeId, announceCursorDryRun), proveLegacyAdoption: proveCursorSelectedLegacyAdoption },
     plannerHost('omp', ompLifecycle, ompWriter.plannedNativeId),
     plannerHost('hermes', hermesLifecycle, hermesWriter.plannedNativeId),
     plannerHost('grok', createGrokLifecycleAdapter(), grokWriter.plannedNativeId),

@@ -67,6 +67,7 @@ export function parseAdoptionAdmission(value: unknown): AdoptionAdmission {
   for (const key of ['attemptId', 'operationId', 'scopeId', 'packageName', 'nativeId', 'sourceSnapshotId']) stable(fresh[key]);
   member(fresh.command, ['add', 'sync']); member(fresh.action, ['install', 'route-migrate']); member(fresh.route, ['managed']); generation(fresh.baseStateGeneration, 0);
   const native = parseCursorAdoptionNativeProof(row.native);
+  if (row.projectedFingerprint !== native.projectedPayloadFingerprint) fail('admission projected fingerprint differs from its exact native payload proof');
   if (fresh.scopeId !== original.scope.id || fresh.packageName !== row.packageName || fresh.nativeId !== native.newNativeId
     || native.oldLedgerNativeId !== original.nativeId || native.packageName !== row.packageName || native.packageVersion !== row.packageVersion
     || target.kind !== original.scope.target.kind || target.instance !== original.scope.target.instance
