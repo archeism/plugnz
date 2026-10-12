@@ -44,7 +44,9 @@ jobs:
           while [ "$SECONDS" -lt "$DEADLINE" ]; do
             RESP=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs?event=push&head_sha=${GITHUB_SHA}&per_page=100" || true)
-            RUN=$(printf '%s' "$RESP" | jq -r '[.workflow_runs[]? | select(.path == ".github/workflows/tests.yml")][0] // empty' 2>/dev/null || true)
+            # The API may return path with an @ref suffix (tests.yml@main);
+            # strip it before matching so the gate can never miss the run.
+            RUN=$(printf '%s' "$RESP" | jq -r '[.workflow_runs[]? | select(((.path // "") | sub("@.*$"; "")) == ".github/workflows/tests.yml")][0] // empty' 2>/dev/null || true)
             if [ -n "$RUN" ]; then
               STATUS=$(printf '%s' "$RUN" | jq -r .status)
               if [ "$STATUS" = "completed" ]; then
