@@ -94,3 +94,14 @@ refused while held, then reacquired the same persistent inode after actual
 SIGKILL. This checkpoint still does not wire the helper into production or
 change the public Node minimum. The known combined end-to-end adoption failure
 remains unresolved; these focused gates do not claim a green full suite.
+
+After the independently reviewed dependent-contract correction, root rebuilt
+the actual Node-target artifact from `8e30057`: 1480 KiB, SHA-256
+`d1acbc05a590ae9af01684ea3bf5480ecd65d574f780a877be5f52b0901cb531`.
+Actual Node 22.23.1 `--help` and `scopes --json` exited zero under an empty
+isolated `OPEN_PLUGIN_HOME`; scopes returned generation zero and no records.
+This supersedes the stale combined bundle for these basic launcher checks only,
+not the older genuine native proof attribution or full adoption acceptance.
+Read-only Sandbox SDK authentication to the exact project/team also succeeded;
+the retained first ZCode acquisition and nine other returned proof sandboxes
+were stopped. No retry or new allocation was performed.
