@@ -68,16 +68,20 @@ describe('native identity preflight coverage', () => {
           outcomes: report.outcomes.map(({ result, reason }) => ({ result, reasonCode: reason?.code })),
           terminalPhase: report.summary.terminalPhase,
           mutationStarted: report.summary.mutationStarted,
+          reasonCode: report.summary.reason?.code,
+          diagnostic: report.summary.reason?.diagnostic,
           stateUnchanged: JSON.stringify(readState()) === before,
         }).toEqual({
           code: 1,
           plannedCalls: 1,
           legacyCalls: 1,
           addCalls: 0,
-          plan: [{ nativeId: null, action: 'not-attempted', route: 'none' }],
-          outcomes: [{ result: 'failed', reasonCode: 'internal.defect' }],
+          plan: [],
+          outcomes: [],
           terminalPhase: 'preflight',
           mutationStarted: false,
+          reasonCode: 'internal.defect',
+          diagnostic: 'selected Codex identity failed',
           stateUnchanged: true,
         });
       });
@@ -227,15 +231,15 @@ describe('native identity preflight coverage', () => {
             stateIds: readState().map(({ id }) => id),
             stateUnchanged: JSON.stringify(readState()) === before,
           }).toEqual({
-            code: 0,
+            code: command === 'update' ? 1 : 0,
             seen: ['planned:target', 'legacy:target'],
-            addCalls: command === 'update' ? 1 : 0,
+            addCalls: 0,
             removeCalls: command === 'remove' && !dryRun ? 1 : 0,
-            plan: [{ packageName: 'target', nativeId: 'target@local', action: command === 'update' ? 'update' : 'retire-orphan' }],
-            outcomes: ['succeeded'],
-            mutationStarted: !dryRun,
-            stateIds: dryRun ? ['target', 'other'] : command === 'update' ? ['target@local', 'other'] : ['other'],
-            stateUnchanged: dryRun,
+            plan: [{ packageName: 'target', nativeId: 'target@local', action: command === 'update' ? 'not-attempted' : 'retire-orphan' }],
+            outcomes: [command === 'update' ? 'failed' : 'succeeded'],
+            mutationStarted: command === 'remove' && !dryRun,
+            stateIds: dryRun || command === 'update' ? ['target', 'other'] : ['other'],
+            stateUnchanged: dryRun || command === 'update',
           });
         });
       }
@@ -304,6 +308,17 @@ describe('native identity preflight coverage', () => {
           }
           const report = parseLifecycleReport(JSON.parse(output.join('')));
 
+          if (command === 'update') {
+            expect({ code, seen, addCalls, removeCalls, plan: report.plan, outcomes: report.outcomes,
+              reasonCode: report.summary.reason?.code, diagnostic: report.summary.reason?.diagnostic,
+              mutationStarted: report.summary.mutationStarted, stateUnchanged: JSON.stringify(readState()) === before }).toEqual({
+              code: 1, seen: ['planned:codex', 'legacy:codex', 'planned:omp', 'legacy:omp'], addCalls: 0, removeCalls: 0,
+              plan: [], outcomes: [], reasonCode: 'internal.defect', diagnostic: 'selected Codex identity failed',
+              mutationStarted: false, stateUnchanged: true,
+            });
+            return;
+          }
+
           expect({
             code,
             seen,
@@ -321,7 +336,7 @@ describe('native identity preflight coverage', () => {
             removeCalls: 0,
             plan: [
               { target: 'codex', nativeId: null, action: 'not-attempted', route: 'none' },
-              { target: 'omp', nativeId: 'demo@local', action: command === 'update' ? 'update' : 'retire-orphan', route: 'managed' },
+              { target: 'omp', nativeId: 'demo@local', action: 'retire-orphan', route: 'managed' },
             ],
             outcomes: [
               { target: 'codex', result: 'failed', reasonCode: 'internal.defect' },
@@ -422,8 +437,8 @@ describe('native identity preflight coverage', () => {
             legacyCalls: 2,
             addCalls: 0,
             removeCalls: 0,
-            plan: [{ packageName: 'demo', nativeId: 'demo', action: 'not-attempted', route: 'none' }],
-            outcomes: [{ result: 'failed', reasonCode: 'internal.ambiguous-ownership' }],
+            plan: command === 'update' ? [] : [{ packageName: 'demo', nativeId: 'demo', action: 'not-attempted', route: 'none' }],
+            outcomes: command === 'update' ? [] : [{ result: 'failed', reasonCode: 'internal.ambiguous-ownership' }],
             terminalPhase: 'preflight',
             mutationStarted: false,
             reasonCode: 'internal.ambiguous-ownership',
@@ -590,15 +605,15 @@ describe('native identity preflight coverage', () => {
             mutationStarted: report.summary.mutationStarted,
             stateIds: readState().map(({ id }) => id),
           }).toEqual({
-            code: 0,
+            code: command === 'update' ? 1 : 0,
             plannedCalls: 2,
             legacyCalls: 2,
-            addCalls: command === 'update' ? 1 : 0,
+            addCalls: 0,
             removeCalls: command === 'remove' && !dryRun ? 1 : 0,
-            plan: [{ packageName: 'demo', nativeId: 'demo@personal', action: command === 'update' ? 'update' : 'retire-orphan', route: 'managed' }],
-            outcomes: [{ result: 'succeeded', reasonCode: undefined }],
-            terminalPhase: 'complete',
-            mutationStarted: !dryRun,
+            plan: [{ packageName: 'demo', nativeId: 'demo@personal', action: command === 'update' ? 'not-attempted' : 'retire-orphan', route: command === 'update' ? 'none' : 'managed' }],
+            outcomes: [{ result: command === 'update' ? 'failed' : 'succeeded', reasonCode: command === 'update' ? 'capability.unverified' : undefined }],
+            terminalPhase: command === 'update' ? (dryRun ? 'preflight' : 'apply') : 'complete',
+            mutationStarted: command === 'remove' && !dryRun,
             stateIds: dryRun || command === 'update' ? ['demo', 'demo@personal'] : ['demo'],
           });
         });
@@ -668,6 +683,17 @@ describe('native identity preflight coverage', () => {
                 console.log = originalLog;
               }
               const report = parseLifecycleReport(JSON.parse(output.join('')));
+
+              if (command === 'update') {
+                expect({ code, plannedCalls, legacyCalls, addCalls, removeCalls, plan: report.plan, outcomes: report.outcomes,
+                  reasonCode: report.summary.reason?.code, diagnostic: report.summary.reason?.diagnostic,
+                  mutationStarted: report.summary.mutationStarted, stateUnchanged: JSON.stringify(readState()) === before }).toEqual({
+                  code: 1, plannedCalls: throwOn, legacyCalls: throwOn, addCalls: 0, removeCalls: 0, plan: [], outcomes: [],
+                  reasonCode: 'internal.defect', diagnostic: throwOn === 1 ? 'undefined' : `${failingHook === 'planned' ? 'planned identity' : 'legacy identity'} failure ${throwOn}`,
+                  mutationStarted: false, stateUnchanged: true,
+                });
+                return;
+              }
 
               expect({
                 code,

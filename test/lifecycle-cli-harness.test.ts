@@ -507,6 +507,8 @@ describe('isolated lifecycle CLI harness', () => {
       const historicalBytes = JSON.stringify(historical);
       harness.writeHome({ 'state.json': historicalBytes });
 
+      harness.fakeNative('codex', Array.from({ length: 32 }, () => ({ args: ['--version'], stdout: 'codex-cli 0.162.0\n' })));
+
       const preview = harness.run(['update', 'demo', '--target', 'codex', '--dry-run', '--json']);
       const previewReport = parseLifecycleReport(JSON.parse(preview.stdout));
       expect({
@@ -1094,33 +1096,27 @@ describe('isolated lifecycle CLI harness', () => {
         exitCode: 1,
         stderr: '',
         outcome: [{
-          action: 'update',
-            result: 'failed',
-          route: 'managed',
+          action: 'not-attempted',
+          result: 'failed',
+          route: 'none',
           resourceState: 'unknown',
           activationState: 'unknown',
           changed: false,
           reason: {
-            category: 'runtime',
-            code: 'runtime.operation-failed',
-            diagnostic: "host not present on this machine — 'demo@local' skipped",
-            capabilityId: null,
+            category: 'capability',
+            code: 'capability.unverified',
+            diagnostic: "target 'claude-code' has no verified native install profile for version 'unknown/unparseable' and local Sources",
+            capabilityId: 'profile',
             evidenceId: null,
           },
         }],
         summary: {
           result: 'incomplete',
-          terminalPhase: 'preflight',
+          terminalPhase: 'apply',
           mutationStarted: false,
           changed: false,
-          failureCategory: 'runtime',
-          reason: {
-            category: 'runtime',
-            code: 'runtime.operation-failed',
-            diagnostic: "host not present on this machine — 'demo@local' skipped",
-            capabilityId: null,
-            evidenceId: null,
-          },
+          failureCategory: 'capability',
+          reason: null,
           recoveryId: null,
           readbackId: null,
         },
@@ -1182,7 +1178,7 @@ describe('isolated lifecycle CLI harness', () => {
         exitCode: 1,
         stderr: '',
         outcome: [{
-          action: 'update',
+          action: 'install',
           result: 'failed',
           route: 'managed',
           resourceState: 'unknown',

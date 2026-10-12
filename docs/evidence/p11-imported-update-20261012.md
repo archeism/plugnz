@@ -280,3 +280,75 @@ before assertions, so corrupt-state failure cannot satisfy ownership controls.
 The initial dependency command included nonexistent `test/recovery.test.ts`;
 only its four actual legacy files counted. The subsequent four recovery-* files
 were separately executed (both before and after the metadata correction).
+
+## Full-gate corrections: recorded selection and authoritative test seams
+
+Root's immutable `e7f04f72feb55a4cc24f7a8cef16d7ed901c651e` full gate FAILED:
+**928 pass / 10 fail / 6 existing skips / 7148 assertions / 696.11s**,
+`root/full-e7f04f7.log` SHA256
+`507ec4b1510f9f8fe5c8f8a73e2f0c89ccaeebfdcae483eaf3b3e341f4f6b0b5`.
+Corrections use owned `/tmp/plugnz-p11-selection-preflight`, branch
+`fix/p11-selection-preflight`; original frozen worktree was not edited during its
+full gate. `ad50468` preserves new RED collision/experimental Kimi inputs.
+
+### Explicit mapping of all ten failures
+
+| Original case | Disposition and surviving acceptance |
+| --- | --- |
+| Native identity: selected historical root alias throws | Propagate the captured selected error as exact `internal.defect`, empty global plan/outcomes, no writes. Both dry-run/apply and both capture callbacks remain checked. |
+| Native identity: unselected hostile package | Genuine production regression: coarse eligibility now excludes unrelated records BEFORE Source/adapter capture, without granting alias ownership. Exact observed callback list excludes `other`. Existing mocked core has no verified Codex version, so it truthfully refuses that unrelated profile; real known-profile Codex positive remains in harness test. |
+| Native identity: Codex defect stops OMP | Genuine swallowed-error regression fixed. Exact selected diagnostic and both adapter-capture callbacks retained, global empty plan/outcomes and byte retention replace old independent per-row result synthesis. |
+| Native identity: Cursor cross-Source canonical collision | Genuine public regression independently RED with modern scoped marker and two v1 Source claims. Exact captured canonical native identity correlates claims only to REFUSE cross-Source ambiguity; no alias ownership grant. Both original injected case and real-bin negative remain. |
+| Native identity: distinct Kimi root/marketplace IDs | Old positive only called injected `writer.add`, bypassing verified Native update policy. Preserve distinct identities/no collision in original test; authoritative public Kimi 2.0.1 fixture returns exact evidenced `capability.unsupported`, retains ledger/store bytes. Original successful-update compatibility criterion is NOT delivered by this safety cutover. No new Native profile claimed. |
+| Native identity: failure ordinal 1/2/3 in planned/legacy callbacks | Preserve all six ordinals, both dry-run/apply, exact thrown diagnostic (including `undefined`), callback counts through failing ordinal, global empty plan/outcomes and no writes. Add/remove original per-row checks unchanged. |
+| Harness: authentic three-field historical Cursor marker positive | UNCHANGED and STILL FAILING. Missing proved legacy adoption executor/mutation fence prevents safe migration. No skip, waiver, unsupported-green replacement, or old-writer fallback. Separate modern-marker/qualified-v1 positive proves pins/history/canonical retry/removal only for its accurately named input format. |
+| Harness: legacy Codex root canonical install | Preserve successful dry-run/apply/canonical ledger and duplicate refusal. Supply actual isolated `codex --version` fixture 0.162.0, the existing verified profile; original input had no version fixture. This creates a canonical fresh native install from recorded Source, not authentic prior-native adoption proof. |
+| Harness: non-finalized Claude update | Preserve failed/not-converged/no-write truth and exact third version-probe failure. Current core reports typed `capability.unverified` unknown version instead of obsolete old-engine skipped text/action. Exact three invocations still required. |
+| Harness: intent cannot persist | Preserve actual EACCES, runtime failure, no Native/ledger writes. Only expected action changes to core `install`: this fixture's native store is absent, unlike a proved update. |
+
+The all-record ownership key now uses the exact captured/recorded native ID,
+not authored package name. A real-bin dcode positive installs two modern Sources
+with authored `demo` and distinct `demo@local`/`demo@personal` native IDs, updates
+both, and verifies both actual native payloads and ledger rows. This was RED
+before the key fix; it is not a claim about two physical Kimi same-name installs.
+Preparation also reuses the existing canonical legacy/bare alias relation to
+carry nonpending metadata/pins BEFORE staged projection/seal, with optional or
+equal Source-relative directory, rather than changing generic ledger lookup.
+
+Public H01 controls additionally update an imported agent-bearing valid dcode
+Source with unknown/unparseable and unmatched 0.1.84 version replies: exact typed
+capability reason, no unsafe Native bytes changed, only version invocations.
+Allowed Desired persistence is not falsely prohibited.
+
+### Verification and retained failures
+
+- Nine-correction replay: **19 pass / 95 assertions / 13.15s**.
+- Focused native-identity/imported/update/new public controls: **42 pass / 383 assertions / 53.55s** (before final separate modern Cursor positive).
+- Built Node 22.23.1 new public controls including that positive: **6 pass / 50 assertions / 11.37s**.
+- Shared executor/planner/actual Cursor admission-composition dependencies: **53 pass / 578 assertions / 8.96s**; `selection-core-dependencies.log` SHA256 `4908ce852da211d203e3664b5251401331d0979c48e48a03ca33accfed891f3d`.
+- Built Node full harness plus initial new controls: **34 pass / 1 FAIL / 89 assertions / 17.45s**. The one failure is the unchanged authentic three-field Cursor acceptance above; this gate is NOT green and release remains blocked pending owner direction/fenced migration.
+- Pinned Bun 1.4.0 final check/build/diff: exit 0. CLI SHA256
+  `89105acf820247153701c44fc1d25e2ad90205143936fa302ca70b7b9d621dad`.
+  Final check log SHA256 `8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92`; build log SHA256 `5ab4377519d53ef9594e808f7b591b5697802b12d46e18f2a1f0eadbe7a05144`.
+
+Retained evidence directory is unchanged. Selected logs/SHA256:
+
+| Log | SHA256 |
+| --- | --- |
+| unselected-identity-e7-red.log | `8867becefe685f469fa6c01d2fd5dce3913502908135eb41ad7041fdde2718b8` |
+| selection-nativeid-red.log | `63688db95b1cc906e17fbb877df14d92a3bd8b59f8462ca31b344258904979d3` |
+| selection-nine-focused.log | `db14ea4f762d151bd1488c601a48a8d453b74bc6eaa49a75c8586ad11334d2db` |
+| selection-focused-final.log | `33b893bb9276337a8ab65be54d1644e7692e497ee66635d3c32e1484dfd82a00` |
+| selection-packed-controls-final.log | `010a5327628de1185001fe8b9deb22ca8aa0219bf9eb5c8538a2403ff729fc59` |
+| selection-packed-with-known-gap.log | `ca2dfe3aac972b8c823e2925f400f2589b13348c22d56c46ffe681ff11ed8660` |
+| selection-kimi-selected.log | `02f476ac430f9dc9f35371777f936766ab19616af2c75f5420fef263c1d2412e` |
+
+Failed attempts remain: a Kimi fixture whose shebang relied on Bun excluded by
+the real-bin harness PATH; corrected to the pinned test runtime before evaluating
+Native behavior. Actual two-source Kimi coexistence then failed sealed readback:
+its current adapter manages paths/registry by authored package name, so that
+experimental input cannot prove two active native identities. No profile/path
+rewrite was invented. Callback migration initially used `continue` inside an
+async fixture callback; corrected to callback `return`, preserving outer ordinals.
+Typecheck caught unreachable update comparisons after narrowing to remove;
+corrected without removing any remove acceptance. All logs and ancestors survive.

@@ -754,10 +754,13 @@ class Ledger {
   activationForPreparation(plan: FrozenPlan, operation: LifecyclePlanOperation, nativeId: string): ActivationRecord | undefined {
     const exact = this.activation(operation.scope.id, operation.package, nativeId);
     if (exact !== undefined) return exact;
-    const aliases = this.state.activations.filter(row => sameNativeImportedAlias(row, {
-      scopeId: operation.scope.id, packageId: operation.package, nativeId,
-      sourceRelativeDir: sourceRelativeDir(plan, operation),
-    }));
+    const canonical = { scopeId: operation.scope.id, packageId: operation.package, nativeId,
+      sourceRelativeDir: sourceRelativeDir(plan, operation) };
+    const aliases = this.state.activations.filter(row => row.pending === undefined
+      && (row.sourceRelativeDir === undefined || row.sourceRelativeDir === canonical.sourceRelativeDir)
+      && (sameNativeImportedAlias(row, canonical)
+        || legacyMarketplaceAlias(row, canonical)
+        || isBareMarketplaceAlias(row, canonical.scopeId, canonical.packageId, canonical.nativeId)));
     if (aliases.length > 1) throw new Error('multiple imported activations match the exact prepared native identity');
     return aliases[0];
   }
@@ -1087,7 +1090,7 @@ function activationKey(activation: ActivationRecord): string {
   return `${activation.scopeId}\0${activation.packageId}\0${activation.nativeId}`;
 }
 
-function legacyMarketplaceAlias(row: ActivationRecord, canonical: ActivationRecord): boolean {
+function legacyMarketplaceAlias(row: ActivationRecord, canonical: Pick<ActivationRecord, 'scopeId' | 'packageId' | 'nativeId' | 'sourceRelativeDir'>): boolean {
   if (row.scopeId !== canonical.scopeId) return false;
   if (row.route.kind !== 'legacy-unverified' || row.ownership.kind !== 'legacy-claim') return false;
   // Verified activation replaces only this exact, nonpending imported identity.

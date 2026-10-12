@@ -1273,9 +1273,12 @@ async function runRecordedLifecycleUpdate(flags: VerbFlags, state: LifecycleStat
     if (requested !== undefined && requested !== activation.packageId && requested !== activation.nativeId) {
       if (scope.authority !== 'legacy-import') return [];
       const writer = present.selected.find(candidate => candidate.id === scope.target.kind)!;
+      // Eligibility only: the captured exact equivalence set still grants selection.
+      if (!requestedPersistedIdentityMatches(writer, activation.packageId, activation.nativeId, requested)) return [];
       const identity = preparedNativeIdentity(writer, records[activationIndex]!, activation.packageId, activation.sourceRelativeDir);
       importedIdentities.set(activationIndex, identity);
-      if (!identity.adapterResolved || identity.failure !== null || (requested !== identity.package && !identity.equivalentNativeIds.has(requested))) return [];
+      if (identity.failure !== null) return [{ scope, packageId: activation.packageId, activationIndex }];
+      if (!identity.adapterResolved || (requested !== identity.package && !identity.equivalentNativeIds.has(requested))) return [];
     }
     return [{ scope, packageId: activation.packageId, activationIndex }];
   });
@@ -1306,24 +1309,35 @@ async function runRecordedLifecycleUpdate(flags: VerbFlags, state: LifecycleStat
     const record = records[activationIndex]!;
     const writer = present.selected.find(candidate => candidate.id === match.scope.target.kind)!;
     const identity = importedIdentities.get(activationIndex) ?? preparedNativeIdentity(writer, record, match.packageId, activation.sourceRelativeDir);
+    importedIdentities.set(activationIndex, identity);
     if (!identity.adapterResolved || identity.failure !== null) {
       return reportFor('update', flags.dryRun, [], [], { terminalPhase: 'preflight', mutationStarted: false,
         reason: identity.failure ?? reason('internal', 'internal.ambiguous-ownership', `recorded package '${activation.nativeId}' no longer has an exact Source/native binding`) });
     }
     match.packageId = identity.package;
   }
-  const owned = new Map<string, { kind: string; instance: string; packageId: string }>();
+  const owned = new Map<string, { kind: string; instance: string; packageId: string; scopeId: string }>();
   for (const match of plannerMatches) {
-    const key = `${match.scope.target.kind}/${match.scope.target.instance}/${match.packageId}`;
+    const nativeId = importedIdentities.get(match.activationIndex)?.nativeId ?? state.activations[match.activationIndex]!.nativeId;
+    const key = `${match.scope.target.kind}/${match.scope.target.instance}/${nativeId}`;
     const previous = owned.get(key);
-    if (previous !== undefined) {
+    const otherClaim = state.activations.some((activation, index) => {
+      const scope = scopes.get(activation.scopeId);
+      if (scope === undefined || scope.id === match.scope.id
+        || scope.target.kind !== match.scope.target.kind || scope.target.instance !== match.scope.target.instance) return false;
+      const captured = importedIdentities.get(index);
+      return (captured?.adapterResolved ? captured.nativeId : activation.nativeId) === nativeId;
+    });
+    if (previous !== undefined || otherClaim) {
       return reportFor('update', flags.dryRun, [], [], {
         terminalPhase: 'preflight',
         mutationStarted: false,
         reason: reason(
           'internal',
           'internal.ambiguous-ownership',
-          `multiple ${previous.kind}/${previous.instance} deployment scopes own native package '${previous.packageId}'`,
+          previous?.scopeId === match.scope.id
+            ? `multiple ${match.scope.target.kind} ledger records match native identity '${nativeId}'`
+            : `multiple ${match.scope.target.kind}/${match.scope.target.instance} deployment scopes own native package '${match.packageId}'`,
         ),
       });
     }
@@ -1331,6 +1345,7 @@ async function runRecordedLifecycleUpdate(flags: VerbFlags, state: LifecycleStat
       kind: match.scope.target.kind,
       instance: match.scope.target.instance,
       packageId: match.packageId,
+      scopeId: match.scope.id,
     });
   }
   const byScope = new Map<string, { scope: LifecycleStateV2['scopes'][number]; packages: string[] }>();
