@@ -34,3 +34,36 @@ Raw logs: `~/.local/state/plugnz-evidence/20261012/global-orphan-ownership/`. Ru
 | packed-node-green.log | `2582f5ad66cc5768ac37c91c15862e32dc5caf9bc88388b005a251b0e3063189` |
 
 The ambient Bun 1.3.14 rejected this repository's lockfile version; installation used the already-available 1.4.0 binary with `--frozen-lockfile`, without changing dependencies or the lockfile. Skill decision: Addy TDD/incremental/Git/documentation methods used unchanged; no skill improvement is claimed. No publication, fleet update, real installation change, or complete child-issue closure is claimed by this checkpoint.
+
+## Root integration acceptance
+
+Both independent axes approved frozen `e61f7c5733c2b458a656825e4f01565a2e97f3ff`,
+tree `6f1cb95a6f078568edd358aa21a368a221105fd0`. Standards found no actionable
+violations. Spec independently ran the planner and public regressions with Bun
+1.4.0: **16 pass / 217 assertions / 8.78s**, including capability-local and V1
+retention controls. No review correction or scope expansion was required.
+
+Root ran `bun run build && bun run check && bun test` on that exact frozen tree,
+with Bun 1.4.0 and Node 22.23.1 available on the controlled PATH. Terminal exit:
+**0**. Full suite: **933 pass / 0 fail / 6 existing skips / 6922 assertions**,
+939 tests across 93 files, **655.94s**. The skips remain opt-in Native/platform
+evidence gaps, not waived acceptance or successful Native probes.
+Root log `root-full-gate.log` in the evidence directory above has SHA256
+`f69621ae33ab3a24144030010946b0a239dbb9c6d8d3a460a045ecce9b4a044c`.
+Merge `34d0cd019dd8f9141cdc89b23cd9064d1b2c02a5` preserves the author commit and
+has the identical tested tree; this acceptance appendix is the only later edit.
+
+Independent complete P07/P09 acceptance audit found both child deliverables
+closure-eligible after this gate. Planner evidence covers final-scope defects,
+pair-local capability continuation, explicit/unfiltered selectors, V1 authority
+withholding, stable operation IDs and read-only dry-run. Retirement evidence
+covers A/B-to-A byte-preserving retirement/tombstones, failed-scope orphan
+retention, foreign/unproven/ambiguous ownership refusal, Source-free offline and
+exact manual retirement, filtered scope lookup and retained data/metadata.
+See `test/planner.test.ts`, `test/orphan-ownership-public.test.ts`,
+`test/executor.test.ts`, `test/lifecycle-public-commands.test.ts` and
+`test/recovery-inventory-public.test.ts` for these accepted controls.
+
+This does not close P08, P10, legacy adoption/fencing, shared writer locking,
+complete host proof or released dcode semantic parity. Publication and actual
+registry-byte verification are separate subsequent checkpoints. Skills unchanged.
