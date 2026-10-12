@@ -1,9 +1,10 @@
 // One complete scenario per controller-owned immutable root; no home relocation.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { accessSync, constants, copyFileSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { accessSync, constants, copyFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
+import { verifySupplierEntry } from './codex-preserved-native-inventory.mjs';
 
 const [arm, source, v1, v2, v3, baseline] = process.argv.slice(2);
 assert(['rollback', 'foreign', 'cache', 'inactive', 'sparse', 'malformed'].includes(arm));
@@ -35,20 +36,14 @@ function verifySupplier() {
     try { accessSync(path, constants.W_OK); writable = true; } catch (error) { assert.equal(error.code, 'EACCES'); }
     assert.equal(writable, false, `Existing supplier input is writable by Native case: ${path}`);
   }
-  for (const row of supplierInput.inventory) {
-    const path = join(supplier, row.path), stat = lstatSync(path);
-    if (row.kind === 'file') {
-      assert(stat.isFile()); assert.equal(stat.size, row.bytes); assert.equal(stat.mode & 0o777, row.mode);
-      assert.equal(createHash('sha256').update(readFileSync(path)).digest('hex'), row.sha256);
-    } else if (row.kind === 'directory') { assert(stat.isDirectory()); assert.equal(stat.mode & 0o777, row.mode); }
-  }
+  for (const row of supplierInput.inventory) verifySupplierEntry(supplier, row);
   assert.equal(binarySha(), '50ed828f357c655a3c82054d346cab8434f24901f14ec19b8267571bdd008b38');
 }
 verifySupplier();
 writeFileSync(join(root, 'supplier-provenance.json'), JSON.stringify({ ...supplierInput, supplierRoot: supplier, caseUid: process.getuid(), groups: process.getgroups(), caps, binaryBefore: binarySha() }, null, 2), { flag: 'wx' });
 assert.match(source, /^https:\/\/github\.com\/archeism\/plugnz\.git#proof\/codex-b029c54-source-20261011(?:-[a-z0-9-]+)?$/);
 for (const revision of [v1, v2, v3]) assert.match(revision, /^[a-f0-9]{40}$/);
-for (const name of ['probe', 'boundary', 'surfaces', 'preflight', 'run']) {
+for (const name of ['probe', 'boundary', 'surfaces', 'preflight', 'run', 'inventory']) {
   copyFileSync(`/vercel/sandbox/proof/codex-preserved-native-${name}.mjs`, join(root, `codex-preserved-native-${name}.mjs`));
 }
 copyFileSync('/vercel/sandbox/proof/plugnz-frozen-b029c54.mjs', join(root, 'plugnz-candidate.mjs'));
