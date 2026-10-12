@@ -117,8 +117,10 @@ export function resolveSource(source: string): FrozenSource {
     return resolvedSource(sourceUri, sha, isGit, snapshot, targetDir, plugins);
   }
 
-  // 3. Recursive scan (1 level deep)
-  for (const entry of readdirSync(targetDir)) {
+  // 3. Recursive scan (1 level deep). Sort so the frozen plan order is
+  // directory-name deterministic rather than readdir/filesystem order —
+  // mutation --json reports an ordered plan (docs/implementation-contract.md).
+  for (const entry of readdirSync(targetDir).sort()) {
     const subDir = join(targetDir, entry);
     if (statSync(subDir).isDirectory() && isPluginDir(subDir)) {
       plugins.push(pluginFromDir(subDir, undefined, targetDir, sourceRoot));
