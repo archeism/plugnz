@@ -782,13 +782,7 @@ async function planOmissions(
       ));
     }
     if (!hostRevalidated(installation, item.scope.id) || item.host === null || item.observation === null) {
-      operations.push(notAttemptedRetirement(
-        operationIdentity('retirement', item.scope.id, activation.packageId, activation.nativeId, activation.sourceRevision ?? 'unrecorded'),
-        item.scope,
-        activation,
-        `ownership of '${activation.packageId}' was not revalidated`,
-      ));
-      continue;
+      return unrevalidatedRetirement(activation);
     }
     const retired = await selectRetirement(item.host, item.observation, item.scope, activation, attemptId, null);
     if (retired.kind === 'defect') return retired;
@@ -818,18 +812,7 @@ async function planRetire(
       ));
     }
     if (!hasRetirementAuthority(activation) || !hostRevalidated(installation, item.scope.id) || item.host === null || item.observation === null) {
-      operations.push(classified(
-        operationIdentity('retirement', item.scope.id, activation.packageId, activation.nativeId, activation.sourceRevision ?? 'unrecorded'),
-        'retirement',
-        item.scope,
-        null,
-        activation.packageId,
-        activation.nativeId,
-        'not-attempted',
-        'none',
-        createLifecycleReason('internal', 'internal.invariant', `ownership of '${activation.packageId}' was not revalidated`),
-      ).operation);
-      continue;
+      return unrevalidatedRetirement(activation);
     }
     const retired = await selectRetirement(item.host, item.observation, item.scope, activation, attemptId, item.recorded.source);
     if (retired.kind === 'defect') return retired;
@@ -967,7 +950,7 @@ async function selectRetirement(
   const operationId = operationIdentity('retirement', scope.id, activation.packageId, activation.nativeId, `${activation.sourceRevision ?? 'unrecorded'}\0${attemptId}`);
   const installation = observation.installations.find((row) => row.nativeId === activation.nativeId);
   if (installation === undefined) {
-    return { kind: 'planned', operation: notAttemptedRetirement(operationId, scope, activation, 'ownership was not revalidated') };
+    return unrevalidatedRetirement(activation);
   }
   let version: TargetVersionObservation;
   try {
@@ -977,7 +960,7 @@ async function selectRetirement(
   }
   const recorded = recordedActivation(scope, source ?? scope.source, activation, installation, observation.target);
   if (recorded === null) {
-    return { kind: 'planned', operation: notAttemptedRetirement(operationId, scope, activation, 'ownership was not revalidated') };
+    return unrevalidatedRetirement(activation);
   }
   const decision = await decideRecordedRoute(host, observation, recorded, operationId, attemptId, 'retire', version);
   if (decision.kind === 'defect') return decision;
@@ -1226,18 +1209,8 @@ function planOperation(
   return { operationId, coverage, scope, sourceSnapshotId, package: packageName, nativeId, action, route };
 }
 
-function notAttemptedRetirement(operationId: string, scope: DeploymentScopeIdentity, activation: ActivationRecord, diagnostic: string): FrozenOperation {
-  return classified(
-    operationId,
-    'retirement',
-    scope,
-    null,
-    activation.packageId,
-    activation.nativeId,
-    'not-attempted',
-    'none',
-    createLifecycleReason('internal', 'internal.invariant', diagnostic),
-  ).operation;
+function unrevalidatedRetirement(activation: ActivationRecord): Defect {
+  return defect(createLifecycleReason('internal', 'internal.invariant', `ownership of '${activation.packageId}' was not revalidated`));
 }
 
 function chosenAction(
