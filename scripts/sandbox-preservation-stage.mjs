@@ -50,6 +50,10 @@ export function stageBundle(bundle, sources) {
       } else {
         assert.equal(row.kind, 'file'); assert.ok(stat.isFile() && !stat.isSymbolicLink());
         assert.equal(stat.size, row.bytes); assert.equal(stat.mode & 0o777, row.mode); assert.equal(hash(src), row.sha256);
+        if (row.device !== undefined || row.inode !== undefined) {
+          assert.equal(String(stat.dev), row.device, 'Archive source device changed after measurement');
+          assert.equal(String(stat.ino), row.inode, 'Archive source inode changed after measurement');
+        }
         assert.equal(stat.dev, lstatSync(bundle).dev, 'Cross-device staging would require an unbudgeted content copy');
         linkSync(src, dst);
       }

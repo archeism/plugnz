@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { preservationProfile, validatePreservationBudget } from './sandbox-preservation-budget.mjs';
 
 const [configPath] = process.argv.slice(2);
 const config = JSON.parse(readFileSync(configPath, 'utf8'));
@@ -13,25 +14,16 @@ assert.match(config.sandbox, /^plugnz-[a-z0-9-]+$/u);
 assert.ok(config.project && config.team && config.cli);
 assert.ok(Number.isSafeInteger(config.experimentUid) && config.experimentUid >= 2000 && config.experimentUid <= 60000);
 assert.ok(Number.isSafeInteger(config.archiveAt) && config.archiveAt > Date.now());
-const acquisition = config.operation === 'acquisition';
-const archiveMs = acquisition ? 240_000 : 50_000;
-const downloadMs = acquisition ? 300_000 : 60_000;
-// Larger acquisition archives get explicit conservative transport bounds;
-// tiny probes are not a throughput certification for 768 MiB.
-const reserveMs = 15_000 + 15_000 + archiveMs + downloadMs + (acquisition ? 60_000 : 30_000);
-assert.ok(config.expiresAt - config.archiveAt >= reserveMs, 'Reserve complete bounded preservation pipeline');
-assert.ok(config.diskGrowthBytes > 0 && config.diskGrowthBytes <= 3 * 1024 ** 3);
 assert.ok(Number.isSafeInteger(config.baselineUsedBytes) && config.baselineUsedBytes > 0, 'Freeze wholeFS baseline before supplier acquisition');
-assert.ok(config.operation === undefined || ['acquisition', 'native-proof', 'method-probe'].includes(config.operation));
-assert.ok(config.diskReserveBytes >= (acquisition ? 896 : 128) * 1024 ** 2);
-assert.ok(config.archiveBytes > 0 && config.archiveBytes <= (acquisition ? 768 : 100) * 1024 ** 2);
 assert.match(config.evidenceRoot, /^\/vercel\/sandbox\/proof\/[a-zA-Z0-9_-]+$/u);
 const output = resolve(config.output);
-if (acquisition) {
+const profile = preservationProfile(config.operation);
+let availableBytes = Number.POSITIVE_INFINITY;
+if (profile.minLocalFreeBytes > 0) {
   const df = spawnSync('df', ['-Pk', dirname(output)], { encoding: 'utf8' }); assert.equal(df.status, 0);
-  const available = Number(df.stdout.trim().split('\n').at(-1).trim().split(/\s+/u)[3]) * 1024;
-  assert.ok(available >= 3 * 1024 ** 3, 'Acquisition requires three GiB local archive/restore headroom');
+  availableBytes = Number(df.stdout.trim().split('\n').at(-1).trim().split(/\s+/u)[3]) * 1024;
 }
+const { archiveMs, downloadMs, reserveMs } = validatePreservationBudget(config, availableBytes);
 assert.ok(!existsSync(output), 'Local attempt directory cannot be overwritten');
 mkdirSync(output, { recursive: true, mode: 0o700 });
 writeFileSync(join(output, 'config.json'), JSON.stringify(config, null, 2), { flag: 'wx', mode: 0o600 });
@@ -122,13 +114,16 @@ const preserve = () => preservePromise ??= (async () => {
 })();
 const helperPath = fileURLToPath(new URL('./sandbox-preservation-remote.mjs', import.meta.url));
 const stagePath = fileURLToPath(new URL('./sandbox-preservation-stage.mjs', import.meta.url));
-for (const [name, path] of [['controller', fileURLToPath(import.meta.url)], ['remote', helperPath], ['stage', stagePath]]) {
+const budgetPath = fileURLToPath(new URL('./sandbox-preservation-budget.mjs', import.meta.url));
+for (const [name, path] of [['controller', fileURLToPath(import.meta.url)], ['remote', helperPath], ['stage', stagePath], ['budget', budgetPath]]) {
   const bytes = readFileSync(path);
   writeFileSync(join(output, `${name}.mjs`), bytes, { flag: 'wx' });
   writeFileSync(join(output, `${name}.sha256`), createHash('sha256').update(bytes).digest('hex'), { flag: 'wx' });
 }
 for (const args of [['copy', helperPath, `${config.sandbox}:${remoteHelper}`],
-  ['copy', stagePath, `${config.sandbox}:/vercel/sandbox/proof/sandbox-preservation-stage.mjs`], ['copy', configPath, `${config.sandbox}:${remoteConfig}`]]) {
+  ['copy', stagePath, `${config.sandbox}:/vercel/sandbox/proof/sandbox-preservation-stage.mjs`],
+  ['copy', budgetPath, `${config.sandbox}:/vercel/sandbox/proof/sandbox-preservation-budget.mjs`],
+  ['copy', configPath, `${config.sandbox}:${remoteConfig}`]]) {
   const result = await cli(args, 20_000); assert.equal(result.code, 0, result.stderr);
 }
 assert.ok(Date.now() < config.archiveAt && config.expiresAt - Date.now() >= reserveMs, 'Setup consumed preservation reserve; refuse native launch');

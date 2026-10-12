@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-for (const mode of ['fail', 'wait', 'partial']) test(`preservation controller retains ${mode} without agent interaction`, () => {
+for (const mode of ['fail', 'wait', 'partial', 'fast-partial']) test(`preservation controller retains ${mode} without agent interaction`, () => {
   const root = mkdtempSync('/tmp/plugnz-preservation-test-');
   try {
     const cli = join(root, 'cli');
@@ -23,9 +23,17 @@ for (const mode of ['fail', 'wait', 'partial']) test(`preservation controller re
     if (!existsSync(join(config.output, 'receipt.json'))) throw new Error(`${result.stderr}\n${readFileSync(join(config.output, 'preservation-failure.json'), 'utf8')}`);
     const receipt = JSON.parse(readFileSync(join(config.output, 'receipt.json'), 'utf8'));
     expect(receipt.reason).toBe(mode === 'wait' ? 'archive-deadline' : 'supplier-failure');
-    expect(receipt.restoredFiles).toBe(1);
+    expect(receipt.restoredFiles).toBe(mode === 'fast-partial' ? 2 : 1);
     expect(readFileSync(join(config.output, 'restored/trial/sentinel'), 'utf8')).toBe('retained fixture');
     if (mode === 'partial') expect(readFileSync(join(config.output, 'restored/suppliers/0/unknown'), 'utf8')).toBe('unknown partial bytes');
+    if (mode === 'fast-partial') {
+      const stopped = JSON.parse(readFileSync(join(root, 'writer-stopped.json'), 'utf8'));
+      const source = readFileSync(join(root, 'evidence/prefix'));
+      expect(stopped.stopped).toBe('retention-budget'); expect(stopped.bytes).toBe(source.length);
+      expect(readFileSync(join(config.output, 'restored/trial/prefix'))).toEqual(source);
+      const pid = Number(readFileSync(join(root, 'writer-pid'), 'utf8'));
+      expect(() => process.kill(pid, 0)).toThrow();
+    }
     const original = readFileSync(join(config.output, 'receipt.json'), 'utf8');
     config.archiveAt = Date.now() + 5000; config.expiresAt = Date.now() + 240_000; metadata();
     writeFileSync(configPath, JSON.stringify(config));
@@ -60,6 +68,35 @@ test('acquisition accepts the measured 768 MiB cap with 896 MiB scratch reserve 
     expect(existsSync(join(config.output, 'receipt.json'))).toBe(true);
     expect(readFileSync(join(config.output, 'restored/trial/sentinel'), 'utf8')).toBe('retained fixture');
   });
+});
+
+test('private large acquisition accepts only the reviewed preservation envelope', () => {
+  const root = mkdtempSync('/tmp/plugnz-preservation-test-');
+  try {
+    const bin = join(root, 'bin'); mkdirSync(bin);
+    const df = join(bin, 'df');
+    writeFileSync(df, '#!/bin/sh\nprintf "Filesystem 1024-blocks Used Available Capacity Mounted on\\nfixture 10000000 1000 7340032 1%% /\\n"\n');
+    chmodSync(df, 0o755);
+    const cli = join(root, 'cli');
+    writeFileSync(cli, `#!${process.execPath}\n${readFileSync(resolve('test/fixtures/preservation-transport.mjs'), 'utf8')}`); chmodSync(cli, 0o755);
+    const now = Date.now();
+    const config = { sandbox: 'plugnz-fixture', project: 'fixture', team: 'fixture', cli,
+      experimentUid: 21001, evidenceRoot: '/vercel/sandbox/proof/fixture', output: join(root, 'output'),
+      operation: 'private-large-acquisition', baselineUsedBytes: 1, archiveAt: now + 5000, expiresAt: now + 785_000,
+      diskGrowthBytes: 6 * 1024 ** 3, diskReserveBytes: 2944 * 1024 ** 2,
+      archiveBytes: 2816 * 1024 ** 2, retainedBodyBytes: 2560 * 1024 ** 2, command: ['fail'] };
+    config.sdkRoot = join(root, 'sdk'); mkdirSync(join(config.sdkRoot, 'dist/auth'), { recursive: true });
+    writeFileSync(join(config.sdkRoot, 'dist/index.js'), `export const Sandbox={get:async()=>({name:'plugnz-fixture',status:'running',expiresAt:new Date(${config.expiresAt})})};`);
+    writeFileSync(join(config.sdkRoot, 'dist/auth/index.js'), 'export const getAuth=()=>({});');
+    const configPath = join(root, 'config.json'); writeFileSync(configPath, JSON.stringify(config));
+
+    const result = spawnSync(process.execPath, [resolve('scripts/sandbox-preservation-controller.mjs'), configPath], {
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, OPEN_PLUGIN_PRESERVATION_TRANSPORT_ROOT: root },
+      encoding: 'utf8', timeout: 10_000 });
+    expect(result.status).toBe(1); // transport's intentional supplier failure
+    expect(existsSync(join(config.output, 'receipt.json'))).toBe(true);
+    expect(readFileSync(join(config.output, 'restored/trial/sentinel'), 'utf8')).toBe('retained fixture');
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 for (const [label, overrides] of [
