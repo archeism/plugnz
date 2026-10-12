@@ -84,6 +84,40 @@ Both independent axes must re-review this corrected frozen checkpoint; actual
 adoption execution, durable mutation recovery and full-suite acceptance remain
 unfinished, not excluded.
 
+## Strict reader host binding
+
+On integration base `584ab4a`, a rehashed Cursor native proof could be parsed under
+a valid dcode Source/target scope. The composer already checked the adapter, but
+the standalone public admission reader did not require the native adapter to equal
+the target host. Both the pure reader and `parseLifecycleReport` accepted the
+forged correlated scope/target/fresh identity before the fix.
+
+The reader now requires `native.adapterId === target.kind`. The permanent public
+regression retains a genuine Cursor preview control, then independently rebinds
+the original scope, fresh scope and report operations to valid dcode and Codex
+scopes and recomputes the canonical admission ID. Both readers must reject the
+wrong-host native proof. No target-instance mapping, alias heuristic, native
+capability or execution authority was added.
+
+```sh
+bun test test/cursor-admission-composition-public.test.ts test/legacy-adoption-record-public.test.ts test/legacy-adoption-proof.test.ts test/legacy-adoption-public.test.ts test/lifecycle-report.test.ts test/cursor-adoption-projection-public.test.ts test/doctor-imports.test.ts
+bun run check
+git diff --check
+```
+
+Result: 48 passed, zero failed, 555 assertions, 16.72 seconds across seven files;
+typecheck and diff check exited zero. The reader's planner, public report and
+retained-record callers were scanned; consumers mirroring the reader must include
+the same binding predicate. No full-suite/adoption-execution acceptance is claimed.
+
+Durable raw logs and dependent scan:
+`/home/charlesfengyc/.local/state/plugnz-evidence/20261012/admission-native-host-binding/`.
+RED `plugnz-admission-native-host-both-red.log` SHA-256
+`908ecb8f0123d74e2c8844f3be7adc13ec76fcdb3f537be3ab3c1b74857899c2`;
+focused GREEN `plugnz-admission-native-host-focused.log` SHA-256
+`fb708645effa3e7f9e0e1b9424da7bd4cebca43e6f3e2a965a1cbe37b5b1f0d9`.
+Skill instructions were used unchanged; independent review remains required.
+
 ## Corrected candidate and combined verification
 
 Corrected candidate `2a7ca8b084e50927f1b0facf3808e97a61fab1ed` received
