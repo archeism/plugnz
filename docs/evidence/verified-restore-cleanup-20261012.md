@@ -44,3 +44,39 @@ not a permanent launch authorization: remeasure before any new acquisition.
 The previous fresh-restore receipts remain historical evidence. Their named
 temporary directories no longer exist; the durable archives above are the
 current recovery sources. This cleanup changes no runtime capability claim.
+
+## Second independently verified duplicate cohort
+
+Reviewer `/root/native_git_standards` independently compared original and
+permanent archives with every existing restore path/body/mode/link, checked
+exact real paths and absence of nested mounts, and performed a privileged
+process cwd/root/exe/FD/maps scan: zero users. Root rechecked all 13 exact
+non-symlink directories and cwd/root/exe/FD users immediately before removal.
+Only these duplicate restores were removed:
+
+1. `/tmp/plugnz-kimi-final-c72-01/restored`
+2. `/tmp/plugnz-codex-independent-l0cCtL`
+3. `/tmp/plugnz-codex-independent-sB7vWC`
+4. `/tmp/plugnz-codex-independent-qlvtsU`
+5. `/tmp/plugnz-codex-independent-fqqVXW`
+6. `/tmp/plugnz-codex-independent-kmHr6b`
+7. `/tmp/plugnz-codex-independent-DVb0L5`
+8. `/tmp/plugnz-codex-b029c54-rollback-02/restored`
+9. `/tmp/plugnz-codex-b029c54-foreign-01/restored`
+10. `/tmp/plugnz-codex-b029c54-cache-01/restored`
+11. `/tmp/plugnz-codex-b029c54-inactive-01/restored`
+12. `/tmp/plugnz-codex-b029c54-sparse-01/restored`
+13. `/tmp/plugnz-codex-b029c54-malformed-01/restored`
+
+Native Codex recovery archives and all metadata remain at
+`/home/charlesfengyc/.local/state/plugnz-evidence/20261012/codex-native-final-c72/`;
+the [accepted Native receipt](codex-b029c54-native-accepted-20261012.md) records
+the six exact archive hashes and restore instructions. Kimi uses the permanent
+archive above. All original archive/config/receipt/helper/log parents and failed
+guard attempts were retained; no user backup or real installation was touched.
+
+This cohort's unique allocated duplicate bytes: **483,463,168**. Available space
+immediately afterward: **8,322,068,480 bytes**. Other machine activity can change
+free space, so this difference is not attributed entirely to this cleanup and
+the launch-time floor must still be rechecked. No throughput or capability claim
+is added by deleting these verified duplicate copies.
