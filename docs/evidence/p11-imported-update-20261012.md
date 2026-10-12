@@ -168,3 +168,52 @@ Root's previous full gate was interrupted (exit 130), NOT passed: `root/full-033
 SHA256 `d948b91fa1325b37513dc34d8ab541f329a5ef5d312b498e4f668249e5f4269f`.
 P11's authentic legacy compatibility limitation remains open. No real native
 execution, integration or publication occurred in this correction.
+
+## Follow-up: canonical same-native retry and pending custody
+
+Independent review reproduced a successful `update demo` at `74b7c08` leaving
+both imported `demo@personal` and confirmed `demo` activations for the same scope
+and native ID. An immediate retry refused ambiguity. The new repeated-update
+public assertion failed (**0 pass / 1 fail / 11 assertions / 2.44s**).
+
+The existing executor alias supersession now also replaces a nonpending
+legacy-unverified/legacy-claim row whose package ID equals its native ID, with
+the verified canonical activation having that exact scope/native ID and equal
+Source-relative directory. This runs only at verified confirmation, not before
+mutation. It does not discard unrelated claims or synthesize a retirement
+tombstone for a still-installed native package.
+
+The shared planner preflight separately refuses differently named imported
+pending claims for the exact selected scope/native ID. This follows explicit
+adoption composition, preserves its diagnostics, and does not change modern
+sealed recovery or the existing distinct bare-native legacy repair policy.
+The public pending install/remove controls cover update/add/sync, empty plan,
+typed `internal.invariant`, and unchanged ledger/native bytes. Before the guard,
+these tests failed (**0 pass / 2 fail / 10 assertions / 2.69s**) on nonempty plans.
+No new pending journal-custody policy was invented.
+
+The positive retains foreign refusal, verifies updated native bytes, retries
+successfully with one canonical activation, then removes successfully with a
+real retained-state tombstone. All completed prior attempts are retained exactly;
+the pending refusal controls retain the entire original state byte-for-byte.
+These fixtures still downgrade modern markers, not authentic legacy authority.
+
+- Focused `bun test test/imported-update-public.test.ts test/update.test.ts test/executor.test.ts test/planner.test.ts`:
+  **74 pass / 702 assertions / 34.02s**. The final additional attempt/tombstone
+  retention assertions are also covered by the built Node gate below.
+- Built Node 22.23.1 `OPEN_PLUGIN_TEST_PACKED_NODE=/home/charlesfengyc/.local/bin/node bun test test/imported-update-public.test.ts`:
+  **9 pass / 106 assertions / 12.90s**.
+- Pinned Bun 1.4.0 check/build and `git diff --check`: exit 0. CLI SHA256
+  `cdffb0b396653d4701cf4bf370be66534085e59cceaf6d630729cc01e240ff1d`.
+
+Evidence log SHA256s: retry RED
+`5b17464aeda7c8edb9f4f94341ec2e956b96697d0b88cc022970c15e98577c1a`;
+pending RED `260cd8f8dec0309966dd75100f65403683ebc6a9bb23e59eb6b17c30033918ae`;
+focused `6ca4fe70de1644187f05fefcda9c1113d99d8c43801000420e0674e71e006509`;
+packed `7af2131cd30b316f5aae18778c085941427edc5d842f998def0f694d911f6776`;
+check `8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92`;
+build `5ab4377519d53ef9594e808f7b591b5697802b12d46e18f2a1f0eadbe7a05144`.
+Root's `74b7c08` full gate was interrupted, exit 130, NOT passed (SHA256
+`5d907e3ae9f995438a1866cdd86bc14be2105f40b2d31fdcd833da98e8c8c00f`).
+All ancestors and failed evidence remain preserved; independent review precedes
+the next full gate. Authentic pre-core compatibility and P11 closure remain open.

@@ -1079,6 +1079,10 @@ function activationKey(activation: ActivationRecord): string {
 function legacyMarketplaceAlias(row: ActivationRecord, canonical: ActivationRecord): boolean {
   if (row.scopeId !== canonical.scopeId) return false;
   if (row.route.kind !== 'legacy-unverified' || row.ownership.kind !== 'legacy-claim') return false;
+  // Verified activation replaces only this exact, nonpending imported identity.
+  if (row.nativeId === canonical.nativeId && row.packageId === row.nativeId
+    && row.packageId !== canonical.packageId && row.pending === undefined
+    && row.sourceRelativeDir === canonical.sourceRelativeDir) return true;
   const separator = row.nativeId.indexOf('@');
   if (separator <= 0 || row.packageId !== row.nativeId) return false;
   const name = row.nativeId.slice(0, separator);

@@ -66,7 +66,50 @@ test('v1 qualified dcode ledger accepts its adapter-proven bare package selector
     ]);
     expect(Object.entries(selected.stores.dcode.after.files).some(([path, bytes]) =>
       path.endsWith('/plugin.json') && bytesToText(bytes).includes('bare selected'))).toBe(true);
+    const retry = harness.run(['update', 'demo', '--target', 'dcode', '--json'], { env });
+    expect(retry.exitCode).toBe(0);
+    const retried = JSON.parse(bytesToText(retry.state.after!));
+    expect(retried.activations.map((row: { packageId: string; nativeId: string }) => ({ package: row.packageId, nativeId: row.nativeId }))).toEqual([
+      { package: 'demo', nativeId: 'demo@personal' },
+    ]);
+    const removed = harness.run(['remove', 'demo', '--target', 'dcode', '--json'], { env });
+    expect(removed.exitCode).toBe(0);
+    const retired = JSON.parse(bytesToText(removed.state.after!));
+    expect(retired.activations).toEqual([]);
+    expect(retired.tombstones.map((row: { packageId: string; nativeId: string }) => ({ package: row.packageId, nativeId: row.nativeId }))).toEqual([
+      { package: 'demo', nativeId: 'demo@personal' },
+    ]);
+    expect(retried.attempts.every((attempt: { id: string }) =>
+      retired.attempts.some((kept: { id: string }) => JSON.stringify(kept) === JSON.stringify(attempt)))).toBe(true);
+    expect(retired.tombstones[0].retentionState).toBe('plugin-state-retained');
+    expect(retired.tombstones[0].sourceRelativeDir).toBe('demo');
     expect(dcode.invocations().every(row => JSON.stringify(row.args) === '["--version"]')).toBe(true);
+  });
+});
+
+for (const pending of ['install', 'remove'] as const) test(`same-native qualified v1 pending ${pending} is retained by every public install verb`, async () => {
+  await withLifecycleCliHarness(harness => {
+    harness.writeHome({ '.deepagents/.keep': '' });
+    const source = harness.source('pending-qualified', {
+      'marketplace.json': '{"name":"personal","plugins":[{"name":"demo","source":"./demo"}]}',
+      'demo/plugin.json': '{"name":"demo","version":"1.0.0"}',
+    });
+    const dcode = harness.fakeNative('dcode', Array.from({ length: 48 }, () => ({ args: ['--version'], stdout: 'deepagents-code 0.1.83\n' })));
+    const env = { OPEN_PLUGIN_DCODE_BIN: dcode.path, OPEN_PLUGIN_DCODE_PYTHON_BIN: fakeDcodeLockInterpreter(harness.root) };
+    expect(harness.run(['add', source, '--target', 'dcode', '--json'], { env }).exitCode).toBe(0);
+    writeFileSync(join(harness.home, 'state.json'), JSON.stringify({ version: 1, installs: [
+      { host: 'dcode', id: 'demo@personal', source, sourceSha: 'legacy', sourceDir: join(source, 'demo'), ownership: 'plgnz', pending },
+    ] }));
+    for (const argv of [['update', 'demo'], ['add', source], ['sync', source, '--plugin', 'demo']]) {
+      const result = harness.run([...argv, '--target', 'dcode', '--json'], { env });
+      const report = parseLifecycleReport(JSON.parse(result.stdout));
+      expect(result.exitCode).toBe(1);
+      expect(report.summary.reason?.code).toBe('internal.invariant');
+      expect(report.summary.mutationStarted).toBe(false);
+      expect(report.plan).toEqual([]);
+      expect(result.state.after).toEqual(result.state.before);
+      expect(result.stores.dcode.after).toEqual(result.stores.dcode.before);
+    }
   });
 });
 

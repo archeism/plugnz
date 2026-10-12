@@ -224,6 +224,12 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
     for (const selected of item.selected) {
       const nativeId = plannedNativeIdFor(item, selected.plugin);
       if (nativeId instanceof Error) return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.defect', unknownErrorDiagnostic(nativeId)));
+      const pendingAlias = loaded.state.activations.find(row => row.scopeId === item.scope.id
+        && row.nativeId === nativeId && row.packageId !== selected.plugin.name
+        && row.route.kind === 'legacy-unverified' && row.ownership.kind === 'legacy-claim'
+        && row.pending !== undefined);
+      if (pendingAlias !== undefined) return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.invariant',
+        `package '${pendingAlias.packageId}' has pending ${pendingAlias.pending!.operation} work that requires recovery before planning`));
       const samePhysicalIds = new Set<string>();
       const admission = item.admissions?.get(selected.plugin.name);
       if (admission !== undefined) samePhysicalIds.add(admission.native.oldLedgerNativeId);
