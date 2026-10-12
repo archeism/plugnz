@@ -7,6 +7,45 @@ export function startLargeRetentionSupervisor({ root, suppliers, config, profile
   recordAllocated = () => {}, intervalMs = 500, measurementDeadlineMs = 750 }) {
   let closed = false, halted = false, worker = null, deadline = null;
   const requestStop = reason => { if (closed || halted) return; halted = true; stop(reason); };
+  const finishCycle = () => { clearTimeout(deadline); deadline = null; };
+  const launchMeasurement = () => {
+    if (closed || halted) return;
+    let current;
+    try {
+      current = worker = new Worker(new URL('./sandbox-preservation-monitor.mjs', import.meta.url),
+        { workerData: { root, suppliers } });
+    } catch (error) {
+      finishCycle(); requestStop(`measurement-failed: ${String(error)}`); return;
+    }
+    let settled = false;
+    const settleWorker = () => {
+      if (settled) return false;
+      settled = true;
+      if (worker === current) worker = null;
+      return true;
+    };
+    current.once('message', result => {
+      if (!settleWorker()) return;
+      if (result.unstable === 'ENOENT') {
+        // The original cycle deadline remains armed across complete rescans.
+        queueMicrotask(launchMeasurement); return;
+      }
+      finishCycle();
+      if (result.error !== undefined) requestStop(`measurement-failed: ${result.error}`);
+      else {
+        const reason = retentionStopReason(result.measurement, config, profile);
+        if (reason !== null) requestStop(reason); else queueMicrotask(sample);
+      }
+    });
+    current.once('error', error => {
+      if (!settleWorker()) return;
+      finishCycle(); requestStop(`measurement-failed: ${String(error)}`);
+    });
+    current.once('exit', code => {
+      if (code === 0 || !settleWorker()) return;
+      finishCycle(); requestStop(`measurement-worker-exit-${code}`);
+    });
+  };
   const sample = () => {
     if (closed || halted) return;
     try {
@@ -14,30 +53,12 @@ export function startLargeRetentionSupervisor({ root, suppliers, config, profile
       if (allocated - baseline >= config.diskGrowthBytes - config.diskReserveBytes) {
         requestStop('disk-budget'); return;
       }
-      if (worker !== null) return;
-      const current = worker = new Worker(new URL('./sandbox-preservation-monitor.mjs', import.meta.url),
-        { workerData: { root, suppliers } });
-      let settled = false;
-      const settle = () => {
-        if (settled) return false;
-        settled = true; clearTimeout(deadline); deadline = null;
-        if (worker === current) worker = null;
-        return true;
-      };
+      if (worker !== null || deadline !== null) return;
       deadline = setTimeout(() => {
-        if (!settle()) return;
-        requestStop('retention-measurement-deadline'); void current.terminate();
+        const current = worker; worker = null; finishCycle();
+        requestStop('retention-measurement-deadline'); if (current !== null) void current.terminate();
       }, measurementDeadlineMs);
-      current.once('message', result => {
-        if (!settle()) return;
-        if (result.error !== undefined) requestStop(`measurement-failed: ${result.error}`);
-        else {
-          const reason = retentionStopReason(result.measurement, config, profile);
-          if (reason !== null) requestStop(reason); else queueMicrotask(sample);
-        }
-      });
-      current.once('error', error => { if (settle()) requestStop(`measurement-failed: ${String(error)}`); });
-      current.once('exit', code => { if (code !== 0 && settle()) requestStop(`measurement-worker-exit-${code}`); });
+      launchMeasurement();
     } catch (error) { requestStop(`measurement-failed: ${String(error)}`); }
   };
   sample();
