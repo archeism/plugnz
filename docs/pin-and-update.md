@@ -1,7 +1,7 @@
 # pin and update
 
 Two verbs that act on installs **plgnz knows about**, plus the
-`state.json` fields they share. Code: `src/pin.ts`, `src/update.ts`,
+`state.json` fields they share. Code: `src/pin.ts`, `src/cli.ts`, `src/executor.ts`,
 `src/mcp.ts` (`pinPluginMcpFiles`), one `pin()` per host module.
 
 ## Why `pin` exists
@@ -58,37 +58,33 @@ a plugin whose source plgnz does not know.
 
 ## `update`
 
-`update [name]` walks the **ledger**, never the host stores, and for each
-record re-resolves the recorded `source`, re-runs that host's `add`, and
-re-applies the recorded pins:
+`update [name]` selects exact recorded Source/package/native bindings. Both
+imported v1 and modern v2 records use the shared lifecycle core:
 
-1. **re-resolve** — `resolveSource` re-reads a git source at its head
-   (`git ls-remote` for a URL, `rev-parse HEAD` for a local checkout). The
-   clone cache is keyed by sha, so a moved head lands in a fresh directory.
-2. **re-add** — version-addressed stores (claude-code, codex, omp) get a new
-   cache slot; the copy-based stores (kimi, cursor) replace their copy. kimi's
-   `plugins/managed/<id>` is *not* version-addressed, so its `add` deletes and
-   re-copies rather than keeping the first tree — that is what "re-materialize"
-   means here, and it is why `add` is idempotent.
-3. **re-pin** — for each server name in the record's `pins`, the host's `pin`
-   runs again with `only: pins` (so a re-add never silently pins servers that
-   were never pinned).
+1. Freeze and preflight every selected Source and observed host before writes.
+2. Stage the candidate and reapply recorded pins before sealing its projected
+   fingerprint or activating it.
+3. Apply, read back and finalize through the recovery journal. A mutation failure
+   stops later mutations; add/update never prune omitted packages.
+
+Imported ownership is revalidated, not inferred from a package name. Legacy
+identity migration or adoption without a proven executor/fence refuses before
+writes; the old per-host re-add engine is not a fallback.
 
 Refusals:
 
 - `name` given, no record → `✗ … refusing to modify it`, exit 1. plgnz
   has no basis for calling another tool's install up to date, and a re-add
   would quietly take ownership of it.
-- source gone or no longer providing the plugin → `✗`, exit 1, store untouched.
-- host not on this machine → `!` skipped, exit 0.
+- source gone or no longer providing the exact package → nonzero, store untouched.
+- unsupported/unverified host operation → typed nonzero capability refusal.
 
 `--dry-run` writes neither the copy nor the ledger.
 
 ## state.json
 
-See `docs/state.md` for the full shape. `pins` is the only field this phase
-adds; it is optional, and absent means `pin` has never rewritten anything for
-that install.
+See `docs/state.md` for the full shape. V2 activations retain their pin server
+names alongside Source/projected/installed fingerprints and recovery history.
 
 ## Evidence
 

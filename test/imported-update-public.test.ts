@@ -1,0 +1,110 @@
+import { expect, test } from 'bun:test';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { bytesToText, withLifecycleCliHarness } from './lifecycle-cli-harness';
+import { parseLifecycleReport } from '../src/lifecycle-report';
+import { fakeDcodeLockInterpreter } from './dcode-fake-lock';
+
+test('v1 update refuses a renamed marketplace before any mutation', async () => {
+  await withLifecycleCliHarness(harness => {
+    harness.writeHome({ '.cursor/.keep': '' });
+    const source = harness.source('market', {
+      'marketplace.json': '{"name":"original","plugins":[{"name":"demo","source":"./demo"}]}',
+      'demo/plugin.json': '{"name":"demo","version":"1.0.0"}',
+    });
+    const cursor = harness.fakeNative('cursor', Array.from({ length: 24 }, () => ({ args: ['--version'], stdout: '2.4.0\n' })));
+    const env = { OPEN_PLUGIN_CURSOR_BIN: cursor.path };
+    const added = harness.run(['add', source, '--target', 'cursor', '--json'], { env });
+    expect(added.exitCode).toBe(0);
+    writeFileSync(join(harness.home, 'state.json'), JSON.stringify({ version: 1, installs: [
+      { host: 'cursor', id: 'demo@original', source, sourceSha: 'legacy', sourceDir: join(source, 'demo'), ownership: 'plgnz' },
+    ] }));
+    writeFileSync(join(source, 'marketplace.json'), '{"name":"renamed","plugins":[{"name":"demo","source":"./demo"}]}');
+    const result = harness.run(['update', 'demo@original', '--target', 'cursor', '--json'], { env });
+    const report = parseLifecycleReport(JSON.parse(result.stdout));
+    expect(result.exitCode).toBe(1);
+    expect(report.summary.mutationStarted).toBe(false);
+    expect(report.plan).toEqual([]);
+    expect(result.state.after).toEqual(result.state.before);
+    expect(Object.values(result.stores).every(store => JSON.stringify(store.after) === JSON.stringify(store.before))).toBe(true);
+  });
+});
+
+test('v1 dcode update reports authored agents as a typed capability gap', async () => {
+  await withLifecycleCliHarness(harness => {
+    harness.writeHome({ '.deepagents/.keep': '' });
+    const source = harness.source('dcode', { 'plugin.json': '{"name":"demo","version":"1.0.0"}' });
+    const dcode = harness.fakeNative('dcode', Array.from({ length: 32 }, () => ({ args: ['--version'], stdout: 'deepagents-code 0.1.83\n' })));
+    const env = { OPEN_PLUGIN_DCODE_BIN: dcode.path, OPEN_PLUGIN_DCODE_PYTHON_BIN: fakeDcodeLockInterpreter(harness.root) };
+    expect(harness.run(['add', source, '--target', 'dcode', '--json'], { env }).exitCode).toBe(0);
+    writeFileSync(join(harness.home, 'state.json'), JSON.stringify({ version: 1, installs: [
+      { host: 'dcode', id: 'demo@local', source, sourceSha: 'legacy', sourceDir: source, ownership: 'plgnz' },
+    ] }));
+    mkdirSync(join(source, 'agents'));
+    writeFileSync(join(source, 'agents/helper.md'), '---\nname: helper\ndescription: helper\n---\n\nAuthored agent.\n');
+    const result = harness.run(['update', 'demo@local', '--target', 'dcode', '--json'], { env });
+    const report = parseLifecycleReport(JSON.parse(result.stdout));
+    expect(result.exitCode).toBe(1);
+    const failure = report.outcomes[0]?.reason;
+    expect({ category: failure?.category, code: failure?.code, capabilityId: failure?.capabilityId }).toEqual({ category: 'capability', code: 'capability.unverified', capabilityId: 'profile' });
+    expect(report.outcomes[0]?.reason?.diagnostic).toBe("target 'dcode' has no verified native update profile for version '0.1.83' and local Sources");
+    expect(report.summary.mutationStarted).toBe(false);
+    expect(result.stores.dcode.after).toEqual(result.stores.dcode.before);
+    expect(dcode.invocations().every(row => JSON.stringify(row.args) === '["--version"]')).toBe(true);
+  });
+});
+
+test('v1 update reapplies a recorded pin in the sealed activation', async () => {
+  await withLifecycleCliHarness(harness => {
+    harness.writeHome({ '.cursor/.keep': '' });
+    const source = harness.source('pinned', {
+      'plugin.json': '{"name":"demo","version":"1.0.0"}',
+      'mcp.json': '{"mcpServers":{"demo":{"command":"node","args":[]}}}',
+    });
+    const cursor = harness.fakeNative('cursor', Array.from({ length: 24 }, () => ({ args: ['--version'], stdout: '2.4.0\n' })));
+    const env = { OPEN_PLUGIN_CURSOR_BIN: cursor.path };
+    expect(harness.run(['add', source, '--target', 'cursor', '--json'], { env }).exitCode).toBe(0);
+    expect(harness.run(['pin', '--target', 'cursor'], { env }).exitCode).toBe(0);
+    const prior = readFileSync(join(harness.home, '.cursor/plugins/local/demo/mcp.json'), 'utf8');
+    writeFileSync(join(harness.home, 'state.json'), JSON.stringify({ version: 1, installs: [
+      { host: 'cursor', id: 'demo', source, sourceSha: 'legacy', sourceDir: source, ownership: 'plgnz', pins: ['demo'] },
+    ] }));
+    writeFileSync(join(source, 'plugin.json'), '{"name":"demo","version":"1.0.0","description":"changed"}');
+    const result = harness.run(['update', 'demo', '--target', 'cursor', '--json'], { env });
+    const report = parseLifecycleReport(JSON.parse(result.stdout));
+    expect(result.exitCode).toBe(0);
+    expect(report.outcomes[0]?.result).toBe('succeeded');
+    const state = JSON.parse(bytesToText(result.state.after!));
+    expect(state.version).toBe(2);
+    expect(state.activations[0].pins).toEqual(['demo']);
+    expect(state.attempts.some((attempt: any) => attempt.journal.some((row: any) => row.sealedOperation?.projectedFingerprint === state.activations[0].fingerprints.projected))).toBe(true);
+    expect(readFileSync(join(harness.home, '.cursor/plugins/local/demo/mcp.json'), 'utf8')).toBe(prior);
+    writeFileSync(join(source, 'mcp.json'), '{"mcpServers":{"demo":{"command":"missing-pin-executable-fixture","args":[]}}}');
+    const refused = harness.run(['update', 'demo', '--target', 'cursor', '--json'], { env });
+    expect(refused.exitCode).toBe(1);
+    expect(parseLifecycleReport(JSON.parse(refused.stdout)).summary.mutationStarted).toBe(false);
+    expect(refused.stores.cursor.after).toEqual(refused.stores.cursor.before);
+  });
+});
+
+for (const pending of [undefined, 'install'] as const) test(`v1 unproven ${pending ?? 'owned'} update refuses before any mutation`, async () => {
+  await withLifecycleCliHarness(harness => {
+    harness.writeHome({ '.cursor/.keep': '' });
+    const source = harness.source('legacy', { 'plugin.json': '{"name":"demo","version":"1.0.0"}' });
+    const cursor = harness.fakeNative('cursor', Array.from({ length: 24 }, () => ({ args: ['--version'], stdout: '2.4.0\n' })));
+    const env = { OPEN_PLUGIN_CURSOR_BIN: cursor.path };
+    expect(harness.run(['add', source, '--target', 'cursor', '--json'], { env }).exitCode).toBe(0);
+    writeFileSync(join(harness.home, '.cursor/plugins/local/demo/.plgnz-install.json'), JSON.stringify({ source, pluginId: 'demo', fingerprint: 'legacy' }));
+    writeFileSync(join(harness.home, 'state.json'), JSON.stringify({ version: 1, installs: [
+      { host: 'cursor', id: 'demo', source, sourceSha: 'legacy', sourceDir: source, ownership: 'plgnz', ...(pending ? { pending } : {}) },
+    ] }));
+    const result = harness.run(['update', 'demo', '--target', 'cursor', '--json'], { env });
+    const report = parseLifecycleReport(JSON.parse(result.stdout));
+    expect(result.exitCode).toBe(1);
+    expect(report.summary.terminalPhase).toBe('preflight');
+    expect(report.summary.mutationStarted).toBe(false);
+    expect(report.summary.failureCategory).toBe('internal');
+    expect(result.state.after).toEqual(result.state.before);
+    expect(Object.values(result.stores).every(store => JSON.stringify(store.after) === JSON.stringify(store.before))).toBe(true);
+  });
+});

@@ -24,6 +24,74 @@ afterAll(() => {
 });
 
 describe('lifecycle executor', () => {
+  test('an update completed before a later failure stays confirmed while subsequent updates stop', async () => {
+    const root = temp('update-completed-before-failure'), home = join(root, 'home'); mkdirSync(home);
+    const alpha = writePlugin(join(root, 'sources'), 'alpha'), beta = writePlugin(join(root, 'sources'), 'beta'), gamma = writePlugin(join(root, 'sources'), 'gamma');
+    const codex = boundHost('codex', join(root, 'codex'), ['install', 'update']), cursor = boundHost('cursor', join(root, 'cursor'), ['install', 'update']);
+    await withHome(home, async () => {
+      const batch = manifest([syncEntry(alpha, 'codex'), syncEntry(beta, 'cursor'), syncEntry(gamma, 'codex')]);
+      const initial = expectFrozen(await planLifecycle({ manifest: batch, dryRun: false, validatedAt: now, hosts: [codex.planner, cursor.planner] }));
+      expect((await executeLifecycle({ plan: initial, hosts: [codex.planner, cursor.planner], now })).exitCode).toBe(0);
+      const first = codex.fake.installedFingerprint('alpha'), later = codex.fake.installedFingerprint('gamma');
+      for (const [path, name] of [[alpha, 'alpha'], [beta, 'beta'], [gamma, 'gamma']]) writeFileSync(join(path!, 'plugin.json'), JSON.stringify({ name, version: '1.0.0', description: 'changed' }));
+      const plan = expectFrozen(await planLifecycle({ manifest: batch, dryRun: false, command: 'update', validatedAt: now, hosts: [codex.planner, cursor.planner] }));
+      cursor.fake.failPhase = 'managed:apply';
+      const result = await executeLifecycle({ plan, hosts: [codex.planner, cursor.planner], now });
+      expect(result.exitCode).toBe(1);
+      expect(result.report.outcomes.map(row => row.result)).toEqual(['succeeded', 'failed', 'not-attempted']);
+      expect(codex.fake.installedFingerprint('alpha') === first).toBe(false);
+      expect(codex.fake.installedFingerprint('gamma')).toBe(later);
+      const loaded = readLifecycleState().state;
+      expect(loaded.activations.find(row => row.packageId === 'alpha')?.fingerprints.installed).toBe(codex.fake.installedFingerprint('alpha'));
+      const attempt = loaded.attempts.find(row => row.id === plan.attemptId)!;
+      expect(attempt.journal.find(row => row.packageId === 'alpha')?.state).toBe('completed');
+      expect(attempt.journal.some(row => row.packageId === 'gamma')).toBe(false);
+    });
+  });
+  for (const phase of ['stage', 'pins', 'managed:apply', 'readback', 'finalize'] as const) test(`update ${phase} failure retains the prior and stops the later update`, async () => {
+    const root = temp(`update-${phase.replace(':', '-')}`), home = join(root, 'home');
+    mkdirSync(home);
+    const alpha = writePlugin(join(root, 'sources'), 'alpha'), beta = writePlugin(join(root, 'sources'), 'beta');
+    const codex = boundHost('codex', join(root, 'codex'), ['install', 'update']);
+    const cursor = boundHost('cursor', join(root, 'cursor'), ['install', 'update']);
+    await withHome(home, async () => {
+      const batch = manifest([syncEntry(alpha, 'codex'), syncEntry(beta, 'cursor')]);
+      const initial = expectFrozen(await planLifecycle({ manifest: batch, dryRun: false, validatedAt: now, hosts: [codex.planner, cursor.planner] }));
+      expect((await executeLifecycle({ plan: initial, hosts: [codex.planner, cursor.planner], now })).exitCode).toBe(0);
+      const prior = codex.fake.installedFingerprint('alpha'), later = cursor.fake.hostMutationState();
+      writeFileSync(join(alpha, 'plugin.json'), JSON.stringify({ name: 'alpha', version: '1.0.0', description: 'update' }));
+      writeFileSync(join(beta, 'plugin.json'), JSON.stringify({ name: 'beta', version: '1.0.0', description: 'update' }));
+      const plan = expectFrozen(await planLifecycle({ manifest: batch, dryRun: false, command: 'update', validatedAt: now, hosts: [codex.planner, cursor.planner] }));
+      expect(plan.operations.map(row => row.operation.action)).toEqual(['update', 'update']);
+      let applyingState = '', corrupted = false;
+      const failing: PlannerHost = phase !== 'finalize' ? codex.planner : { ...codex.planner, adapter: {
+        ...codex.planner.adapter,
+        verify: (handle, observation) => {
+          const verified = codex.planner.adapter.verify(handle, observation);
+          if (!corrupted) {
+            applyingState = readFileSync(stateFile(), 'utf8');
+            rmSync(stateFile()); mkdirSync(stateFile()); corrupted = true;
+          }
+          return verified;
+        },
+        rollback: async handle => {
+          const result = await codex.planner.adapter.rollback(handle);
+          rmSync(stateFile(), { recursive: true }); writeFileSync(stateFile(), applyingState);
+          return result;
+        },
+      } };
+      if (phase !== 'finalize') codex.fake.failPhase = phase;
+      const result = await executeLifecycle({ plan, hosts: [failing, cursor.planner], now });
+      expect(result.exitCode).toBe(1);
+      expect(result.report.outcomes[0]?.result === 'succeeded').toBe(false);
+      expect(result.report.outcomes[1]?.result).toBe('not-attempted');
+      expect(codex.fake.installedFingerprint('alpha')).toBe(prior);
+      expect(cursor.fake.hostMutationState()).toBe(later);
+      const attempt = readLifecycleState().state.attempts.find(row => row.id === plan.attemptId)!;
+      expect(attempt.journal.some(row => row.packageId === 'alpha' && row.state === 'completed')).toBe(false);
+      expect(attempt.journal.some(row => row.packageId === 'beta' && row.state === 'completed')).toBe(false);
+    });
+  });
   test('fresh owned retirement and disable refuse a route contradiction introduced after global preflight', async () => {
     for (const action of ['retire', 'disable'] as const) {
     const root = temp('fresh-retirement-route');

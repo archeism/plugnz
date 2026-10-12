@@ -13,7 +13,6 @@ import { retirementTombstone } from './owned-activation';
 import { withLegacyWriterRecord, writeLifecycleState, writeState } from './state-write';
 import type { InstallRecord } from './state';
 import { runPin } from './pin';
-import { runUpdate, type UpdateFinding } from './update';
 import { fingerprintInstallation } from './fingerprint';
 import type { HostReader, HostWriter } from './host';
 import { consumerProfiles, findConsumerProfile, type ConsumerProfile } from './consumer-profiles';
@@ -36,7 +35,7 @@ import {
 import { serializeLegacyInstallOutcomes } from './legacy-install-outcome';
 import { createDeploymentScopeIdentity, type DeploymentScopeIdentity } from './deployment-scope';
 import { unknownErrorDiagnostic } from './error-diagnostic';
-import { captureNativeIdentity, type NativeIdentitySnapshot } from './native-identity';
+import { captureNativeIdentity } from './native-identity';
 import packageJson from '../package.json' with { type: 'json' };
 
 const USAGE = `plugnz — install, diagnose and update agent plugins and MCP configs
@@ -1242,7 +1241,19 @@ async function runRecordedLifecycleUpdate(flags: VerbFlags, state: LifecycleStat
     });
   }
   if (profiles.error !== undefined) return usageReport('update', flags.dryRun, profiles.error, 'usage.invalid-selection');
-  const present = flags.targets.length === 0 ? select(writers, []) : select(writers, profiles.selected.map((profile) => profile.id));
+  for (const profile of profiles.selected) {
+    try { requireCompatible(profile, 'update'); }
+    catch (error) {
+      return reportFor('update', flags.dryRun, [], [], { terminalPhase: 'preflight', mutationStarted: false, reason: reasonForError(error) });
+    }
+  }
+  let present: ReturnType<typeof select<HostWriter>>;
+  try {
+    present = flags.targets.length === 0 ? select(writers, []) : select(writers, profiles.selected.map((profile) => profile.id));
+  } catch (error) {
+    return reportFor('update', flags.dryRun, [], [], { terminalPhase: 'preflight', mutationStarted: false,
+      reason: reason('internal', 'internal.defect', unknownErrorDiagnostic(error)) });
+  }
   if (present.error !== undefined) return usageReport('update', flags.dryRun, present.error, 'usage.invalid-selection');
   if (present.selected.length === 0) {
     return reportFor('update', flags.dryRun, [], [], {
@@ -1257,7 +1268,8 @@ async function runRecordedLifecycleUpdate(flags: VerbFlags, state: LifecycleStat
   const matches = state.activations.flatMap((activation) => {
     const scope = scopes.get(activation.scopeId);
     if (scope === undefined || scope.target.instance !== 'default' || !kinds.has(scope.target.kind)) return [];
-    if (requested !== undefined && requested !== activation.packageId && requested !== activation.nativeId) return [];
+    if (requested !== undefined && requested !== activation.packageId && requested !== activation.nativeId
+      && !(scope.authority === 'legacy-import' && requested === logicalNativeName(activation.nativeId))) return [];
     return [{ scope, packageId: activation.packageId }];
   });
   const plannerMatches = matches.filter((match) => plannerKinds.has(match.scope.target.kind));
@@ -1279,6 +1291,20 @@ async function runRecordedLifecycleUpdate(flags: VerbFlags, state: LifecycleStat
       });
     }
     return reportFor('update', flags.dryRun, [], [], { mutationStarted: false });
+  }
+  const records = readState();
+  for (const match of plannerMatches) {
+    if (match.scope.authority !== 'legacy-import') continue;
+    const activationIndex = state.activations.findIndex(activation => activation.scopeId === match.scope.id && activation.packageId === match.packageId);
+    const activation = state.activations[activationIndex]!;
+    const record = records[activationIndex]!;
+    const writer = present.selected.find(candidate => candidate.id === match.scope.target.kind)!;
+    const identity = preparedNativeIdentity(writer, record, match.packageId, activation.sourceRelativeDir);
+    if (!identity.adapterResolved || identity.failure !== null) {
+      return reportFor('update', flags.dryRun, [], [], { terminalPhase: 'preflight', mutationStarted: false,
+        reason: identity.failure ?? reason('internal', 'internal.ambiguous-ownership', `recorded package '${activation.nativeId}' no longer has an exact Source/native binding`) });
+    }
+    match.packageId = identity.package;
   }
   const owned = new Map<string, { kind: string; instance: string; packageId: string }>();
   for (const match of plannerMatches) {
@@ -1951,311 +1977,13 @@ export async function main(argv: string[]): Promise<number> {
       printReport(report, mutationOutput);
       return exitCodeForLifecycleReport(report);
     }
-    if (recordedLifecycle.sourceVersion === 2) {
-      const recorded = await runRecordedLifecycleUpdate(flags, recordedLifecycle.state);
-      if (recorded !== null) {
-        printReport(recorded, mutationOutput);
-        return exitCodeForLifecycleReport(recorded);
-      }
-    }
-    let profileSelection: ReturnType<typeof selectProfiles>;
-    try {
-      profileSelection = selectProfiles(flags.targets);
-    } catch (error) {
-      return printDetectionDefect('update', flags.dryRun, error, mutationOutput);
-    }
-    if (profileSelection.error) {
-      const report = usageReport('update', flags.dryRun, profileSelection.error, 'usage.invalid-selection');
-      printReport(report, mutationOutput);
-      return exitCodeForLifecycleReport(report);
-    }
-    const incompatibleProfile = profileSelection.selected.find((profile) => {
-      try { requireCompatible(profile, 'update'); return false; }
-      catch (error) { if (error instanceof CompatibilityError) return true; throw error; }
+    const recorded = await runRecordedLifecycleUpdate(flags, recordedLifecycle.state);
+    const report = recorded ?? reportFor('update', flags.dryRun, [], [], {
+      terminalPhase: 'preflight', mutationStarted: false,
+      reason: reason('capability', 'capability.unsupported', 'selected target is cleanup-only; plugin updates are unsupported', 'lifecycle-update'),
     });
-    if (incompatibleProfile !== undefined) {
-      let failure: LifecycleReason;
-      try {
-        requireCompatible(incompatibleProfile, 'update');
-        failure = reason('internal', 'internal.invariant', `incompatible target '${incompatibleProfile.id}' was unexpectedly admitted`);
-      } catch (error) {
-        failure = reasonForError(error);
-      }
-      const report = reportFor('update', flags.dryRun, [], [], { terminalPhase: 'preflight', mutationStarted: false, reason: failure });
-      printReport(report, mutationOutput);
-      return exitCodeForLifecycleReport(report);
-    }
-    let selection: { selected: (typeof writers)[number][]; error?: string };
-    try {
-      selection = flags.targets.length === 0
-        ? select(writers, [])
-        : select(writers, profileSelection.selected.map((profile) => profile.id));
-    } catch (error) {
-      return printDetectionDefect('update', flags.dryRun, error, mutationOutput);
-    }
-    if (selection.error) {
-      const report = usageReport('update', flags.dryRun, selection.error, 'usage.invalid-selection');
-      printReport(report, mutationOutput);
-      return exitCodeForLifecycleReport(report);
-    }
-    if (selection.selected.length === 0) {
-      const failure = reason('runtime', 'runtime.operation-failed', 'No detected writer targets');
-      const report = reportFor('update', flags.dryRun, [], [], { terminalPhase: 'preflight', mutationStarted: false, reason: failure });
-      printReport(report, mutationOutput);
-      return exitCodeForLifecycleReport(report);
-    }
-    let lifecycleState: LifecycleStateV2;
-    let updateState: InstallRecord[];
-    try {
-      lifecycleState = readLifecycleState().state;
-      updateState = readState();
-    } catch (error) {
-      const failure = reason('internal', 'internal.corrupt-state', unknownErrorDiagnostic(error));
-      const report = reportFor('update', flags.dryRun, [], [], { terminalPhase: 'preflight', mutationStarted: false, reason: failure });
-      printReport(report, mutationOutput);
-      return exitCodeForLifecycleReport(report);
-    }
-    const selectedTargetKinds = new Set(selection.selected.map((writer) => writer.id));
-    const scopesById = new Map(lifecycleState.scopes.map((scope) => [scope.id, scope]));
-    const requestedName = flags.positionals[0];
-    const persistedCandidates: PersistedNativeIdentityCandidate[] = [];
-    const nativeIdentityCaptures = new Map<number, PreparedNativeIdentity>();
-    const nativeIdentitySnapshots = new Map<InstallRecord, NativeIdentitySnapshot>();
-    let scopeFailure: LifecycleReason | null = null;
-    lifecycleState.activations.forEach((activation, activationIndex) => {
-      if (scopeFailure !== null) return;
-      const stored = scopesById.get(activation.scopeId);
-      if (stored === undefined || stored.target.instance !== 'default' || !selectedTargetKinds.has(stored.target.kind)) return;
-      const record = updateState[activationIndex];
-      if (record === undefined || record.host !== stored.target.kind || record.id !== activation.nativeId) {
-        scopeFailure = reason('internal', 'internal.invariant', `install record '${activation.nativeId}' on ${stored.target.kind} has no exact deployment scope identity`);
-        return;
-      }
-      const writer = selection.selected.find((candidate) => candidate.id === stored.target.kind);
-      if (writer === undefined) {
-        scopeFailure = reason('internal', 'internal.invariant', `selected update target '${stored.target.kind}' has no writer`);
-        return;
-      }
-      persistedCandidates.push({
-        activationIndex,
-        record,
-        scope: createDeploymentScopeIdentity(stored.source, { kind: stored.target.kind, instance: stored.target.instance }),
-        package: activation.packageId,
-        ...(activation.sourceRelativeDir === undefined ? {} : { sourceRelativeDir: activation.sourceRelativeDir }),
-        host: stored.target.kind,
-        writer,
-      });
-    });
-    const selectedCandidates = persistedCandidates.filter((candidate) => requestedPersistedIdentityMatches(
-      candidate.writer,
-      candidate.package,
-      candidate.record.id,
-      requestedName,
-    ));
-    const selectedPairs = selectedCandidates.map((candidate) =>
-      capturePersistedNativeIdentity(candidate, nativeIdentityCaptures)).filter((candidate) =>
-      candidate.identity.failure !== null || !candidate.identity.adapterResolved ||
-        requestedCapturedIdentityMatches(candidate.identity, candidate.record.id, requestedName)).map((candidate) => {
-      const { identity } = candidate;
-      return {
-        ...candidate,
-        package: identity.package,
-        nativeId: identity.nativeId,
-        legacyNativeIds: identity.legacyNativeIds,
-        equivalentNativeIds: identity.equivalentNativeIds,
-        adapterResolved: identity.adapterResolved,
-        failure: identity.failure,
-      };
-    });
-    if (scopeFailure === null) {
-      for (const pair of selectedPairs) {
-        if (pair.failure !== null) continue;
-        const equivalentRecords = selectedPairs.filter((candidate) =>
-          candidate.host === pair.host &&
-          candidate.scope.target.instance === pair.scope.target.instance &&
-          pair.equivalentNativeIds.has(candidate.record.id));
-        if (equivalentRecords.length > 1) {
-          const diagnostic = equivalentRecords.every((candidate) => candidate.record.id === pair.record.id)
-            ? `multiple ${pair.host}/${pair.scope.target.instance} deployment scopes own native package '${pair.record.id}'`
-            : `multiple ${pair.host} ledger records match native identity '${pair.nativeId}'`;
-          scopeFailure = reason(
-            'internal',
-            'internal.ambiguous-ownership',
-            diagnostic,
-          );
-          break;
-        }
-        const collision = nativeIdentityCollision(pair, persistedCandidates, nativeIdentityCaptures);
-        if (collision !== null) pair.failure = collision;
-      }
-    }
-    if (scopeFailure !== null || (requestedName !== undefined && selectedPairs.length === 0)) {
-      const failure = scopeFailure ?? reason('internal', 'internal.ambiguous-ownership', `no install record for '${requestedName}' in state.json — not installed by plgnz; refusing to modify it`);
-      const report = reportFor('update', flags.dryRun, [], [], {
-        terminalPhase: 'preflight',
-        mutationStarted: false,
-        reason: failure,
-      });
-      printReport(report, mutationOutput);
-      return exitCodeForLifecycleReport(report);
-    }
-    if (selectedPairs.length === 0) {
-      const report = reportFor('update', flags.dryRun, [], [], { mutationStarted: false });
-      printReport(report, mutationOutput);
-      return exitCodeForLifecycleReport(report);
-    }
-
-    const baseOperations = selectedPairs.map((pair) => planOperation({
-      command: 'update',
-      scope: pair.scope,
-      package: pair.package,
-      nativeId: pair.nativeId,
-      action: pair.failure === null ? 'update' : 'not-attempted',
-      route: pair.failure === null ? 'managed' : 'none',
-    }));
-    let updatePlan: readonly LifecyclePlanOperation[] = freezePlan(baseOperations);
-    const identityFailure = selectedPairs.find((pair) => pair.failure !== null)?.failure ?? null;
-    if (identityFailure !== null) {
-      const blocked = reason('runtime', 'runtime.operation-failed', 'not attempted after an adapter identity preflight failure');
-      const identityOutcomes = updatePlan.map((operation, index) => outcomeFor(operation, {
-        result: selectedPairs[index]!.failure === null ? 'not-attempted' : 'failed',
-        changed: false,
-        reason: selectedPairs[index]!.failure ?? blocked,
-      }));
-      const report = reportFor('update', flags.dryRun, updatePlan, identityOutcomes, {
-        terminalPhase: 'preflight',
-        mutationStarted: false,
-        reason: identityFailure,
-      });
-      printReport(report, mutationOutput);
-      return exitCodeForLifecycleReport(report);
-    }
-    selectedPairs.forEach((pair, index) => {
-      const nativeId = updatePlan[index]?.nativeId;
-      if (nativeId === null || nativeId === undefined) return;
-      nativeIdentitySnapshots.set(pair.record, Object.freeze({
-        nativeId,
-        legacyNativeIds: Object.freeze([...pair.legacyNativeIds]),
-        equivalentNativeIds: Object.freeze([...pair.equivalentNativeIds]),
-      }));
-    });
-    let updateMutationStarted = false;
-    try {
-      const result = json
-        ? await withLogsOnStderr(() => runUpdate(undefined, { dryRun: flags.dryRun, state: updateState, records: selectedPairs.map(({ record }) => record), writers: selection.selected, nativeIdentitySnapshots }))
-        : await runUpdate(undefined, { dryRun: flags.dryRun, state: updateState, records: selectedPairs.map(({ record }) => record), writers: selection.selected, nativeIdentitySnapshots });
-      updateMutationStarted = result.mutationStarted;
-      const groups = new Map<string, UpdateFinding[]>();
-      let commandFailure: LifecycleReason | null = null;
-      let commandTerminalPhase: LifecycleTerminalPhase | undefined;
-      for (const finding of result.findings) {
-        if (finding.package === undefined || finding.nativeId === undefined) {
-          if (finding.reasonCode === 'internal.ambiguous-ownership') {
-            commandFailure ??= reason('internal', finding.reasonCode, finding.message);
-            commandTerminalPhase ??= 'preflight';
-          } else if (finding.mark === '✗' || finding.status !== undefined) {
-            commandFailure ??= reason('internal', 'internal.invariant', finding.message);
-          }
-          continue;
-        }
-        const pair = selectedPairs.find((candidate) => candidate.host === finding.host && candidate.nativeId === finding.nativeId);
-        if (pair === undefined) {
-          commandFailure ??= reason('internal', 'internal.invariant', `update result for '${finding.nativeId}' on ${finding.host} has no deployment scope identity`);
-          continue;
-        }
-        const key = `${pair.scope.id}\u0000${pair.nativeId}`;
-        const group = groups.get(key) ?? [];
-        group.push(finding);
-        groups.set(key, group);
-      }
-      if (flags.dryRun) {
-        updatePlan = freezePlan(selectedPairs.map((pair, index) => {
-          const findings = groups.get(`${pair.scope.id}\u0000${pair.nativeId}`) ?? [];
-          const failed = findings.find((finding) => finding.mark !== '✓' || finding.status !== undefined);
-          const successfulAction = findings.find((finding) => finding.action !== undefined)?.action;
-          return planOperation({
-            command: 'update',
-            scope: pair.scope,
-            package: pair.package,
-            nativeId: pair.nativeId,
-            action: failed !== undefined ? 'not-attempted' : successfulAction ?? baseOperations[index]!.action,
-            route: failed !== undefined ? 'none' : 'managed',
-          });
-        }));
-      }
-      const updateOutcomes = updatePlan.map((operation) => {
-        const findings = groups.get(`${operation.scope.id}\u0000${operation.nativeId}`) ?? [];
-        if (findings.length === 0) {
-          return outcomeFor(operation, {
-            result: 'not-attempted',
-            changed: false,
-            resourceState: 'unknown',
-            activationState: 'unknown',
-            reason: reason('runtime', 'runtime.operation-failed', 'not attempted after an earlier update failure'),
-          });
-        }
-        const failed = findings.find((finding) => finding.mark !== '✓' || finding.status !== undefined);
-        const capabilityStatus = failed?.status === 'unsupported' || failed?.status === 'unverified';
-        const succeeded = failed === undefined;
-        const pairMutationStarted = findings.some((finding) => finding.mutationStarted === true);
-        const pairChanged = findings.some((finding) => finding.changed === true);
-        const failureBeforeApply = failed?.terminalPhase === 'parse' || failed?.terminalPhase === 'resolve' ||
-          failed?.terminalPhase === 'freeze' || failed?.terminalPhase === 'preflight';
-        const earlyFailureAlongsideMutation = !succeeded && result.mutationStarted && !pairMutationStarted && failureBeforeApply;
-        const capability = capabilityStatus && !pairMutationStarted && !pairChanged && failureBeforeApply && failed?.resourceState !== 'potentially-changed';
-        if (!succeeded) commandTerminalPhase = earlyFailureAlongsideMutation ? 'apply' : failed.terminalPhase;
-        const failure = succeeded ? null : capability
-          ? reason(
-              'capability',
-              failed.status === 'unsupported' ? 'capability.unsupported' : 'capability.unverified',
-              failed.message,
-              failed.capabilityId ?? 'update',
-              failed.evidenceId ?? null,
-            )
-          : failed.reasonCode === 'recovery.required'
-            ? reason('recovery', 'recovery.required', failed.message)
-          : failed.reasonCode === 'readback.failed' || failed.reasonCode === 'readback.mismatch'
-            ? reason('readback', failed.reasonCode, failed.message)
-            : reason('runtime', 'runtime.operation-failed', failed.message);
-        return outcomeFor(operation, {
-          result: succeeded
-            ? 'succeeded'
-            : failure?.category === 'recovery' || (pairMutationStarted && failure?.category === 'readback')
-              ? 'pending'
-              : 'failed',
-          changed: pairChanged,
-          resourceState: !succeeded ? failed.resourceState ?? (pairMutationStarted ? 'potentially-changed' : 'unknown') : undefined,
-          activationState: !succeeded ? failed.activationState ?? 'unknown' : undefined,
-          reason: failure,
-        });
-      });
-      if (result.exitCode !== 0 && commandFailure === null && updateOutcomes.every((candidate) => candidate.result === 'succeeded')) {
-        commandFailure = reason('internal', 'internal.invariant', 'update exited nonzero without a failed pair result');
-      }
-      const report = reportFor('update', flags.dryRun, updatePlan, updateOutcomes, {
-        terminalPhase: commandTerminalPhase,
-        mutationStarted: result.mutationStarted,
-        reason: commandFailure,
-      });
-      printReport(report, mutationOutput);
-      return exitCodeForLifecycleReport(report);
-    } catch (error) {
-      const failure = reasonForError(error);
-      const skipped = updatePlan.map((operation) => outcomeFor(operation, {
-        result: 'not-attempted',
-        changed: false,
-        resourceState: 'unknown',
-        activationState: 'unknown',
-        reason: failure,
-      }));
-      const report = reportFor('update', flags.dryRun, updatePlan, skipped, {
-        terminalPhase: flags.dryRun ? 'preflight' : 'apply',
-        mutationStarted: updateMutationStarted,
-        reason: failure,
-      });
-      printReport(report, mutationOutput);
-      return exitCodeForLifecycleReport(report);
-    }
+    printReport(report, mutationOutput);
+    return exitCodeForLifecycleReport(report);
   }
 
   if (verb === 'sync') return runSync(args.slice(1), wantsJson);

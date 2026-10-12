@@ -91,8 +91,9 @@ insufficient: sync, retire, pin, recovery and legacy writes also participate.
 
 Exact files: `src/executor.ts`, `src/lifecycle-recovery.ts`,
 `src/pin-lifecycle.ts`, `src/pin.ts`, `src/cli.ts`, `src/state-write.ts`.
-`src/update.ts` has an imported legacy writer but no actual call. Source-helper
-tests must exercise the same guarded writer boundary; the published package
+The P11 cutover removes `src/update.ts` and its aliased legacy saves: CLI update
+now uses the shared lifecycle executor for both imported v1 and modern v2 state.
+Cleanup-only routes stay non-updatable. The published package
 exposes the CLI, not these TypeScript modules. Scan again after merging newer
 main rather than treating these line numbers or callers as permanent.
 
