@@ -6,13 +6,14 @@ import { join, resolve } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
 
-const base = '/vercel/sandbox/proof';
-assert.equal(resolve(process.cwd()), base, 'Oracle requires its owned Sandbox workdir');
-const [phase, expectedRevision, attempt = '01', candidate = 'd3da', run = '00'] = process.argv.slice(2);
+const base = resolve(process.cwd());
+assert.match(base, /^\/vercel\/sandbox\/proof\/[a-zA-Z0-9_-]+$/u, 'Oracle requires one owned Sandbox proof root');
+const [phase, expectedRevision, attempt = '01', candidate = 'd3da', run = '00', sourceRef = 'finish/native-kimi-zcode-proof'] = process.argv.slice(2);
 assert.ok(['V1', 'V2'].includes(phase));
 assert.match(expectedRevision ?? '', /^[a-f0-9]{40}$/u);
 assert.match(attempt, /^[0-9]{2}$/u);
 assert.match(run, /^[0-9]{2}$/u);
+assert.ok(['finish/native-kimi-zcode-proof', 'proof/kimi-native-c72-20261012'].includes(sourceRef), 'Oracle requires a frozen proof ref');
 const prefix = run === '00' ? phase : `${phase}.r${run}`;
 const root = join(base, `attempt-${attempt}`);
 mkdirSync(root, { recursive: true });
@@ -22,6 +23,7 @@ assert.match(processStatus, /^NoNewPrivs:\s+1$/mu);
 const candidates = {
   d3da: { file: 'plugnz.mjs', sha256: 'efe017a6fb28c84a7d2f762d2ed875f0494bf962cc3c2cfe31f3eeaf2d4cebf2' },
   '04bdef3': { file: 'plugnz-04bdef3.mjs', sha256: 'ecd9dc84124bcaa39df1199bf4862c47ce915926d455a4fdcf461d857f18a837' },
+  c72: { file: 'plugnz-c72.mjs', sha256: 'c72c6e9674c454bc6a54e68c0b89f8670a2017fd54c9d76131234d619fafd606' },
 };
 assert.ok(Object.hasOwn(candidates, candidate), 'Oracle requires a frozen candidate');
 const artifact = join(base, candidates[candidate].file);
@@ -46,7 +48,7 @@ const env = {
 };
 const manifest = join(root, 'kimi-sync.json');
 writeFileSync(manifest, JSON.stringify({ schemaVersion: 1, entries: [{ operation: 'sync', source: {
-  kind: 'git', locator: 'https://github.com/archeism/plugnz.git', ref: 'finish/native-kimi-zcode-proof',
+  kind: 'git', locator: 'https://github.com/archeism/plugnz.git', ref: sourceRef,
 }, target: { kind: 'kimi', instance: 'default' }, selectors: [{ package: 'kimi-probe', adoptExisting: false }] }] }));
 
 function treeDigest(path) {
@@ -148,7 +150,7 @@ const activation = state.activations.find(row => row.nativeId === 'kimi-probe@pl
 assert.ok(activation);
 assert.equal(marker.pluginId, activation.nativeId); assert.equal(marker.scopeId, activation.scopeId);
 const scope = state.scopes.find(row => row.id === activation.scopeId);
-assert.deepEqual(scope.source, { kind: 'git', locator: 'https://github.com/archeism/plugnz.git', ref: 'finish/native-kimi-zcode-proof' });
+assert.deepEqual(scope.source, { kind: 'git', locator: 'https://github.com/archeism/plugnz.git', ref: sourceRef });
 assert.deepEqual(scope.target, { kind: 'kimi', instance: 'default' });
 const original = state.attempts.flatMap(row => row.journal).find(row => row.action === 'install' && row.nativeId === activation.nativeId);
 assert.ok(original?.sealedOperation);
@@ -189,6 +191,6 @@ const allocated = spawnSync('du', ['-sk', '/vercel/sandbox/native', base], { enc
 assert.equal(allocated.status, 0);
 const kilobytes = allocated.stdout.trim().split('\n').reduce((sum, line) => sum + Number(line.split(/\s/u)[0]), 0);
 assert.ok(kilobytes <= 1024 * 1024, 'Owned native/proof allocation exceeded 1GiB budget');
-const evidence = { phase, run, candidate, node: process.version, expectedRevision, artifactSha256: hash(readFileSync(artifact)), nativePackage: packageJson.name, nativeVersion: packageJson.version, nativeEntrypointSha256: hash(readFileSync(realpathSync(native))), outputs, discovery, allocatedKiB: kilobytes };
+const evidence = { phase, run, candidate, sourceRef, node: process.version, expectedRevision, artifactSha256: hash(readFileSync(artifact)), nativePackage: packageJson.name, nativeVersion: packageJson.version, nativeEntrypointSha256: hash(readFileSync(realpathSync(native))), outputs, discovery, allocatedKiB: kilobytes };
 writeFileSync(join(root, `${prefix}.result.json`), JSON.stringify(evidence, null, 2), { flag: 'wx' });
 console.log(JSON.stringify(evidence, null, 2));
