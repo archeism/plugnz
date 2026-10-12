@@ -1265,12 +1265,19 @@ async function runRecordedLifecycleUpdate(flags: VerbFlags, state: LifecycleStat
   const kinds = new Set(present.selected.map((writer) => writer.id));
   const scopes = new Map(state.scopes.map((scope) => [scope.id, scope]));
   const requested = flags.positionals[0];
-  const matches = state.activations.flatMap((activation) => {
+  const records = readState();
+  const importedIdentities = new Map<number, PreparedNativeIdentity>();
+  const matches = state.activations.flatMap((activation, activationIndex) => {
     const scope = scopes.get(activation.scopeId);
     if (scope === undefined || scope.target.instance !== 'default' || !kinds.has(scope.target.kind)) return [];
-    if (requested !== undefined && requested !== activation.packageId && requested !== activation.nativeId
-      && !(scope.authority === 'legacy-import' && requested === logicalNativeName(activation.nativeId))) return [];
-    return [{ scope, packageId: activation.packageId }];
+    if (requested !== undefined && requested !== activation.packageId && requested !== activation.nativeId) {
+      if (scope.authority !== 'legacy-import') return [];
+      const writer = present.selected.find(candidate => candidate.id === scope.target.kind)!;
+      const identity = preparedNativeIdentity(writer, records[activationIndex]!, activation.packageId, activation.sourceRelativeDir);
+      importedIdentities.set(activationIndex, identity);
+      if (!identity.adapterResolved || identity.failure !== null || !identity.equivalentNativeIds.has(requested)) return [];
+    }
+    return [{ scope, packageId: activation.packageId, activationIndex }];
   });
   const plannerMatches = matches.filter((match) => plannerKinds.has(match.scope.target.kind));
   if (matches.length > 0 && plannerMatches.length === 0) return null;
@@ -1292,14 +1299,13 @@ async function runRecordedLifecycleUpdate(flags: VerbFlags, state: LifecycleStat
     }
     return reportFor('update', flags.dryRun, [], [], { mutationStarted: false });
   }
-  const records = readState();
   for (const match of plannerMatches) {
     if (match.scope.authority !== 'legacy-import') continue;
-    const activationIndex = state.activations.findIndex(activation => activation.scopeId === match.scope.id && activation.packageId === match.packageId);
+    const activationIndex = match.activationIndex;
     const activation = state.activations[activationIndex]!;
     const record = records[activationIndex]!;
     const writer = present.selected.find(candidate => candidate.id === match.scope.target.kind)!;
-    const identity = preparedNativeIdentity(writer, record, match.packageId, activation.sourceRelativeDir);
+    const identity = importedIdentities.get(activationIndex) ?? preparedNativeIdentity(writer, record, match.packageId, activation.sourceRelativeDir);
     if (!identity.adapterResolved || identity.failure !== null) {
       return reportFor('update', flags.dryRun, [], [], { terminalPhase: 'preflight', mutationStarted: false,
         reason: identity.failure ?? reason('internal', 'internal.ambiguous-ownership', `recorded package '${activation.nativeId}' no longer has an exact Source/native binding`) });

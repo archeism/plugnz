@@ -95,3 +95,35 @@ the obsolete helper-dependent suite, migration mismatch attempts, and the
 invalid selected-host fixture's diagnostic. Its generated scope incorrectly
 reused another scope's last-attempt ID; the corrected fixture omits that false
 history claim and proves exact unselected-record preservation.
+
+## Independent review correction: qualified imported selection
+
+Independent Spec found that `8fe0303` rejected `update demo@personal` for a v1
+bare `demo` row whose exact Source and adapter proved that qualified identity.
+The new public regression failed at that checkpoint (0 pass / 1 fail). A
+Source-derived qualified name is now accepted only when the existing adapter
+capture resolves the persisted identity and its exact equivalence set contains
+the requested selector. The captured result is reused for manifest selection;
+no name-prefix matching, broader Source fallback or legacy ownership relaxation
+was added. The foreign-marketplace control requires the exact
+`internal.ambiguous-ownership` diagnostic, empty plan and unchanged ledger/store;
+the valid selector requires successful updated native bytes.
+
+This positive still starts with a modern scoped marker and downgrades only its
+ledger. Genuine three-field legacy-marker refusals and the unfinished P11
+compatibility requirement remain unchanged.
+
+- Focused correction: `bun test test/imported-update-public.test.ts test/update.test.ts`: **22 pass / 148 assertions / 25.47s**. After adding exact foreign diagnostic assertions, the built Node gate below verifies the final regression.
+- `OPEN_PLUGIN_TEST_PACKED_NODE=/home/charlesfengyc/.local/bin/node bun test test/imported-update-public.test.ts --test-name-pattern 'adapter-proven qualified selector'`: **1 pass / 11 assertions / 1.68s**, Node 22.23.1.
+- `bun run check`, `bun scripts/build.mjs`, `git diff --check`: exit 0; pinned Bun 1.4.0.
+
+| Correction log | SHA256 |
+| --- | --- |
+| qualified-red.log | `c0df019760e141645822f87823f173833111e0c46a80a3376d312e86a404231d` |
+| qualified-focused-green.log | `f0921985dd617da1c7e823c5a70ffb176faead49f4c11d39dee6664e4b969a66` |
+| qualified-packed-green.log | `0bb8029c6671b6bbddb2ea3932437cfdb79ce9d8a522708f433948c68fa5f43d` |
+| qualified-check.log | `8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92` |
+| qualified-build.log | `13aee9b163da74d6f89c7628b2d1eb6f0258f071b9ec11b44c39828aad30c8bc` |
+
+`8fe0303` and its failed correction replay remain preserved; root review and
+the combined built-first full gate are required before integration/publication.

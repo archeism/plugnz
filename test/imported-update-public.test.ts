@@ -5,6 +5,39 @@ import { bytesToText, withLifecycleCliHarness } from './lifecycle-cli-harness';
 import { parseLifecycleReport } from '../src/lifecycle-report';
 import { fakeDcodeLockInterpreter } from './dcode-fake-lock';
 
+test('v1 bare ledger accepts only its adapter-proven qualified selector', async () => {
+  await withLifecycleCliHarness(harness => {
+    harness.writeHome({ '.cursor/.keep': '' });
+    const source = harness.source('qualified', {
+      'marketplace.json': '{"name":"personal","plugins":[{"name":"demo","source":"./demo"}]}',
+      'demo/plugin.json': '{"name":"demo","version":"1.0.0"}',
+    });
+    const cursor = harness.fakeNative('cursor', Array.from({ length: 32 }, () => ({ args: ['--version'], stdout: '2.4.0\n' })));
+    const env = { OPEN_PLUGIN_CURSOR_BIN: cursor.path };
+    expect(harness.run(['add', source, '--target', 'cursor', '--json'], { env }).exitCode).toBe(0);
+    writeFileSync(join(harness.home, 'state.json'), JSON.stringify({ version: 1, installs: [
+      { host: 'cursor', id: 'demo', source, sourceSha: 'legacy', sourceDir: join(source, 'demo'), ownership: 'plgnz' },
+    ] }));
+    const foreign = harness.run(['update', 'demo@foreign', '--target', 'cursor', '--json'], { env });
+    expect(foreign.exitCode).toBe(1);
+    const refused = parseLifecycleReport(JSON.parse(foreign.stdout));
+    expect(refused.summary.mutationStarted).toBe(false);
+    expect(refused.plan).toEqual([]);
+    expect(refused.summary.reason?.code).toBe('internal.ambiguous-ownership');
+    expect(refused.summary.reason?.diagnostic).toBe("no install record for 'demo@foreign' in state.json — not installed by plgnz; refusing to modify it");
+    expect(foreign.state.after).toEqual(foreign.state.before);
+    expect(foreign.stores.cursor.after).toEqual(foreign.stores.cursor.before);
+    writeFileSync(join(source, 'demo/plugin.json'), '{"name":"demo","version":"1.0.0","description":"updated"}');
+    const selected = harness.run(['update', 'demo@personal', '--target', 'cursor', '--json'], { env });
+    const report = parseLifecycleReport(JSON.parse(selected.stdout));
+    expect(selected.exitCode).toBe(0);
+    expect(report.outcomes.map(row => ({ package: row.package, nativeId: row.nativeId, result: row.result }))).toEqual([
+      { package: 'demo', nativeId: 'demo', result: 'succeeded' },
+    ]);
+    expect(bytesToText(selected.stores.cursor.after.files['plugins/local/demo/plugin.json']!)).toContain('updated');
+  });
+});
+
 test('v1 update refuses a renamed marketplace before any mutation', async () => {
   await withLifecycleCliHarness(harness => {
     harness.writeHome({ '.cursor/.keep': '' });
