@@ -1,7 +1,7 @@
 # ZCode two-physical-ID migration — contract proposal
 
 Status: design for independent review, not implementation or native admission.
-Code baseline: `d3da1d5`; historical producer: `75d7bc1`.
+Proposal correction baseline: `584ab4a`; historical producer: `75d7bc1`.
 Shared legacy wire baseline: `97b411d` in
 `docs/legacy-adoption-wire-contract.md` on the separate receipt-contract branch.
 This extends its evidenced two-ID variant; it does not reuse Cursor's same-root
@@ -81,7 +81,7 @@ proof gains a discriminated variant, not an open format string:
 
 ```ts
 type RootProof = {
-  role: "cache" | "marketplace" | "resources";
+  role: "cache" | "marketplace" | "marketplace-cache" | "resources";
   nativeId: string;
   physicalPath: string;
   presence: "present" | "absent";
@@ -104,11 +104,14 @@ type ZCodeTwoIdProof = {
   newPrior: SerializedLifecycleOperation["prior"]; // absent, independently proved
   oldRoots: RootProof[]; newRoots: RootProof[];
   retainedData: RetentionProof[];
+  targetVersion: Extract<TargetVersionObservation, { kind: "detected" }>;
+  nativeFence: NativeFenceEvidence;
+  sharedStores: SharedStoresProof;
   evidenceId: Digest;
 };
 ```
 
-Roots are exactly the adapter-derived cache/marketplace/resources paths per ID,
+Roots are exactly the adapter-derived cache/marketplace/marketplace-cache/resources paths per ID,
 sorted by `(nativeId,role)`, with no duplicate/missing role. Retention entries are
 exactly old/new IDs, sorted, with no duplicate/missing ID. `physicalPath` is the
 captured canonical physical root (missing tails resolved from the nearest actual
@@ -120,6 +123,129 @@ include absence of that exact configuration key. Present data/tree fingerprints
 use the existing framed tree algorithm, prefixed; no unknown extra resource bytes
 are ignored. Existing retention observations remain mandatory composite readback,
 but their path/status-only shape is not a substitute for these byte proofs.
+
+`marketplace` is plugnz's owned authored materialization;
+`marketplace-cache` is the native cached marketplace tree. They are distinct:
+the pinned native adapter derives its manifest as
+`<pluginStorageRoot>/marketplaces/<sanitized-market>/marketplace.json`.
+Both full trees and any native atomic-activation transaction/backup sidecars
+belong to the mutation boundary. The private historical fixture's six-root proof
+does not prove these additional genuine native surfaces.
+
+## Shared-store witnesses and permitted deltas
+
+This proposal's closed additions below contain digests/membership, never option
+values, credentials or rollback artifact paths:
+
+```ts
+type EntryDigest = { key: string; presence: "present" | "absent"; valueDigest: Digest | null };
+type SharedJsonProof = {
+  kind: "installed-registry" | "config" | "marketplace-registry";
+  format: "zcode-native/0.16.9";
+  physicalPath: string;
+  rawDigest: Digest; preservedDigest: Digest;
+  selected: EntryDigest[];
+  siblings: { key: string; valueDigest: Digest }[];
+  siblingOrder: string[];
+};
+type MarketplaceMembershipProof = {
+  nativeId: string; physicalPath: string;
+  role: "marketplace" | "marketplace-cache";
+  exclusive: boolean;
+  selectedEntry: EntryDigest;
+  selectedPayloadPath: string;
+  selectedPayloadFingerprint: Digest | null;
+  preservedMetadataDigest: Digest;
+  preservedTreeDigest: Digest;
+  siblings: { packageName: string; entryDigest: Digest; physicalPayloadPath: string; payloadFingerprint: Digest }[];
+  siblingOrder: string[];
+};
+type SharedStoresProof = {
+  json: [SharedJsonProof, SharedJsonProof, SharedJsonProof];
+  marketplaces: MarketplaceMembershipProof[];
+  nativeParents: { physicalPath: string; fullInventoryDigest: Digest;
+    preservedInventoryDigest: Digest }[];
+};
+```
+
+The `json` tuple order is installed-registry, config, marketplace-registry and
+each canonical physical path is independently adapter-derived. Duplicate/missing
+files, rows/keys, roles or sibling membership refuse. `selected` has exactly two
+old/new registry entries, four config keys (`enabled:<id>` and `options:<id>`),
+or two old/new marketplace entries. Selected keys and the `siblings` digest list
+sort lexicographically; `siblingOrder` preserves the original array-relative order
+(empty for unordered config objects). Native identity/key parsing is exact, never
+basename stripping. Null values hash as present values, not absent entries.
+
+The native 0.16.9 installed file is `{version:1,plugins:[...]}` and known
+marketplaces is `{version:1,marketplaces:[...]}`, not the fixture's name-to-path
+map. For each JSON surface, remove only its exact selected entries from the
+validated decoded value, retaining every other field, container presence,
+sibling value and sibling-relative order. Its canonical redacted remainder is
+`H("plugnz/zcode-shared-remainder/v1", {kind,physicalPath,value:remainder})`.
+Each entry digest is `H("plugnz/zcode-shared-entry/v1", {kind,key,value})`;
+rawDigest separately binds exact file bytes for immediate CAS. Unknown preserved
+metadata is never dropped during rewriting. All prior full values/raw bytes stay
+in private sealed rollback artifacts; public digests do not reconstruct secrets.
+
+`nativeParents` is the exact deduplicated sorted set of parent namespaces in which
+the pinned primitives create cache/marketplace activation sidecars or replace the
+three shared JSON files. Each canonical path is independently derived from their
+actual target paths, with captured physical parent identity in the private handle.
+Inventory records every direct child and its complete tree/body/kind/mode digest;
+no unknown entry is ignored. Full inventory uses
+`H("plugnz/zcode-native-parent/v1", {physicalPath,entries})`; preserved inventory
+uses that same domain after removing only exact selected target names and exact
+sidecar names bound by this invocation's validated native transaction receipt.
+It is not a wildcard exclusion for `.stage-*`, `.backup` or `.transaction.json`.
+Missing or unrecognized sidecar ownership keeps the native transition unknown.
+These witnesses carry digests, not plugnz rollback paths or native credential data.
+
+The only permitted registry deltas are addition of the exact proved canonical
+native row and later removal of the exact old row. No dependency-closure install
+outside the two IDs is admitted. Canonical row fields must match the pinned native
+record schema, package/version/cache/Source and bounded command receipt; generated
+`installedAt`, `updatedAt` and `cacheTransactionId` are recorded exactly in the
+post-command witness, not declared arbitrary wildcards in the precommand seal.
+An interrupted native call without that complete proved witness is unknown,
+not a checkpoint allowing automatic rollback.
+
+Config allows addition of canonical enablement `true`, then removal of the exact
+old enablement key. Both old/new options remain byte-equivalent canonical values
+to their retained priors throughout; existing old options are never merged,
+moved, erased or copied under the new ID. All sibling flags/options, global
+switches, higher-level overrides and unrelated metadata are invariant.
+
+For authored and native-cached marketplace trees, bind exact manifest metadata,
+selected entry/payload and every sibling entry/path/tree. The preserved metadata
+digest covers all manifest fields except `plugins`; preserved tree digest is
+`H("plugnz/zcode-marketplace-remainder/v1", sorted full relative inventory)` after
+excluding only the independently owned selected payload subtree and manifest
+bytes. Inventory includes kind, full mode and body digest for files, all directory
+entries and exact symlink targets; unsupported redirected payload roots refuse.
+Manifest entry digests use the shared entry domain with the role as `kind`.
+Membership is complete, duplicates fail, and sibling-relative order is invariant.
+The selected subtree cannot contain a sibling root or an ancestor of one.
+
+Exclusive roots have no siblings or unknown retained payloads: removing their
+selected manifest/payload permits removal of the captured whole root and old
+marketplace registration. Shared roots remain present at the same physical paths:
+remove only the exact selected manifest entry and independently exclusive selected
+subtree in each role, preserving all siblings/metadata. Retain the old native
+marketplace record; the only allowed field change is `pluginCount = priorCount-1`,
+with the prior count independently matching complete native manifest membership.
+Every other record field, including Source and native transaction IDs, is unchanged.
+All new marketplace metadata comes only from the bounded native command receipt.
+No whole shared marketplace refresh, unlink, renamed parent or deletion by name is
+authorized. Shared retirement is required acceptance work, not excluded because
+the current private precondition refuses it.
+
+Admission carries exact priors; the seal commits the allowed per-step delta policy,
+membership and opaque remainder witnesses; each checkpoint/readback carries exact
+observed entry/raw/root digests. Rollback must prove the entire matched checkpoint
+and all invariant remainders before its first write, then restore selected entries
+while preserving siblings. Unknown extra/native sidecar writes or changes to any
+remainder are a foreign third state and keep artifacts plus loud pending recovery.
 
 Do not force a verified modern activation into `LegacyRecordProof`. The approved
 `75c07bf` foundation is strictly legacy-only; its `legacyAdoptions` v1 fields and
@@ -235,7 +361,27 @@ checks, never replaced by a matching hash. The shared deterministic attempt and
 operation derivation applies unchanged. Expectations are excluded from derivation.
 The exact migration
 input is `operationIdentity("desired-pair", scopeId, packageName, newNativeId,
-sourceFingerprint + "\\0" + attemptId)`; there is only one current Desired pair.
+sourceFingerprint + "\0" + attemptId)`; there is only one current Desired pair.
+Here `"\0"` denotes one actual U+0000 separator, not the two characters
+backslash and zero. Each operation field is framed as its decimal JavaScript
+UTF-16 `.length`, U+0000, the UTF-8 field bytes, and U+0000; SHA256 of the joined
+frames has prefix `operation-v1-`. This is the existing planner protocol, not
+the canonical JSON digest protocol. The Source fingerprint is its existing raw
+64-hex value, not a newly prefixed wire digest. See the executable literal vector
+below; using a backslash-zero salt produces a different, invalid operation ID.
+
+`native.targetVersion` is the fresh adapter observation from this precommand
+inventory, never the original activation's recorded version, a consumer metadata
+profile or a supplied string. Unknown/unparseable observations cannot create an
+admission. Admission hashing includes that complete observation; the existing
+capability `evidenceId` binds its reviewed route/version profile. Exact verified
+native supplier/runtime hashes remain in acquisition and capability-proof receipts,
+not in a newly invented mandatory public artifact field.
+Fresh probing/revalidation after actual fence acquisition must equal the previewed
+observation and capability evidence before any recovery, stage, ledger or native write;
+version/probe/evidence drift invalidates the expectation globally. The paired seal's
+`detectedVersion`/`versionProbeId` equal those detected fields; its capability
+evidence and fence evidence must bind the same version/probe and target.
 
 Existing explicit manifest selector may add optional
 `expectedMigration: { schemaVersion: 1; admissionId: Digest }`. It must match a
@@ -309,19 +455,22 @@ type PairedIdentitySeal = {
   source: SourceSnapshotReference;
   packageFingerprint: Digest; projectedFingerprint: Digest;
   detectedVersion: string; versionProbeId: string; capabilityEvidenceId: string;
+  nativeFence: NativeFenceEvidence;
   mutationGroupId: string; mutationInvocationOperationId: string;
   affectedNativeIds: [string, string]; affectedOperationIds: [string];
   old: { nativeId: string; prior: SerializedLifecycleOperation["prior"]; expected: SerializedLifecycleOperation["expected"] };
   canonical: { nativeId: string; prior: SerializedLifecycleOperation["prior"]; expected: SerializedLifecycleOperation["expected"] };
   priorRoots: RootProof[]; expectedRoots: RootProof[];
   priorRetention: RetentionProof[]; expectedRetention: RetentionProof[];
+  priorSharedStores: SharedStoresProof;
+  checkpointPolicy: PairedCheckpointPolicy;
 };
 type IdentityMigrationCommit = {
   schemaVersion: 1; admissionId: Digest; sealDigest: Digest;
   verifiedReadback: {
     old: SerializedLifecycleOperation["expected"];
     canonical: SerializedLifecycleOperation["expected"];
-    roots: RootProof[]; retention: RetentionProof[];
+    roots: RootProof[]; retention: RetentionProof[]; sharedStores: SharedStoresProof;
   };
   stateGeneration: number; committedAt: string; commitId: Digest;
 };
@@ -330,7 +479,8 @@ type IdentityMigrationCommit = {
 The old/canonical readbacks retain their actual distinct native IDs; all other
 adapter/Scope/target/package identity fields match the operation. Old prior is
 present and verified active; canonical prior independently absent with no active
-entry or roots. Old expected is absent/inactive with not-applicable enablement,
+entry or roots. Old expected is absent/inactive with disabled serialized enablement
+(public outcome enablement can be not-applicable),
 but retained data/options; canonical expected is active/present/enabled with
 exact projected native/resource bytes. Root proofs describe actual filesystem
 post-state, not only registry presence. Old owned payload roots are removed only
@@ -362,7 +512,12 @@ the actual Native representation. No prior route is rewritten to hide this fact.
 `sealDigest = H("plugnz/identity-migration-seal/v1", seal)`;
 `commitId = H("plugnz/identity-migration-commit/v1", commit without commitId)`.
 Commit verifiedReadback must equal both expected readbacks/roots/retention and
-reflect the actual verified paired observation. Its generation is the one atomic
+reflect the actual verified paired observation. Its shared-store witness must equal
+the final exact candidate checkpoint admitted by the sealed delta policy, including
+native-generated record metadata bound by its retained command receipt; it is not
+a fabricated pre-seal digest for timestamps/transaction IDs that do not yet exist.
+Invariant remainders/membership are fixed by the admission and seal throughout.
+Its generation is the one atomic
 replacement generation, not a later cleanup generation. Admission/handle IDs,
 journal `identity-migrate` action/Native route, seal, immutable COMMIT settlement
 and cleanup-pending/completed state must all correlate. Missing/contradictory
@@ -420,13 +575,227 @@ replacement, relation/readback and cleanup-pending journal. Old data/options sta
 Restart after that point settles only modern cleanup; update/retire cannot alter
 the immutable historical commit or reactivate old history.
 
-Intermediate recovery CAS accepts only the complete prior, complete candidate or
-an exact phase-specific checkpoint proved from the chosen native/managed
-primitives. New installed while old remains active is a reachable checkpoint;
-each managed old cache/registry/flag/resource/marketplace retirement step requires
-its own exact fingerprint/metadata witness. Arbitrary Cartesian combinations or
-unknown partial native-command states stay pending with backups. This checkpoint
-schema and actual fence proof must be reviewed before migration implementation.
+<!-- zcode-operation-golden-v1 -->
+```json
+{
+  "scopeId": "scope-v1-39b5df12b629b9414c9c752db5ee5f8e437e42195f63f343e991146760e5f7ae",
+  "sourceFingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "packageName": "demo",
+  "newNativeId": "demo@plgnz-3c708994a71afe18",
+  "stateGeneration": 7,
+  "attemptId": "attempt-v1-539846b9c0b94590ffd345250188834e1ba0db89a1d7a04654abd6fd475bbe11",
+  "operationId": "operation-v1-43655b1cb41cb836e6b1dfb9acb13031c1f6b7b56a65bad742343e6df015550f",
+  "framedUtf8Hex": "313200646573697265642d706169720037330073636f70652d76312d3339623564663132623632396239343134633963373532646235656535663865343337653432313935663633663334336539393131343637363065356637616500340064656d6f0032370064656d6f40706c676e7a2d3363373038393934613731616665313800313430006666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666600617474656d70742d76312d3533393834366239633062393435393066666433343532353031383838333465316261306462383961316437613034363534616264366664343735626265313100"
+}
+```
+
+The attempt frames `["7","sync",scopeId,sourceFingerprint,"demo"]`; the operation
+frames `["desired-pair",scopeId,"demo",newNativeId,sourceFingerprint+NUL+attemptId]`.
+Its last field length is 140 UTF-16 units. A backslash-zero salt yields invalid
+`operation-v1-8bfc31decbc66d89967a5d55058e006303f44ac5a85e4bbc6e5265a24f4f6ad8`.
+`test/zcode-migration-contract-vectors.test.mjs` pins these literals and calls the
+existing pure planner attempt derivation. These are framing vectors, not native
+admission, original-history, checkpoint or capability proof.
+
+## Closed checkpoint and fence boundary
+
+These are proposal types, not additions to current runtime/state enums:
+
+```ts
+type NativeFenceEvidence = {
+  mechanism: "host-enforced-cross-process";
+  targetVersion: Extract<TargetVersionObservation, { kind: "detected" }>;
+  evidenceId: Digest;
+  writerCoverageDigest: Digest; physicalBoundaryDigest: Digest;
+};
+type PairedCheckpointPoint =
+  | "sealed" | "canonical-marketplace-source-ready" | "canonical-resources-ready"
+  | "canonical-marketplace-registered"
+  | "canonical-verified" | "old-flag-removed" | "old-row-removed"
+  | "old-cache-removed" | "old-resources-removed"
+  | "old-source-entry-removed" | "old-source-payload-removed"
+  | "old-cache-entry-removed" | "old-cache-payload-removed"
+  | "old-marketplace-record-retired" | "old-source-root-retired"
+  | "old-marketplace-cache-root-retired" | "candidate-verified"
+  | "committed" | "restoring" | "rolled-back";
+type PairedObservation = {
+  old: SerializedLifecycleOperation["expected"];
+  canonical: SerializedLifecycleOperation["expected"];
+  roots: RootProof[]; retention: RetentionProof[]; sharedStores: SharedStoresProof;
+};
+type ForwardCheckpointPoint = Exclude<PairedCheckpointPoint, "restoring" | "rolled-back">;
+type PairedCheckpointPolicy = {
+  schemaVersion: 1;
+  steps: { from: Exclude<ForwardCheckpointPoint, "committed">;
+    to: Exclude<ForwardCheckpointPoint, "sealed">;
+    primitive: "rename-owned-tree" | "replace-selected-json" | "native-marketplace-add" | "native-install"
+      | "verified-readback" | "ledger-cas";
+    allowedDeltaDigest: Digest }[];
+  reverse: { from: Exclude<ForwardCheckpointPoint, "committed">;
+    steps: { index: number; primitive: "rename-owned-tree" | "replace-selected-json";
+      allowedDeltaDigest: Digest }[] }[];
+};
+type PairedStepIntent = {
+  schemaVersion: 1; admissionId: Digest; sealDigest: Digest;
+  predecessorCheckpointId: Digest; direction: "forward" | "reverse";
+  policyIndex: number; beforeDigest: Digest; expectedAfterDigest: Digest | null;
+  intentId: Digest;
+};
+type PairedCheckpoint = {
+  schemaVersion: 1; admissionId: Digest; sealDigest: Digest;
+  attemptId: string; operationId: string;
+  sequence: number; point: PairedCheckpointPoint;
+  previousCheckpointId: Digest | null; fenceEpoch: string;
+  observation: PairedObservation; stepIntentId: Digest | null;
+  rollback: { fromCheckpointId: Digest; step: number } | null;
+  nativeReceipt: { command: "marketplace-add" | "install";
+    invocationId: string; invocationWindowDigest: Digest;
+    stdoutDigest: Digest; observedDeltaDigest: Digest } | null;
+  checkpointId: Digest;
+};
+```
+
+All fields/versions are closed; unknown points, duplicate steps and skipped or
+reordered transitions fail. `checkpointId` is
+`H("plugnz/zcode-paired-checkpoint/v1", checkpoint without checkpointId)`.
+`sequence` starts at zero and increments by one. The sealed checkpoint has null
+predecessor/receipt and equals the seal's complete prior; every successor binds its
+predecessor ID and exact admission/seal/attempt/operation/fence epoch. Observation
+digests use `H("plugnz/zcode-paired-observation/v1", observation)`; sealed delta
+policy digests use `H("plugnz/zcode-paired-delta/v1", exact allowed selected paths/keys/operation)`.
+Hashes are correlation checks, never possession or native mutation authority.
+The seal fixes delta policies, not guessed full future native timestamp/UUID
+digests. Before each step append one immutable intent under the held fence;
+`intentId = H("plugnz/zcode-paired-intent/v1", intent without intentId)`.
+Its beforeDigest equals the exact predecessor observation, index/direction select
+exactly one sealed policy, and expectedAfterDigest is derived from that predecessor
+plus the sealed deterministic delta for every managed/reverse step. It may be null
+only for the two native calls whose generated metadata is receipt-bound. Checkpoint
+stepIntentId matches that exact intent; sealed has null stepIntentId. Intents cannot
+alter the delta policy, Scope, Source, IDs, roots, prior or retained original.
+
+The fixed forward chain is the points above through candidate-verified, then
+committed. Shared-root retirement points are verified no-ops preserving the complete
+shared root; exclusive-root points remove only their captured root after selected
+contents are retired. Rolled-back is reachable only through whole paired readback
+verification after restoration, never because one root happens to match its prior.
+Restoring/rolled-back are not members of the forward chain. A forward checkpoint
+has null rollback; restoring/rolled-back require its exact start checkpoint ID and
+an index into the seal's complete deterministic reverse policy for that start point.
+
+| Point reached | Sole permitted difference; every unlisted witness is invariant |
+| --- | --- |
+| canonical-marketplace-source-ready | Atomic rename of exact sealed authored marketplace tree into absent canonical root; old unchanged |
+| canonical-resources-ready | Atomic rename of exact sealed resource tree into absent canonical root; all other surfaces unchanged |
+| canonical-marketplace-registered | Native marketplace add creates exact canonical known record/cached marketplace, including full native sidecar inventory |
+| canonical-verified | Native install creates canonical cache/installed row/enablement; actual loader, Source/resources and complete native delta verify; old unchanged |
+| old-flag-removed | Remove only old enablement; old registered cache inactive; all data/options unchanged |
+| old-row-removed | Remove only old installed row; captured payload roots still exist |
+| old-cache-removed | Remove only independently exclusive old cache tree |
+| old-resources-removed | Remove only independently exclusive old external-resource tree |
+| old-source-entry-removed | Remove only selected authored manifest entry; preserve sibling entries/order/metadata |
+| old-source-payload-removed | Remove only selected authored package subtree; preserve sibling roots/inventory |
+| old-cache-entry-removed | Remove only selected native-cached marketplace manifest entry; siblings unchanged |
+| old-cache-payload-removed | Remove only selected native-cached package subtree; siblings unchanged |
+| old-marketplace-record-retired | Exclusive: remove exact old known record; shared: only proved pluginCount decrement |
+| old-source-root-retired | Exclusive root absent; shared complete preserved authored root remains |
+| old-marketplace-cache-root-retired | Exclusive root absent; shared complete preserved native-cached root remains |
+| candidate-verified | No mutation; match both readbacks, every root/shared remainder/sibling and retention |
+| committed | One ledger generation CAS replacing exact old row and persisting immutable relation/commit plus cleanup-pending journal; native unchanged |
+
+The two native transitions permit `expectedAfterDigest:null` only for the pinned
+schema's native-generated timestamps/transaction IDs captured from the exact approved
+command under the proven shared fence. Their sealed delta policy fixes every semantic
+field/path and all siblings/remainders. Before any old retirement, durably record the
+exact validated command receipt plus full post-state checkpoint and read it back.
+A timeout, exit failure, kill, absent receipt, unrecognized sidecar or incomplete
+native state never authorizes a guessed transition or broad rollback. Interruption
+between native mutation and that durable checkpoint is explicitly unknown, with
+loud pending recovery and complete backups. Real native recovery classification
+of this window remains required acceptance work; this schema does not prove it.
+
+For managed writes, expectedAfterDigest is mandatory and derived before apply from
+sealed bytes/entries and predecessor, never from arbitrary post-state. Persist
+intent before each write. Tree activation/retirement uses one same-filesystem
+atomic rename between an exact captured root and an exclusive private staged or
+retained artifact slot; both parents' captured physical identity/device and the
+destination's absence are mandatory. Root retirement does not recursively delete
+live contents: it removes their native path by rename, retaining the complete
+artifact until COMMIT cleanup. JSON replacement uses a fully written deterministic
+candidate and atomic same-parent rename, with exact prior raw bytes/mode and every
+preserved remainder checked under the fence. Thus each managed edge leaves exactly
+predecessor or successor. Recursive live deletion, multi-object live copy and
+cross-device rename are forbidden primitives for this format, not deferred prefix
+wildcards. Final disposal is modern cleanup after durable COMMIT, never rollback
+authority over an unproved live tree.
+Restart matches one full witnessed checkpoint or proved atomic-edge outcome across
+all surfaces; Cartesian mixtures of old/new roots/JSON are foreign states. For every
+forward checkpoint except committed, the seal contains exactly one reverse recipe:
+reverse its completed native/managed deltas in deterministic order, using only
+captured owned-tree rename and selected-JSON replacement, never native uninstall.
+Unchanged surfaces are verified no-ops; each reverse intent fixes full before/after
+observation digests for its sealed precise selected paths/keys. Reverse indices start at zero,
+are contiguous, and terminate at the complete sealed prior. Restore progress uses
+the same predecessor/successor CAS across all surfaces, checks all invariant
+remainders before its first write, and records each completed atomic step before
+the next. Only full final prior readback permits rolled-back. A reverse policy
+missing any start point, surface or exact artifact authority refuses sealing.
+Failure retains artifacts/pending state. COMMIT is irreversible:
+cleanup cannot follow a reverse edge or resurrect old ownership.
+
+The fence begins before snapshots/native staging and spans both IDs, both
+marketplace roles, shared installed/known registries, every effective config path,
+data/options witnesses, native transaction sidecars and ledger CAS. Keep it through
+paired verification and rollback or committed cleanup. Restart acquires a fresh
+epoch and reproves every exact witness. Coverage must include native CLI,
+app-server/protocol, discovery/seed/atomic-recovery writers, plugnz and any
+plugin-data writers excluded by claimed retention fingerprints. Versioned capability
+evidence must prove actual exclusion and crash/restart semantics for this complete
+writer/root boundary. Matching hashes, empty process scans, lock filenames,
+promise queues, a plugnz-only lease and successful child exit are not participation.
+
+### Pinned native limitation and owner options
+
+At official [Source 872ad960's plugin-storage-lock.ts](https://github.com/zai-org/ZCode/blob/872ad960de7ec172591f7e1952f7849229f94521/apps/zcode-cli/packages/bootstrap/src/lib/plugin-storage-lock.ts#L1-L27),
+the entire mutation lock is an in-process `Map<string,Promise<unknown>>`; lines 1–5
+explicitly make cross-process locking a non-goal. Separate CLI/app-server processes
+therefore do not share it. The
+[official seed lock](https://github.com/zai-org/ZCode/blob/872ad960de7ec172591f7e1952f7849229f94521/apps/zcode-cli/packages/bootstrap/src/app/official-plugin-seed-lock.ts)
+is scoped to bundled-version seeding, not this paired boundary. Native
+[atomic directory activation](https://github.com/zai-org/ZCode/blob/872ad960de7ec172591f7e1952f7849229f94521/apps/zcode-cli/packages/adapters/src/plugins/atomic-directory.ts)
+has per-target reservations/exclusive markers and recovery; its POSIX atomic file
+replacement path does not acquire a common registry/config fence. These useful
+narrower protections do not provide whole-store cross-process exclusion. The
+[native marketplace implementation](https://github.com/zai-org/ZCode/blob/872ad960de7ec172591f7e1952f7849229f94521/apps/zcode-cli/packages/adapters/src/plugins/marketplace.ts#L587-L669)
+installs a dependency closure and separately saves registry state, explaining why
+outside closure writes and interrupted sidecars need complete witnessing.
+
+This is verified source-level evidence, not a released-CLI concurrency replay or
+successful genuine supplier build. Acquisition and later Native replay retain their
+own exact supplier/runtime hashes and failed attempts. No accepted producer of
+NativeFenceEvidence exists for the pinned version; it cannot currently produce a
+Native identity-migration admission or seal. Missing native cross-process exclusion
+is a real route capability limitation. Unfinished plugnz checkpoint/transaction/CAS
+code is separately an internal defect/invariant. Neither is a green skip or a
+waiver of required migration.
+
+Options requiring explicit owner choice, not an automatic scope decision:
+
+1. Preserve automatic Native safety and pursue an upstream-supported cross-process
+   transaction/fence covering the complete boundary, enabling only a later proved
+   native version. External issue/PR/coordination is **human-owned afterwards**;
+   this agent files nothing outside controlled repositories.
+2. Approve a separately specified offline/OS-exclusive maintenance route enforcing
+   absence of native/data writers throughout the transaction, not a one-time scan.
+   It needs its own real exclusion/restart proof and changes the operational
+   contract; it is not relabeled automatic Native support.
+3. Retain historical activations and visibly hard-block migration while completing
+   other supported lifecycle work. This preserves state but does not deliver or
+   exclude migration. Managed-only materialization alone does not exclude native
+   writers and is not a proven substitute for either fence option.
+
+This proposal selects none. No real host is stopped, no upstream is modified/filed,
+no runtime floor changes and no safety gate is weakened.
 
 ## Transaction, CAS and restart
 
@@ -524,6 +893,21 @@ arm. The later Native arm has its own bounded budget and distinct unprivileged
 UID. Freeze controlled HTTPS Source V1/V2 and the rebuilt combined producer
 artifact before each gate; earlier C72 proofs belong only to their own producer.
 No real installation, user credentials or model turn is in this proof scope.
+
+## Correction checkpoint verification (design only)
+
+The operation recipe/golden tests were first RED against the prior proposal:
+zero pass, two fail, two assertions. After correction, pinned Bun 1.4.0 ran
+`bun test test/zcode-migration-contract-vectors.test.mjs`: three pass, zero fail,
+13 assertions. Its independent Node subprocess used Node 22.23.1 and reproduced
+the literal attempt and operation IDs using built-in SHA256 and actual NUL bytes.
+`bun run check` and `git diff --check` exited 0. These are pure framing checks,
+not migration execution, a runtime schema gate, Native concurrency proof or a
+whole producer/consumer verification. No current enum, state schema, executor,
+native route, runtime minimum, dependency or real installation changes here.
+The corrected closed proposal still requires both independent design axes;
+native fence availability still requires the owner decision described above.
+Skills remain unchanged; no skill-performance improvement is claimed.
 
 Proofs: canonical Git Source install, same-HEAD zero-write preview/apply, changed
 SHA/content convergence where supported, actual loader skill/command/resource
