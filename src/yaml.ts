@@ -68,11 +68,15 @@ function needsQuotes(value: string): boolean {
   if (LEADING_INDICATORS.has(value[0]!)) return true;
   if (MERGE_KEYS.has(value)) return value === "<<";
   if (value === ".") return true; // YAML document-end marker as a whole scalar
-  // ASCII space at either edge quotes; every other whitespace codepoint
-  // (U+2000–U+200A, U+1680, U+202F, U+205F, U+3000, U+FEFF) passes plain —
-  // JS trim() strips those, so it must not drive this rule. NEL/NBSP/LS/PS
-  // quote anywhere via the codepoint loop below.
+  // ASCII space at either edge quotes; other whitespace codepoints
+  // (U+2000–U+200A, U+1680, U+202F, U+205F, U+3000) pass plain — JS trim()
+  // strips those, so it must not drive this rule. NEL/NBSP/LS/PS quote
+  // anywhere via the codepoint loop below.
+  // Leading (or lone) U+FEFF quotes: Bun 1.4.2 emitted a bare BOM that
+  // parsed back as null; 1.4.3 quotes it so the roundtrip survives.
+  // Embedded and trailing U+FEFF stay plain.
   if (value[0] === " " || value.endsWith(" ")) return true;
+  if (value[0] === "\uFEFF") return true;
   for (const char of value) {
     const code = char.charCodeAt(0);
     if (char === "\"" || char === "'") return true;

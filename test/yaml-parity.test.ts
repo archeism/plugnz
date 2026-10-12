@@ -12,6 +12,9 @@ declare const Bun: {
 type CorpusEntry = { source: string; raw: string };
 const corpus: CorpusEntry[] = JSON.parse(readFileSync(join(import.meta.dir, "parity", "corpus.json"), "utf8"));
 
+/** Last Bun version the quoting table and BMP differential sweep were re-probed under. */
+const GRAMMAR_VERIFIED_BUN = "1.4.3";
+
 /** Grammar cases derived from probing Bun.YAML.stringify directly; each pair
  * is (input, exact Bun output) so a Bun upgrade that shifts the grammar fails
  * here before it can ship different bytes to any install. */
@@ -68,6 +71,12 @@ const CROSS_CHECK: unknown[] = [
   ["x\r y"],
   ["a\x7f b"],
   ["null\n"],
+  // Bun 1.4.3 quotes a scalar that starts with (or is) U+FEFF; embedded and
+  // trailing U+FEFF stay plain. 1.4.2 emitted a lone BOM bare (roundtrip loss).
+  "\uFEFF",
+  "\uFEFFx",
+  "a\uFEFFb",
+  "x\uFEFF",
 ];
 
 describe("yaml byte parity (capability yaml-parity)", () => {
@@ -160,14 +169,17 @@ describe("yaml merge-key and adversarial differential coverage", () => {
   test("the byte-grammar contract declares which Bun versions verified it", () => {
     // Grammar is an observed Bun implementation detail, not a spec: U+2028
     // serializes differently on Bun 1.3.x than on the 1.4.x line this
-    // writer's grammar was derived and swept under. The published artifact
-    // is Bun-independent (the bundle embeds this writer); this contract only
-    // governs the dev-time differential gate. Update GRAMMAR_VERIFIED_BUN
-    // after re-probing whenever Bun's serialization shifts.
+    // writer's grammar was derived and swept under. Last re-sweep was Bun
+    // 1.4.3 (GRAMMAR_VERIFIED_BUN): leading U+FEFF quotes; 1.4.2 emitted it
+    // bare and parsed a lone BOM as null. CI pins that version in
+    // .github/workflows/tests.yml. The published artifact is Bun-independent
+    // (the bundle embeds this writer); this contract only governs the
+    // dev-time differential gate. Update GRAMMAR_VERIFIED_BUN after
+    // re-probing whenever Bun's serialization shifts.
     const version = (Bun as unknown as { version: string }).version;
     const ok = /^1\.(4|5|6|7|8|9)\./.test(version) || /^2\./.test(version);
     if (!ok) throw new Error(
-      `byte-grammar contract not verified under Bun ${version}: the differential sweep is derived from Bun >= 1.4 serialization (U+2028 differs on 1.3.x). Pin dev Bun >= 1.4 to run this gate, or re-derive the grammar and update the contract in test/yaml-parity.test.ts.`,
+      `byte-grammar contract not verified under Bun ${version}: the differential sweep is derived from Bun >= 1.4 serialization (U+2028 differs on 1.3.x; U+FEFF quoting from ${GRAMMAR_VERIFIED_BUN}). Pin dev Bun >= 1.4 to run this gate, or re-derive the grammar and update the contract in test/yaml-parity.test.ts.`,
     );
   });
 

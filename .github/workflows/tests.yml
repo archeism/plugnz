@@ -20,6 +20,11 @@ jobs:
         with:
           persist-credentials: false
       - uses: oven-sh/setup-bun@v2
+        with:
+          # Pin to the version the yaml-parity grammar was re-swept under
+          # (test/yaml-parity.test.ts GRAMMAR_VERIFIED_BUN). Unpinned setup-bun
+          # floated 1.4.3 onto a writer swept under 1.4.2 and reddened CI.
+          bun-version: "1.4.3"
       - name: Install and run the full suite
         run: |
           bun install --frozen-lockfile
