@@ -18,6 +18,7 @@ import { CompatibilityError } from '../src/compatibility';
 import { kimiNativeEnv, withKimiNative } from './kimi-fixture';
 import { LifecycleReportValidationError, parseLifecycleReport } from '../src/lifecycle-report';
 import { hermesRuntimeFixture } from './hermes-runtime-fixture';
+import { snapshotTree } from './lifecycle-cli-harness';
 
 const plannedNativeId: HostWriter['plannedNativeId'] = (plugin) => plugin.name;
 
@@ -310,7 +311,7 @@ describe('add', () => {
     });
   });
 
-  test('cursor > marketplace collection survives add, list, doctor, legacy pending repair, update failures, and removal', async () => {
+  test('cursor > marketplace collection survives ordinary add, list, doctor, repair, update failures, and removal', async () => {
     await withHostEnvAsync('cursor', async (home) => {
       rmSync(join(home, '.cursor', 'plugins', 'local', 'demo-plugin'), { recursive: true, force: true });
       const sourceDir = mkdtempSync(join(tmpdir(), 'open-plugin-cursor-marketplace-'));
@@ -341,22 +342,19 @@ describe('add', () => {
         const original = readState().find((record) => record.host === 'cursor' && record.id === 'personal');
         expect(original === undefined).toBe(false);
         const target = join(home, '.cursor', 'plugins', 'local', 'personal');
-        // This is the state left by the old writer: a native bare marker and
-        // a pending marketplace-qualified CLI record. Retrying must recover it.
-        writeFileSync(join(target, '.plgnz-install.json'), JSON.stringify({ source: sourceDir, pluginId: 'personal', fingerprint: original?.fingerprint ?? '' }));
-        writeLedger(home, [{ ...original!, id: 'personal@personal', pending: 'install' }]);
-
-        output.length = 0;
-        expect(await main(['add', sourceDir, '--target', 'cursor', '--plugin', 'personal', '--adopt-existing', '--legacy-json'])).toBe(0);
-        expect((JSON.parse(readFileSync(join(target, '.plgnz-install.json'), 'utf8')) as { pluginId?: string }).pluginId).toBe('personal@personal');
-        expect(readState().find((record) => record.host === 'cursor' && record.id === 'personal')?.pending).toBeUndefined();
-
         output.length = 0;
         expect(await main(['add', sourceDir, '--target', 'cursor', '--plugin', 'personal', '--adopt-existing', '--legacy-json'])).toBe(0);
         const outcomes = JSON.parse(output.join('')) as Array<{ status: string; nativeId: string }>;
         const nativeId = cursor.listInstalled().find((plugin) => plugin.name === 'personal')?.id;
         expect(nativeId).toBe('personal');
         expect(outcomes.some((outcome) => outcome.status === 'unchanged' && outcome.nativeId === nativeId)).toBe(true);
+
+        // Ordinary owned same-version repair is distinct from legacy adoption.
+        writeFileSync(join(target, 'skills', 'skill', 'SKILL.md'), '# tampered installed bytes\n');
+        output.length = 0;
+        expect(await main(['add', sourceDir, '--target', 'cursor', '--plugin', 'personal', '--legacy-json'])).toBe(0);
+        expect(readFileSync(join(target, 'skills', 'skill', 'SKILL.md'), 'utf8')).toBe('# Personal\n');
+        expect((JSON.parse(readFileSync(join(target, '.cursor-plugin', 'plugin.json'), 'utf8')) as { version: string }).version).toBe('0.2.0');
 
         writeFileSync(join(sourceDir, 'plugins', 'personal', 'skills', 'skill', 'SKILL.md'), '# Personal v2\n');
         output.length = 0;
@@ -382,6 +380,44 @@ describe('add', () => {
       } finally {
         console.log = originalLog;
       }
+    });
+  });
+
+  test('cursor > qualified legacy pending adoption fails loudly without native, cache, or ledger writes', async () => {
+    await withHostEnvAsync('cursor', async (home) => {
+      rmSync(join(home, '.cursor', 'plugins', 'local', 'demo-plugin'), { recursive: true, force: true });
+      const sourceDir = join(home, 'legacy-cursor-source');
+      initGitRepo(sourceDir, {
+        '.claude-plugin/marketplace.json': JSON.stringify({ name: 'personal', plugins: [{ name: 'personal', source: './plugins/personal' }] }),
+        'plugins/personal/plugin.json': JSON.stringify({ name: 'personal', version: '0.2.0' }),
+        'plugins/personal/skills/skill/SKILL.md': '# Personal\n',
+      });
+      const output: string[] = [], originalLog = console.log;
+      console.log = (value: string) => output.push(value);
+      try {
+        expect(await main(['add', sourceDir, '--target', 'cursor', '--plugin', 'personal', '--json'])).toBe(0);
+        const original = readState().find(record => record.host === 'cursor' && record.id === 'personal');
+        expect(original === undefined).toBe(false);
+        const target = join(home, '.cursor', 'plugins', 'local', 'personal');
+        // Preserve the original mixed-test fixture: bare old marker and exact
+        // marketplace-qualified imported pending ledger claim, not modern ownership.
+        writeFileSync(join(target, '.plgnz-install.json'), JSON.stringify({ source: sourceDir, pluginId: 'personal', fingerprint: original!.fingerprint }));
+        writeLedger(home, [{ ...original!, id: 'personal@personal', pending: 'install' }]);
+        const before = snapshotTree(home);
+        for (let retry = 0; retry < 2; retry++) {
+          output.length = 0;
+          expect(await main(['add', sourceDir, '--target', 'cursor', '--plugin', 'personal', '--adopt-existing', '--json'])).toBe(1);
+          const report = parseLifecycleReport(JSON.parse(output.join('')));
+          expect(report.summary.reason?.category).toBe('internal');
+          expect(report.summary.reason?.code).toBe('internal.invariant');
+          expect(report.summary.reason?.diagnostic).toContain('no verified mutation fence and atomic adoption executor');
+          expect(report.plan[0]?.adoption?.original.nativeId).toBe('personal@personal');
+          expect(report.summary.mutationStarted).toBe(false);
+          expect(report.summary.changed).toBe(false);
+          expect(snapshotTree(home)).toEqual(before);
+          expect(readState().find(record => record.host === 'cursor' && record.id === 'personal@personal')?.pending).toBe('install');
+        }
+      } finally { console.log = originalLog; }
     });
   });
 
