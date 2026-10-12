@@ -78,23 +78,90 @@ Reader-only `doctor`, `list`, `scopes` and dry-run must not import the writer
 lease or create a lock database. Global Source/record/admission preflight must
 remain before the first writer operation. No new user verb is proposed.
 
-## Complete writer boundary scan at 75c07bf
+## Corrected writer boundary scan at published 0.0.13 source
 
-CodeGraph exploration was followed by exhaustive `rg` for both write APIs.
+Rechecked source `80e9618` after the earlier `75c07bf` scan. CodeGraph exploration
+was followed by direct-call and alias/callback searches for both write APIs.
 Protecting only executor mutations or CLI's `add/update/remove` guard is
 insufficient: sync, retire, pin, recovery and legacy writes also participate.
 
 | Writer | Current callers |
 | --- | --- |
-| `writeLifecycleState` | executor Ledger.save; lifecycle-recovery preparation/settlement; pin-lifecycle; pin persisted records; CLI writer-record install and legacy remove pending/final |
-| `writeState` v1 | pin; CLI writer-record install and legacy remove pending/final |
+| `writeLifecycleState` | `executor.ts:1065` Ledger.save; `lifecycle-recovery.ts:78,95`; `pin-lifecycle.ts:39`; `pin.ts:163`; `cli.ts:908,1839,1869` writer install and legacy remove pending/final |
+| `writeState` v1 | `pin.ts:142`; `cli.ts:905,1844,1873`; **aliased** `update.ts:240,330` pending/final saves |
 
 Exact files: `src/executor.ts`, `src/lifecycle-recovery.ts`,
-`src/pin-lifecycle.ts`, `src/pin.ts`, `src/cli.ts`, `src/state-write.ts`.
-`src/update.ts` has an imported legacy writer but no actual call. Source-helper
-tests must exercise the same guarded writer boundary; the published package
-exposes the CLI, not these TypeScript modules. Scan again after merging newer
-main rather than treating these line numbers or callers as permanent.
+`src/pin-lifecycle.ts`, `src/pin.ts`, `src/update.ts`, `src/cli.ts`,
+`src/state-write.ts`. The former statement that update only imports the writer
+was incorrect: `runUpdate` binds `const save = options.writeState ?? writeState`
+at `update.ts:111`, then calls it before native add and after verified readback.
+`UpdateOptions.writeState` is an injectable callback at line 73. Public CLI
+`cli.ts:2145–2146` injects its preloaded state, selected records, writers and
+native identities into `runUpdate`, **not** a custom save callback; its default
+aliased writer therefore remains live. Searching only `writeState(` misses it.
+
+Source-helper tests must exercise the same guarded writer boundary; the published
+package exposes the CLI, not these TypeScript modules. Scan aliases/callbacks
+again after merging newer main rather than treating this inventory as permanent.
+
+## One proposed next implementation slice: shared writer lifetime
+
+This remains a proposal; no backend/runtime policy is selected here. The already
+private `src/sqlite-file-lease.ts` helper is unwired. A final-write-only mutex would
+leave native mutation and recovery exposed, and v1 has no generation counter.
+The [wire contract](../legacy-adoption-wire-contract.md#durable-relation-seal-projection-and-immutable-commit)
+requires holding the ledger lease through cleanup and the **last** journal CAS.
+
+1. Add one private ledger-transaction coordinator keyed to the canonical physical
+   ledger parent and basename, with a stable dedicated lease file. The ledger
+   itself is replaced by rename, so its changing inode cannot be the lock identity.
+   Resolve binding consistently across `OPEN_PLUGIN_HOME` aliases; never unlink
+   or replace the lease file. Creation/binding policy for an absent ledger parent
+   must be explicit and occur only after successful read-only global preflight.
+2. `runFrozenLifecycle` first completes the existing whole-batch freeze/preflight.
+   Dry-run and refused plans return before loading the lease provider. Apply then
+   acquires the lease, rereads and revalidates the whole frozen batch before the
+   first recovery or staging write. Reject stale generation/identity rather than
+   silently accepting a new command. Reuse retained Sources without refetch.
+   Hold the same lease through `recoverLifecycleJournals`, retained-source replan,
+   `executeLifecycle`, native readback, cleanup and final ledger closure.
+3. Pass an opaque active transaction context through those writers and nested
+   helpers. Reuse that context for the same ledger instead of reacquiring the
+   lease in `runOfflineLifecyclePin` or each `Ledger.save`. A process-global
+   "already locked" boolean would wrongly authorize another concurrent command.
+   Both `writeState` and `writeLifecycleState` must verify the live bound context;
+   their existing schema/history/generation validation remains mandatory.
+4. Protect the owning legacy and pin critical sections too: `runWriterAdd`
+   including both `writeInstallLedger` calls; the legacy remove loop including
+   pending intent/native remove/readback/final save; `runUpdate` including aliased
+   or injected saves; and `runPin` including native pin and `persistRecordedPins`.
+   Preloaded/injected records must be revalidated under the lease before mutation.
+   A helper entered directly must not bypass this ownership boundary. Split CLI
+   paths must share their outer command context, not silently release between
+   nested writer phases. Deterministic whole-batch failures remain zero-write.
+5. Keep lease imports out of reader modules and dry-run execution. Map busy,
+   binding/provider and release errors to actionable nonzero results. Release
+   failure after commit does not authorize rollback or another unlocked write;
+   any later repair reacquires and revalidates exact durable generation/history.
+
+First public regression proposal: two real CLI children share one temporary
+`OPEN_PLUGIN_HOME`. Pause writer A after its pending journal but before native
+readback/final save; writer B must report busy without native/ledger changes.
+Include a legacy update alias and pin contender, not only two executor saves.
+SIGKILL A: B must reacquire the lease and reach the existing honest recovery
+result without erasing pending intent or losing a committed generation. A
+successful native recovery still requires its separate fenced/CAS proof;
+unsupported recovery must remain loud. Read-only commands must still run without
+importing the provider or creating a lease database. This is a proposed product
+gate, not a new successful run or native-fence claim.
+
+Owner runtime-floor choice still blocks production provider activation. The helper
+also currently requires `process.getuid` and POSIX ownership/mode checks; merely
+raising Node's version does not establish Windows/platform compatibility. Neither
+another backend nor an operating-system exclusion is chosen here. A ledger lease
+excludes cooperating plugnz writers only: distinct ledgers targeting one native
+root and independent native harness writers still require separate evidenced
+native-root coordination/CAS. No automatic native-fence guarantee follows.
 
 ## Frozen experiments (no real homes or native launchers)
 
