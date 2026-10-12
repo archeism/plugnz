@@ -377,7 +377,7 @@ admission. Admission hashing includes that complete observation; the existing
 capability `evidenceId` binds its reviewed route/version profile. Exact verified
 native supplier/runtime hashes remain in acquisition and capability-proof receipts,
 not in a newly invented mandatory public artifact field.
-Fresh probing/revalidation after actual fence acquisition must equal the previewed
+Fresh probing/revalidation after ALL required fences are acquired must equal the previewed
 observation and capability evidence before any recovery, stage, ledger or native write;
 version/probe/evidence drift invalidates the expectation globally. The paired seal's
 `detectedVersion`/`versionProbeId` equal those detected fields; its capability
@@ -387,8 +387,10 @@ Existing explicit manifest selector may add optional
 `expectedMigration: { schemaVersion: 1; admissionId: Digest }`. It must match a
 real migration and cannot create one. A legacy-unsealed origin also requires
 existing explicit `adoptExisting: true`; a verified modern owned origin does not
-require invented adoption authority. Direct commands freeze admission before
-writes; Personal's two-process flow supplies the preview expectation. Original
+require invented adoption authority. Direct commands freeze the complete batch
+read-only, acquire all required fences, then revalidate that complete batch before
+the first accepted intent/relation/recovery write; Personal's two-process flow
+supplies the preview expectation. Original
 Scope/Source/target/version/native-byte drift or ambiguous correspondence anywhere
 is global zero-write refusal. Own recovery/replan writes cannot silently rebind a
 precommand expectation or refetch Source.
@@ -799,32 +801,63 @@ no runtime floor changes and no safety gate is weakened.
 
 ## Transaction, CAS and restart
 
-1. Global admission freezes every Scope and both-ID coverage. Persist fresh
-   accepted intent plus exact retained origin/admission relation atomically before
-   staging. An expectation from preview binds the precommand generation.
-2. Acquire a proven mutation fence, revalidate admission/current native roots,
-   then snapshot both cache selections, registry/config entries, marketplace
+1. Global read-only admission freezes the COMPLETE command batch: every Scope,
+   both-ID coverage, Source snapshot, native/version/capability evidence and each
+   expectation. An expectation from preview binds the precommand generation.
+   This phase performs no accepted intent, relation, recovery, staging, ledger or
+   native write. It cannot recover/replan an earlier operation to make admission
+   pass or silently rebind/refetch a precommand expectation or Source.
+2. Acquire ALL required fences for that complete batch in deterministic global canonical order.
+   Before acquiring any, enumerate the complete lock set, including the ledger
+   lease and every proven native-writer boundary. Canonical physical lock-resource
+   identities, not Scope order or logical aliases, determine one common total
+   order for admission, apply and recovery. Deduplicate aliases of the same lock;
+   acquire it once, never reentrantly. Ledger lease acquisition participates in
+   this same order, not a nested ledger-first/native-first order chosen per route.
+   Every cooperating writer uses that order; an incompatible native lock protocol
+   blocks admission until its coherent ordering/exclusion is proved. Acquisition
+   failure releases acquired fences in reverse order without proceeding to writes.
+   Exclusion acquisition must not create/repair accepted ledger state, run recovery,
+   mutate native state or Source, or grant a mutation exception to the zero-write
+   promise. Its actual primitive and any lock bookkeeping need reviewed evidence;
+   this proposal supplies neither an implementation nor an imaginary native fence.
+3. Revalidate the COMPLETE frozen batch with ALL fences held, including the ledger
+   generation, every Scope/target/context, frozen Source snapshot, both native IDs,
+   canonical roots and complete native/shared-store/retention witnesses, fresh
+   TargetVersionObservation/probe, capability/fence evidence, and all expectations.
+   Any deterministic drift, including a bad last Scope, is command-global zero-write:
+   release all fences without accepted intent/relation/recovery/native/Source writes.
+   No per-Scope accept-then-lock loop and no recovery/replan/refetch can bypass this
+   boundary. Missing actual native exclusion remains the capability hard block
+   described above; a ledger lease cannot satisfy it.
+4. FIRST atomic accepted intent/relation/recovery writes occur only after that
+   complete revalidation: persist fresh accepted intent plus the exact retained
+   origin/admission relation atomically, bound to the unchanged precommand
+   expectation/generation. Keep the complete fence set held through capture,
+   staging, sealing, apply, readback and commit or bounded recovery. Then snapshot
+   both cache selections, registry/config entries, marketplace
    entries/owned trees, external resources and data/options boundaries before any
-   mutation. Capture canonical physical roots so supported stable native-store
+   native mutation. Capture canonical physical roots so supported stable native-store
    links remain valid and later root retargets cannot authorize deletion.
-3. Seal the fresh handle and paired priors with the complete attempt/operation,
+5. Seal the fresh handle and paired priors with the complete attempt/operation,
    both IDs, roots/fingerprints, Source and origin digest. Persist it before apply.
    Native fence proof is a required gate: a plugnz-only lock must not be described
    as excluding concurrent native harness writers. Existing ZCode currently has no
    `beginRecovery` implementation; single-process rollback is insufficient.
-4. Stage/install the new owned identity without overwriting existing foreign
+6. Stage/install the new owned identity without overwriting existing foreign
    paths. Keep old usable state until new byte/loader/retention readback verifies.
    Then retire only the exact old activation entries and roots supported by the
    admission. Preserve old-ID data/options in place; do not guess an options merge
    or delete data because the old ID is no longer active. Report retained paths.
-5. Composite readback verifies new conforming bytes, old no longer active and
+7. Composite readback verifies new conforming bytes, old no longer active and
    exact retention/sibling preservation. One ledger generation CAS writes the
    canonical activation, removes only the exact old active record, commits the
    retained migration relation/readback and modern COMMIT cleanup-pending journal.
    `lastConverged` advances only at this verified composite boundary.
-6. Cleanup/dispose only exact captured artifacts after the durable commit receipt;
-   release the fence, then close the modern journal. Any failure keeps accurate
-   durable pending state and referenced backups. Original historical proofs stay.
+8. Cleanup/dispose only exact captured artifacts after the durable commit receipt;
+   release the complete fence set in reverse order, then close the modern journal.
+   Any failure keeps accurate durable pending state and referenced backups.
+   Original historical proofs stay.
 
 Rollback validates **all** affected surfaces before its first restore write.
 Each must equal the sealed prior or an exact reachable fresh candidate/phase
@@ -834,9 +867,11 @@ absent new state, and preserve unrelated JSON entries semantically. Validate bot
 priors and retention before publishing rollback/cleanup-pending; artifacts survive
 ledger failure. No same-ID snapshot can authorize deletion of the other ID.
 
-Restart parses the exact paired sealed handle and durable relation, re-acquires
-the same fence, validates both-ID prior/candidate CAS, and settles only the fresh
-operation. Prior/candidate classifications must include reachable intermediate
+Restart parses the exact paired sealed handle and durable relation read-only,
+re-acquires the complete required fence set in the same global canonical order,
+validates the complete frozen batch and both-ID prior/candidate CAS before its
+first recovery write, and settles only the fresh operation. Prior/candidate
+classifications must include reachable intermediate
 states (new installed while old active; new verified while old retirement partial).
 Unknown mixtures/foreign state fail loudly. Committed cleanup cannot resurrect
 the old activation, roll back a committed migration, or reopen a superseded
@@ -908,6 +943,18 @@ native route, runtime minimum, dependency or real installation changes here.
 The corrected closed proposal still requires both independent design axes;
 native fence availability still requires the owner decision described above.
 Skills remain unchanged; no skill-performance improvement is claimed.
+
+The later ordering correction preserves that checkpoint and fixes the conflicting
+transaction sequence: global read-only admission, acquisition of the complete
+canonically ordered fence/ledger-lease set, complete frozen-batch revalidation,
+then the first atomic accepted intent/relation/recovery writes. Its pure proposal
+regression was RED against `7303ca6` (three pass, one fail, 16 assertions): acquisition
+and revalidation occupied the same later step while persistence was first. After
+correction, Bun 1.3.14 ran the same focused file with four pass, zero fail and
+19 assertions; Node 22.23.1 again reproduced the framing literals. Typecheck and
+diff checks exited 0. This checks the documented sequence, not an executor,
+working lock primitive, actual concurrency or migration functionality. Both
+independent design axes must review this delta; native exclusion remains blocked.
 
 Proofs: canonical Git Source install, same-HEAD zero-write preview/apply, changed
 SHA/content convergence where supported, actual loader skill/command/resource

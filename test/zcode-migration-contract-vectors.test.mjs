@@ -9,6 +9,21 @@ const document = readFileSync(new URL('../docs/zcode-two-id-migration-contract-p
 const frame = parts => parts.map(part => `${part.length}\0${part}\0`).join('');
 const operation = parts => `operation-v1-${createHash('sha256').update(frame(parts)).digest('hex')}`;
 
+test('transaction requires whole-batch admission, fencing and revalidation before its first write', () => {
+  const transaction = document.split('## Transaction, CAS and restart\n')[1].split('\nRollback validates')[0];
+  const steps = transaction.split(/\n(?=\d+\. )/u).map(step => step.trim()).filter(Boolean);
+  const firstWrite = steps.findIndex(step => /Persist fresh|FIRST atomic accepted/u.test(step));
+  const admission = steps.findIndex(step => /Global (?:read-only )?admission/u.test(step));
+  const fences = steps.findIndex(step => /Acquire .*fence/u.test(step));
+  const revalidation = steps.findIndex(step => /[Rr]evalidate /u.test(step));
+  expect(admission).toBeGreaterThanOrEqual(0);
+  expect(fences).toBeGreaterThan(admission);
+  expect(revalidation).toBeGreaterThan(fences);
+  expect(firstWrite).toBeGreaterThan(revalidation);
+  expect(steps[fences]).toContain('deterministic global canonical order');
+  expect(steps[revalidation]).toContain('command-global zero-write');
+});
+
 test('proposal specifies an actual NUL, not a backslash-zero operation salt', () => {
   expect(document.includes('sourceFingerprint + "\\0" + attemptId')).toBe(true);
   expect(document.includes('sourceFingerprint + "\\\\0" + attemptId')).toBe(false);
