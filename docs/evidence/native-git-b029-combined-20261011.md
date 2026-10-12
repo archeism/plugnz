@@ -69,3 +69,20 @@ The five root verification logs are additionally retained outside temporary
 storage at
 `/home/charlesfengyc/.local/state/plugnz-evidence/20261011/native-git-6289/`.
 Actual released-native acceptance and main integration are still pending.
+
+## Preservation integration gate
+
+Frozen combined checkpoint `f470a0d` includes the reviewed namespace-preservation
+workflow. Root full suite settled exit 0 (handle `8284`): 843 passed, six existing
+skips, zero failed, 5865 assertions, 849 tests across 76 files, 565.55 seconds.
+Following typecheck exited 0. The application artifact remains the exact `c72c6e`
+SHA256 above; only preservation scripts/tests/docs were integrated.
+
+Full log `/tmp/plugnz-f470a0d-combined-full.log`, SHA256
+`0556707646a4be8e51d8bc54ef58ccd7315b83732ffb528be39593e761181246`.
+The later acquisition-budget correction was merged at `57dfe5b` after this full
+gate. It independently passed both author and reviewer 14-test/69-assertion
+controller/namespace gates; this paragraph does not claim a full-suite result
+for that later tree. Root independent review keeps Native arms at 100 MiB,
+acquisition-only archives at 768 MiB with 896 MiB scratch reserve, the actual
+630-second acquisition preservation reserve, and 3 GiB whole-filesystem growth.
