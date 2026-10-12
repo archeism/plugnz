@@ -60,6 +60,10 @@ import {
   type SyncManifestSyncEntry,
 } from './sync-manifest';
 import { canonicalTargetContext, type PersistedTargetIdentity } from './target-identity';
+import type { ProveLegacyAdoption } from './legacy-admission';
+import { adoptionDigest, canonicalAdoptionJson, projectLegacyRecordProofs, type AdoptionDigest } from './legacy-adoption-proof';
+import { parseAdoptionAdmission, type AdoptionAdmission } from './legacy-adoption-record';
+import { resolveRecordedPinExecutables } from './recorded-pins';
 
 export type LifecyclePlan =
   | {
@@ -105,6 +109,8 @@ export interface PlannerHost {
   readonly kinds: readonly string[];
   readonly adapter: LifecycleHostAdapter;
   readonly plannedNativeId: (plugin: PluginSource) => string;
+  /** Read-only exact legacy projection; never authorizes staging, recovery or apply. */
+  readonly proveLegacyAdoption?: ProveLegacyAdoption;
   /** Private, read-only physical identity correlation; never grants Source ownership. */
   readonly samePhysicalNativeIdentity?: (plugin: PluginSource, prior: ActivationRecord, observation: TargetInventoryObservation) => SamePhysicalNativeIdentityEvidence | null;
   readonly announceDryRun?: (operation: LifecyclePlanOperation) => void;
@@ -147,6 +153,7 @@ type PreparedSync = {
   readonly observation: TargetInventoryObservation | null;
   readonly scope: DeploymentScopeIdentity;
   readonly identity: readonly string[];
+  readonly admissions?: ReadonlyMap<string, AdoptionAdmission>;
 };
 
 type PreparedRetire = {
@@ -202,6 +209,14 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
     } else prepared.push(result);
   }
 
+  const attemptId = lifecycleAttemptId(loaded.state.stateGeneration, prepared.map((item) => item.identity));
+  for (const item of prepared) {
+    if (item.kind !== 'sync') continue;
+    const composed = await composeLegacyAdmissions(item, attemptId, loaded.state, command);
+    if (composed.kind === 'defect') return zeroWrite(command, input.dryRun, composed.reason);
+    if (composed.admissions.size > 0) prepared[prepared.indexOf(item)] = { ...item, admissions: composed.admissions };
+  }
+
   // A changed physical identity is not a fresh install. Only a separately proven
   // identity-migration transaction may supersede this recorded activation.
   for (const item of prepared) {
@@ -210,6 +225,8 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
       const nativeId = plannedNativeIdFor(item, selected.plugin);
       if (nativeId instanceof Error) return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.defect', unknownErrorDiagnostic(nativeId)));
       const samePhysicalIds = new Set<string>();
+      const admission = item.admissions?.get(selected.plugin.name);
+      if (admission !== undefined) samePhysicalIds.add(admission.native.oldLedgerNativeId);
       try {
         if (item.observation !== null && item.host?.samePhysicalNativeIdentity !== undefined) {
           for (const row of loaded.state.activations) {
@@ -247,11 +264,10 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
 
   for (const item of prepared) {
     if (item.kind !== 'sync') continue;
-    const expected = item.selected.find(selected => selected.expectedAdoption !== undefined);
+    const expected = item.selected.find(selected => selected.expectedAdoption !== undefined && !item.admissions?.has(selected.plugin.name));
     if (expected !== undefined) return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.invariant',
       `expected adoption admission for '${expected.plugin.name}' has no independently proven matching legacy operation`));
   }
-  const attemptId = lifecycleAttemptId(loaded.state.stateGeneration, prepared.map((item) => item.identity));
   const recovering = input.recoveryPreflight && loaded.state.attempts.some(attempt => attempt.command !== 'legacy-recovery' && attempt.journal.some(row =>
     prepared.some(item => item.scope.id === row.scopeId) && ['pending', 'applying', 'applied', 'readback-verified', 'rollback', 'cleanup-pending'].includes(row.state)));
   const scopes: PlannedScope[] = [];
@@ -314,7 +330,105 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
     } : planned.scope);
     operations.push(...planned.operations, ...transitional);
   }
-  return frozenPlan(input, command, attemptId, scopes, operations, prepared, loaded.state);
+  const plan = frozenPlan(input, command, attemptId, scopes, operations, prepared, loaded.state);
+  const admissions = prepared.filter((item): item is PreparedSync => item.kind === 'sync').flatMap(item => [...item.admissions?.values() ?? []]);
+  if (admissions.length === 0) return plan;
+  if (admissions.some(admission => !plan.report.plan.some(operation => operation.operationId === admission.fresh.operationId
+    && operation.action === admission.fresh.action && operation.route === admission.fresh.route))) {
+    return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.invariant',
+      'legacy admission contradicts the fresh frozen pair classification; no mutation was authorized'));
+  }
+  const reason = createLifecycleReason('internal', 'internal.invariant',
+    'exact legacy adoption admission was proven, but plugnz has no verified mutation fence and atomic adoption executor; original history and native bytes were retained');
+  const current = plan.report.plan.map(operation => {
+    const admission = admissions.find(row => row.fresh.operationId === operation.operationId);
+    if (admission !== undefined) return { ...operation, adoption: admission };
+    return operation.action === 'retain-prior' ? { ...operation, action: 'not-attempted' as const, route: 'none' as const } : operation;
+  });
+  return { kind: 'zero-write-failure', report: parseLifecycleReport({ ...plan.report, plan: current,
+    outcomes: current.map(operation => ({ ...operation, result: 'not-attempted',
+      ...(input.dryRun ? observedStates(operation, prepared, loaded.state) : { resourceState: 'unknown', activationState: 'unknown' }), changed: false, reason })),
+    summary: { result: 'incomplete', terminalPhase: 'preflight', mutationStarted: false, changed: false,
+      failureCategory: 'internal', reason, recoveryId: null, readbackId: null } }) };
+}
+
+async function composeLegacyAdmissions(
+  item: PreparedSync,
+  attemptId: string,
+  state: LifecycleStateV2,
+  command: LifecycleCommandName,
+): Promise<{ readonly kind: 'composed'; readonly admissions: ReadonlyMap<string, AdoptionAdmission> } | Defect> {
+  const admissions = new Map<string, AdoptionAdmission>();
+  if (command !== 'add' && command !== 'sync') return { kind: 'composed', admissions };
+  const scope = state.scopes.find(row => row.id === item.scope.id);
+  if (scope === undefined || !item.selected.some(row => row.adoptionRequested)) return { kind: 'composed', admissions };
+  try {
+    const proofs = projectLegacyRecordProofs(state, scope).filter(proof => !state.legacyAdoptions?.records.some(record =>
+      record.phase === 'committed' && record.legacy.original.attemptId === proof.original.attemptId
+      && record.legacy.original.operationId === proof.original.operationId));
+    for (const selected of item.selected) {
+      if (!selected.adoptionRequested || proofs.length === 0) continue;
+      if (item.host?.proveLegacyAdoption === undefined || item.observation === null) {
+        return defect(createLifecycleReason('capability', 'capability.unverified', 'target has no evidenced legacy adoption projection', 'legacy-adoption-projection'));
+      }
+      const plugin = selected.plugin;
+      const nativeId = item.host.plannedNativeId(plugin);
+      const operationId = operationIdentity('desired-pair', item.scope.id, plugin.name, nativeId, `${item.frozen.snapshot.fingerprint}\0${attemptId}`);
+      const inventory = inventoryPackageSemantics(plugin);
+      const version = await item.host.adapter.probeVersion(item.observation.target);
+      const decision = await selectPairRoute(item, plugin, inventory, nativeId, operationId, attemptId, 'install', version);
+      if (decision.kind === 'defect') return decision;
+      if (decision.kind === 'gap') return defect(decision.reason);
+      if (decision.route !== 'managed' || !/^sha256:[a-f0-9]{64}$/u.test(decision.evidenceId)) {
+        return defect(createLifecycleReason('internal', 'internal.invariant', 'legacy admission requires exact managed projection evidence'));
+      }
+      const snapshot = createFrozenPackageSnapshot({ attemptId, operationId, action: 'install', scopeId: item.scope.id,
+        target: item.observation.target, packageName: plugin.name, nativeId, sourceType: item.scope.source.kind,
+        immutableRevision: item.frozen.snapshot.revision, snapshotRoot: item.frozen.snapshotDir, packageRoot: plugin.dir,
+        relativePackagePath: plugin.relativeDir || '.', snapshotFingerprint: item.frozen.snapshot.fingerprint,
+        packageFingerprint: plugin.contentFingerprint!, inventory, ...(plugin.marketplace === undefined ? {} : { collectionName: plugin.marketplace }),
+        ...(item.scope.source.kind === 'git' ? { nativeGit: { locator: item.scope.source.locator, resolvedRevision: item.frozen.snapshot.revision } } : {}) });
+      const matches: AdoptionAdmission[] = [];
+      for (const legacy of proofs) {
+        const candidate = item.host.proveLegacyAdoption({ legacy, snapshot, source: item.frozen.snapshot,
+          version, evidenceId: decision.evidenceId as AdoptionDigest });
+        if (candidate === null) continue;
+        const resolved = resolveRecordedPinExecutables(plugin.dir, legacy.snapshot.activation.pins);
+        if (resolved.kind === 'refused') return defect(resolved.reason);
+        const native = candidate.prove(createResolvedLifecyclePins(resolved.pins));
+        if (native.adapterId !== item.host.adapter.id || canonicalAdoptionJson(native.version) !== canonicalAdoptionJson(version)) {
+          throw new Error('adapter legacy proof differs from the exact target version/evidence binding');
+        }
+        const observed = item.observation.installations.find(row => row.nativeId === native.newNativeId);
+        if (native.oldPhysicalNativeId !== native.newNativeId || native.newNativeId !== nativeId
+          || observed?.presence !== 'present' || native.roots.some(root => !observed.contentRoots.some(row =>
+            row.path === root.path && `sha256:${row.fingerprint}` === root.fullFingerprint))) {
+          throw new Error('adapter legacy proof contradicts the observed same physical root');
+        }
+        const payload = { schemaVersion: 1 as const, original: legacy.original, legacyRecordDigest: legacy.recordDigest,
+          source: item.frozen.snapshot, target: item.observation.target, packageName: plugin.name, packageVersion: native.packageVersion,
+          projectedFingerprint: native.projectedPayloadFingerprint, native,
+          fresh: { attemptId, operationId, command, baseStateGeneration: state.stateGeneration,
+            scopeId: item.scope.id, packageName: plugin.name, nativeId, sourceSnapshotId: sourceSnapshotId(item.frozen),
+            action: 'install' as const, route: 'managed' as const } };
+        matches.push(parseAdoptionAdmission({ ...payload, admissionId: adoptionDigest('plugnz/legacy-admission/v1', payload) }));
+      }
+      if (matches.length > 1) throw new Error('selected package has ambiguous legacy adoption originals');
+      const admission = matches[0];
+      if (admission === undefined) {
+        if (selected.expectedAdoption !== undefined) throw new Error('expected adoption admission has no independently proven matching legacy operation');
+        continue;
+      }
+      if (selected.expectedAdoption !== undefined && selected.expectedAdoption.admissionId !== admission.admissionId) {
+        throw new Error('expected adoption admission changed against frozen Source/native/original evidence');
+      }
+      admissions.set(plugin.name, admission);
+    }
+    return { kind: 'composed', admissions };
+  } catch (error) {
+    return defect(createLifecycleReason('internal', 'internal.defect',
+      `legacy attempt has no durable sealed recovery authority; explicit admission refused: ${unknownErrorDiagnostic(error)}`));
+  }
 }
 
 async function prepareEntry(
@@ -370,7 +484,10 @@ async function prepareSync(
     return defect(createLifecycleReason('internal', 'internal.invariant',
       `target context changed for recorded scope '${scope.id}'; use a distinct target instance or retire the recorded scope explicitly`));
   }
-  const pending = pendingDefect(state, scope.id, new Set(selected.map((item) => item.plugin.name)), command);
+  // Read-only inspection may classify an explicit legacy adoption. It cannot
+  // bypass recovery or enter execution: only the composed admission boundary follows.
+  const pending = pendingDefect(state, scope.id, new Set(selected.map((item) => item.plugin.name)), command,
+    selected.some(item => item.adoptionRequested));
   if (pending !== null) return defect(pending);
   const host = hosts.find((candidate) => candidate.kinds.includes(entry.target.kind)) ?? null;
   if (host === null) {
@@ -744,7 +861,7 @@ async function selectPairRoute(
   recordedScope?: DeploymentScopeRecord,
   activation?: ActivationRecord,
   observeExistingOnly = false,
-): Promise<{ readonly kind: 'selected'; readonly route: 'native' | 'managed'; readonly provenanceRepair: boolean } | { readonly kind: 'gap'; readonly reason: LifecycleReason } | Defect> {
+): Promise<{ readonly kind: 'selected'; readonly route: 'native' | 'managed'; readonly provenanceRepair: boolean; readonly evidenceId: string } | { readonly kind: 'gap'; readonly reason: LifecycleReason } | Defect> {
   if (item.host === null || item.observation === null) {
     return { kind: 'gap', reason: createLifecycleReason('capability', 'capability.unverified', 'missing lifecycle adapter', 'lifecycle-adapter') };
   }
@@ -815,7 +932,7 @@ async function selectPairRoute(
       pins,
     });
     if (decision.kind === 'capability-gap') return { kind: 'gap', reason: decision.gaps[0] };
-    return { kind: 'selected', route: decision.route, provenanceRepair };
+    return { kind: 'selected', route: decision.route, provenanceRepair, evidenceId: decision.evidenceId };
   } catch (error) {
     return defect(createLifecycleReason('internal', 'internal.defect', unknownErrorDiagnostic(error)));
   }
@@ -1246,10 +1363,13 @@ function pendingDefect(
   scopeId: string,
   repairablePackageNames?: ReadonlySet<string>,
   command?: LifecycleCommandName,
+  inspectLegacyAdoption = false,
 ): LifecycleReason | null {
   const activation = state.activations.find((row) =>
     row.scopeId === scopeId
     && row.pending !== undefined
+    && !(inspectLegacyAdoption && (command === 'add' || command === 'sync')
+      && row.ownership.kind === 'legacy-claim' && row.route.kind === 'legacy-unverified')
     && !repairsLegacyMarketplaceAlias(row, repairablePackageNames)
     && !recoversPendingUpdate(row, repairablePackageNames, command));
   if (activation?.pending === undefined) return null;

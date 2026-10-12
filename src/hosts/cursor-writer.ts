@@ -26,6 +26,18 @@ import { CryptoHasher, spawnSync } from '../runtime';
 import type { SourceType } from '../semantic-inventory';
 import type { PluginSource, ResolvedSource } from '../source';
 import { cursor, cursorInstanceRoot, localDir, mcpCandidates } from './cursor';
+import { proveCursorLegacyAdoption } from './cursor-adoption';
+import type { ProveLegacyAdoption } from '../legacy-admission';
+
+/** Exact adapter-enumerated same-root legacy identities; no generic alias inference. */
+export const proveCursorSelectedLegacyAdoption: ProveLegacyAdoption = request => {
+  const name = request.snapshot.packageName;
+  const collection = request.snapshot.collectionName;
+  const aliases = collection === undefined ? [name] : [name, `${name}@${collection}`];
+  if (!aliases.includes(request.legacy.original.package ?? '')
+    || !aliases.includes(request.legacy.original.nativeId ?? '')) return null;
+  return { prove: pins => proveCursorLegacyAdoption({ ...request, pins }) };
+};
 
 const OWNERSHIP = '.plgnz-install.json';
 const CURSOR_MANAGED_VERSION = '2.4.0';

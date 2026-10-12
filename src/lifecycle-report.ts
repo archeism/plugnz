@@ -7,6 +7,8 @@ import {
 import { unknownErrorDiagnostic } from './error-diagnostic';
 import { OPEN_LIFECYCLE_JOURNAL_STATES, parseRecoveryOperationProof, type RecoveryOperationProof } from './recovery-proof';
 import type { JournalState } from './state';
+import { parseAdoptionAdmission, type AdoptionAdmission } from './legacy-adoption-record';
+import { canonicalAdoptionJson } from './legacy-adoption-proof';
 
 export const LIFECYCLE_REPORT_SCHEMA_VERSION = 1 as const;
 
@@ -127,6 +129,8 @@ export interface LifecyclePlanOperation {
   nativeId: string | null;
   action: LifecyclePlanAction;
   route: LifecycleRoute;
+  /** Exact read-only admission, not a delivered adoption or mutation permission. */
+  adoption?: AdoptionAdmission;
 }
 
 export interface LifecycleOperationOutcome extends LifecyclePlanOperation {
@@ -239,6 +243,9 @@ export function parseLifecycleReport(value: unknown): LifecycleReport {
       if (outcome[field] !== operation[field]) {
         throw protocol('protocol.contradictory-outcome', `outcome '${operationId}' contradicts planned ${field}`);
       }
+    }
+    if (canonicalAdoptionJson(outcome['adoption'] ?? null) !== canonicalAdoptionJson(operation['adoption'] ?? null)) {
+      throw contradiction(`outcome '${operationId}' contradicts planned adoption admission`);
     }
   }
 
@@ -366,6 +373,7 @@ const PLAN_OPERATION_FIELDS = [
   'nativeId',
   'action',
   'route',
+  'adoption',
 ] as const;
 
 const OUTCOME_FIELDS = [
@@ -399,6 +407,19 @@ function assertPlanOperation(
   if (snapshot !== undefined && !sameSourceBinding(snapshot.reference.binding, (operation['scope'] as unknown as DeploymentScopeIdentity).source)) {
     throw invalid(`planned operation '${operation['operationId']}' scope contradicts its source snapshot`);
   }
+  if (operation['adoption'] !== undefined) {
+    const admission = parseAdoptionAdmission(operation['adoption']);
+    const scope = operation['scope'] as unknown as DeploymentScopeIdentity;
+    if (operation['coverage'] !== 'desired-pair' || snapshot === undefined
+      || admission.fresh.command !== command || admission.fresh.operationId !== operation['operationId']
+      || admission.fresh.scopeId !== scope.id || admission.fresh.packageName !== operation['package']
+      || admission.fresh.nativeId !== operation['nativeId'] || admission.fresh.sourceSnapshotId !== operation['sourceSnapshotId']
+      || admission.fresh.action !== operation['action'] || admission.fresh.route !== operation['route']
+      || canonicalAdoptionJson(admission.source) !== canonicalAdoptionJson(snapshot.reference)
+      || admission.target.kind !== scope.target.kind || admission.target.instance !== scope.target.instance) {
+      throw contradiction(`planned operation '${operation['operationId']}' contradicts its exact adoption admission`);
+    }
+  }
   if (operation['coverage'] === 'retirement' && operation['action'] !== 'retire-orphan' && operation['action'] !== 'not-attempted') {
     throw invalid(`orphan retirement '${operation['operationId']}' has a non-retirement action`);
   }
@@ -430,6 +451,9 @@ function assertOutcome(
   }
   const reason = outcome['reason'];
   if (reason !== null) assertReason(reason as Record<string, unknown>);
+  if (outcome['adoption'] !== undefined && (outcome['result'] !== 'not-attempted' || outcome['changed'] !== false)) {
+    throw contradiction(`read-only admission '${outcome['operationId']}' cannot claim delivered adoption without a verified transaction receipt`);
+  }
   if (isObject(reason) && reason['category'] === 'readback' &&
       outcome['resourceState'] === 'potentially-changed' && outcome['result'] !== 'pending') {
     throw contradiction(`unresolved readback outcome '${outcome['operationId']}' must remain pending`);
