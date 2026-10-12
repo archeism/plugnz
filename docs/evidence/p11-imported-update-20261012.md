@@ -217,3 +217,66 @@ Root's `74b7c08` full gate was interrupted, exit 130, NOT passed (SHA256
 `5d907e3ae9f995438a1866cdd86bc14be2105f40b2d31fdcd833da98e8c8c00f`).
 All ancestors and failed evidence remain preserved; independent review precedes
 the next full gate. Authentic pre-core compatibility and P11 closure remain open.
+
+## Follow-up: prepare exact imported metadata before seal
+
+Independent review of preserved `fc19ea6` identified two real counterexamples:
+omitting optional v1 `sourceDir` left duplicate claims after success, and a
+qualified imported row with recorded MCP pins lost those pins before staging.
+The pin regressions for both directory variants failed (**0 pass / 2 fail /
+26 assertions / 5.04s**) on actual native command `/usr/bin/node` becoming `node`.
+
+`Ledger.activation` remains exact and unchanged. A separate preparation lookup
+now accepts a unique nonpending legacy-claim/legacy-unverified qualified row only
+for the exact planned scope/native ID, whose package ID equals that native ID,
+with Source-relative directory either omitted or matching the frozen package.
+The shared planner already validates the exact observed authored/native binding;
+it now globally refuses contradictory defined directory, foreign package claim,
+or multiple same-native imported claims. No raw prefix or same-name Source
+fallback grants authority. The imported record's pins reach existing staged pin
+application before projection/seal; its activation/creation metadata reaches
+confirmed replacement. Verified alias supersession uses the same narrow relation,
+including the proven omitted-directory case. Pending claims remain refused intact.
+
+Public fixtures cover both optional-directory forms with actual absolute MCP
+command, canonical pins and original activation time, repeated update, and remove.
+Removal verifies exact prior attempts and canonical Source revision, route,
+ownership, fingerprints, pins and activation time in the retained-state tombstone.
+Shared add/sync controls globally refuse contradictory/foreign/multiple claims
+with exact diagnostic, empty plan and byte retention. All remain modern-marker
+ledger downgrades; authentic pre-core compatibility is still unfinished.
+
+Dependency scan: only Cursor provides `proveLegacyAdoption` (`src/lifecycle-hosts.ts`).
+Its proof requires canonical native ID equal authored package (`src/hosts/cursor-adoption.ts:39`),
+so existing admitted qualified history has a distinct bare physical ID and is
+outside the new same-native pending guard. Existing bare history has unchanged
+package identity and is also outside it. No speculative admission bypass added.
+
+- Final focused imported/update/executor/planner: **76 pass / 782 assertions / 47.62s**.
+- Final built Node 22.23.1 imported suite: **11 pass / 184 assertions / 19.58s**.
+- Legacy proof/public/record/Cursor projection: **7 pass / 362 assertions / 9.15s**.
+- Four actual recovery files: **21 pass / 324 assertions / 65.64s**.
+- Pinned Bun 1.4.0 check/build/diff: exit 0. CLI SHA256
+  `1eade8edc499e661f5563c8d313b67dfd23da1ff890e69ac0279f401ce38c70f`.
+
+Logs in the retained evidence directory: `canonical-pins-red.log`
+`d9908ff1531a84276f4419e550a9ef272c7b72149e88a01f0195f67e560c60dd`;
+`canonical-metadata-focused-final.log`
+`bc0dd40e46d86877105cac9f4ff7f9274dcd9d3d33d88d8379f54e34b808487c`;
+`canonical-metadata-packed-final.log`
+`ae5049405abbfaa6f25c243eb6e0d4b0dd9bc200ea89d7020de3135cc4a298b5`;
+`canonical-metadata-adoption.log`
+`3e92e47d2577aa2c1937e2ef64b2af4df88f0c29a4e139306c2da32b59cbf72f`;
+`canonical-metadata-recovery.log`
+`ab72beb5c3b891e5993320c8bacb36b5e8224309d3948468c9d55473017ae231`;
+`canonical-metadata-check-final2.log`
+`8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92`;
+`canonical-metadata-build.log`
+`758e4167e71a9e8c42d07cf1da3713537ee28d20ce8f12b17329636ec6945892`.
+Failed intermediate checks/fixture attempts remain: unavailable `structuredClone`
+in the project's narrow TypeScript globals and serializing imported generation 0
+as v2. Corrected fixture sets generation 1 and validates it via `readLifecycleState`
+before assertions, so corrupt-state failure cannot satisfy ownership controls.
+The initial dependency command included nonexistent `test/recovery.test.ts`;
+only its four actual legacy files counted. The subsequent four recovery-* files
+were separately executed (both before and after the metadata correction).

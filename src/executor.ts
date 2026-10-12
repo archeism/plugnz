@@ -189,7 +189,7 @@ async function runActivation(
   }
   let prepared: Awaited<ReturnType<typeof prepareActivation>>;
   try {
-    const recorded = ledger.activation(operation.scope.id, operation.package, nativeId);
+    const recorded = ledger.activationForPreparation(plan, operation, nativeId);
     prepared = await prepareActivation(plan, operation, host, nativeId, action, recorded?.pins ?? [], recorded, ledger.scope(operation.scope.id));
   } catch (error) {
     if (action === 'update' && error instanceof SemanticInventoryError && ledger.activation(operation.scope.id, operation.package, nativeId) !== undefined) {
@@ -272,7 +272,7 @@ async function runActivation(
       createLifecycleReason('internal', 'internal.invariant', `${action} '${operation.operationId}' readback has no fingerprint`),
     );
   }
-  const recorded = ledger.activation(operation.scope.id, operation.package, nativeId);
+  const recorded = ledger.activationForPreparation(plan, operation, nativeId);
   try {
     ledger.confirmActivation(plan, operation, {
       scopeId: operation.scope.id,
@@ -751,6 +751,17 @@ class Ledger {
     return this.state.activations.find((row) => row.scopeId === scopeId && row.packageId === packageId && row.nativeId === nativeId);
   }
 
+  activationForPreparation(plan: FrozenPlan, operation: LifecyclePlanOperation, nativeId: string): ActivationRecord | undefined {
+    const exact = this.activation(operation.scope.id, operation.package, nativeId);
+    if (exact !== undefined) return exact;
+    const aliases = this.state.activations.filter(row => sameNativeImportedAlias(row, {
+      scopeId: operation.scope.id, packageId: operation.package, nativeId,
+      sourceRelativeDir: sourceRelativeDir(plan, operation),
+    }));
+    if (aliases.length > 1) throw new Error('multiple imported activations match the exact prepared native identity');
+    return aliases[0];
+  }
+
   scope(scopeId: string): DeploymentScopeRecord | undefined {
     return this.state.scopes.find(row => row.id === scopeId);
   }
@@ -1080,9 +1091,7 @@ function legacyMarketplaceAlias(row: ActivationRecord, canonical: ActivationReco
   if (row.scopeId !== canonical.scopeId) return false;
   if (row.route.kind !== 'legacy-unverified' || row.ownership.kind !== 'legacy-claim') return false;
   // Verified activation replaces only this exact, nonpending imported identity.
-  if (row.nativeId === canonical.nativeId && row.packageId === row.nativeId
-    && row.packageId !== canonical.packageId && row.pending === undefined
-    && row.sourceRelativeDir === canonical.sourceRelativeDir) return true;
+  if (sameNativeImportedAlias(row, canonical)) return true;
   const separator = row.nativeId.indexOf('@');
   if (separator <= 0 || row.packageId !== row.nativeId) return false;
   const name = row.nativeId.slice(0, separator);
@@ -1091,6 +1100,14 @@ function legacyMarketplaceAlias(row: ActivationRecord, canonical: ActivationReco
 
 function legacyBareMarketplaceAlias(row: ActivationRecord, canonical: ActivationRecord): boolean {
   return isBareMarketplaceAlias(row, canonical.scopeId, canonical.packageId, canonical.nativeId);
+}
+
+function sameNativeImportedAlias(row: ActivationRecord, canonical: Pick<ActivationRecord, 'scopeId' | 'packageId' | 'nativeId' | 'sourceRelativeDir'>): boolean {
+  return row.scopeId === canonical.scopeId && row.nativeId === canonical.nativeId
+    && row.route.kind === 'legacy-unverified' && row.ownership.kind === 'legacy-claim'
+    && row.packageId === row.nativeId && row.packageId !== canonical.packageId
+    && row.pending === undefined
+    && (row.sourceRelativeDir === undefined || row.sourceRelativeDir === canonical.sourceRelativeDir);
 }
 
 function isBareMarketplaceAlias(row: ActivationRecord, scopeId: string, packageId: string, nativeId: string): boolean {

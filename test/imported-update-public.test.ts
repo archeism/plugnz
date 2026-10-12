@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { bytesToText, withLifecycleCliHarness } from './lifecycle-cli-harness';
 import { parseLifecycleReport } from '../src/lifecycle-report';
 import { fakeDcodeLockInterpreter } from './dcode-fake-lock';
+import { readLifecycleState } from '../src/state';
 
 test('v1 bare ledger accepts only its adapter-proven qualified selector', async () => {
   await withLifecycleCliHarness(harness => {
@@ -38,18 +39,24 @@ test('v1 bare ledger accepts only its adapter-proven qualified selector', async 
   });
 });
 
-test('v1 qualified dcode ledger accepts its adapter-proven bare package selector', async () => {
+for (const includeSourceDir of [true, false]) test(`v1 qualified dcode ledger accepts its adapter-proven bare package selector (sourceDir ${includeSourceDir ? 'recorded' : 'omitted'})`, async () => {
   await withLifecycleCliHarness(harness => {
     harness.writeHome({ '.deepagents/.keep': '' });
     const source = harness.source('dcode-qualified', {
       'marketplace.json': '{"name":"personal","plugins":[{"name":"demo","source":"./demo"}]}',
       'demo/plugin.json': '{"name":"demo","version":"1.0.0"}',
+      'demo/mcp.json': '{"mcpServers":{"demo":{"command":"node","args":[]}}}',
     });
     const dcode = harness.fakeNative('dcode', Array.from({ length: 32 }, () => ({ args: ['--version'], stdout: 'deepagents-code 0.1.83\n' })));
     const env = { OPEN_PLUGIN_DCODE_BIN: dcode.path, OPEN_PLUGIN_DCODE_PYTHON_BIN: fakeDcodeLockInterpreter(harness.root) };
     expect(harness.run(['add', source, '--target', 'dcode', '--json'], { env }).exitCode).toBe(0);
+    const pinned = harness.run(['pin', '--target', 'dcode', '--json'], { env });
+    expect(pinned.exitCode).toBe(0);
+    const pinnedMcp = Object.entries(pinned.stores.dcode.after.files).find(([path]) => path.endsWith('/mcp.json'))!;
+    const pinnedCommand = JSON.parse(bytesToText(pinnedMcp[1])).mcpServers.demo.command;
+    expect(pinnedCommand.startsWith('/')).toBe(true);
     writeFileSync(join(harness.home, 'state.json'), JSON.stringify({ version: 1, installs: [
-      { host: 'dcode', id: 'demo@personal', source, sourceSha: 'legacy', sourceDir: join(source, 'demo'), ownership: 'plgnz' },
+      { host: 'dcode', id: 'demo@personal', source, sourceSha: 'legacy', ...(includeSourceDir ? { sourceDir: join(source, 'demo') } : {}), ownership: 'plgnz', pins: ['demo'], installedAt: '2020-01-02T03:04:05.000Z' },
     ] }));
     const foreign = harness.run(['update', 'demo@foreign', '--target', 'dcode', '--json'], { env });
     const refused = parseLifecycleReport(JSON.parse(foreign.stdout));
@@ -66,12 +73,16 @@ test('v1 qualified dcode ledger accepts its adapter-proven bare package selector
     ]);
     expect(Object.entries(selected.stores.dcode.after.files).some(([path, bytes]) =>
       path.endsWith('/plugin.json') && bytesToText(bytes).includes('bare selected'))).toBe(true);
+    const selectedMcp = Object.entries(selected.stores.dcode.after.files).find(([path]) => path.endsWith('/mcp.json'))!;
+    expect(JSON.parse(bytesToText(selectedMcp[1])).mcpServers.demo.command).toBe(pinnedCommand);
     const retry = harness.run(['update', 'demo', '--target', 'dcode', '--json'], { env });
     expect(retry.exitCode).toBe(0);
     const retried = JSON.parse(bytesToText(retry.state.after!));
     expect(retried.activations.map((row: { packageId: string; nativeId: string }) => ({ package: row.packageId, nativeId: row.nativeId }))).toEqual([
       { package: 'demo', nativeId: 'demo@personal' },
     ]);
+    expect(retried.activations[0].pins).toEqual(['demo']);
+    expect(retried.activations[0].activatedAt).toBe('2020-01-02T03:04:05.000Z');
     const removed = harness.run(['remove', 'demo', '--target', 'dcode', '--json'], { env });
     expect(removed.exitCode).toBe(0);
     const retired = JSON.parse(bytesToText(removed.state.after!));
@@ -83,6 +94,9 @@ test('v1 qualified dcode ledger accepts its adapter-proven bare package selector
       retired.attempts.some((kept: { id: string }) => JSON.stringify(kept) === JSON.stringify(attempt)))).toBe(true);
     expect(retired.tombstones[0].retentionState).toBe('plugin-state-retained');
     expect(retired.tombstones[0].sourceRelativeDir).toBe('demo');
+    for (const field of ['sourceRevision', 'route', 'ownership', 'fingerprints', 'pins', 'activatedAt']) {
+      expect(retired.tombstones[0][field]).toEqual(retried.activations[0][field]);
+    }
     expect(dcode.invocations().every(row => JSON.stringify(row.args) === '["--version"]')).toBe(true);
   });
 });
@@ -109,6 +123,43 @@ for (const pending of ['install', 'remove'] as const) test(`same-native qualifie
       expect(report.plan).toEqual([]);
       expect(result.state.after).toEqual(result.state.before);
       expect(result.stores.dcode.after).toEqual(result.stores.dcode.before);
+    }
+  });
+});
+
+test('shared preflight refuses contradictory or multiple same-native imported claims without dropping metadata', async () => {
+  await withLifecycleCliHarness(harness => {
+    harness.writeHome({ '.deepagents/.keep': '' });
+    const source = harness.source('ambiguous-qualified', {
+      'marketplace.json': '{"name":"personal","plugins":[{"name":"demo","source":"./demo"}]}',
+      'demo/plugin.json': '{"name":"demo","version":"1.0.0"}',
+    });
+    const dcode = harness.fakeNative('dcode', Array.from({ length: 48 }, () => ({ args: ['--version'], stdout: 'deepagents-code 0.1.83\n' })));
+    const env = { OPEN_PLUGIN_DCODE_BIN: dcode.path, OPEN_PLUGIN_DCODE_PYTHON_BIN: fakeDcodeLockInterpreter(harness.root) };
+    expect(harness.run(['add', source, '--target', 'dcode', '--json'], { env }).exitCode).toBe(0);
+    const ledger = join(harness.home, 'state.json');
+    writeFileSync(ledger, JSON.stringify({ version: 1, installs: [
+      { host: 'dcode', id: 'demo@personal', source, sourceSha: 'legacy', sourceDir: join(source, 'demo'), ownership: 'plgnz' },
+    ] }));
+    const imported = readLifecycleState(ledger).state;
+    for (const variant of ['directory', 'foreign', 'multiple']) {
+      const state = JSON.parse(JSON.stringify(imported));
+      state.stateGeneration = 1;
+      if (variant === 'directory') state.activations[0]!.sourceRelativeDir = 'other';
+      else if (variant === 'foreign') state.activations[0]!.packageId = 'foreign';
+      else state.activations.push({ ...state.activations[0]!, packageId: 'foreign' });
+      writeFileSync(ledger, JSON.stringify(state));
+      readLifecycleState(ledger);
+      for (const argv of [['add', source], ['sync', source, '--plugin', 'demo']]) {
+        const result = harness.run([...argv, '--target', 'dcode', '--json'], { env });
+        const report = parseLifecycleReport(JSON.parse(result.stdout));
+        expect(result.exitCode).toBe(1);
+        expect(report.summary.reason?.code).toBe('internal.ambiguous-ownership');
+        expect(report.summary.reason?.diagnostic).toBe("imported activation contradicts the exact Source/native binding for 'demo'");
+        expect(report.plan).toEqual([]);
+        expect(result.state.after).toEqual(result.state.before);
+        expect(result.stores.dcode.after).toEqual(result.stores.dcode.before);
+      }
     }
   });
 });
