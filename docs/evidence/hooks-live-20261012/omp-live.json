@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "candidate_commit": "0d7d658035b7f144c81f30591fc7293d5900c317",
+  "helper_sha256": "cc2aeb52220efc2ffc33af54337886575ae77c6bf3d26b8af86a41777e082318",
+  "candidate_cli_sha256": "2014d2fa23480043f5fd76c943ec847af8f9ff14f28a183ed21b2ae1474f2443",
+  "candidate_package_version": "0.0.16",
+  "status": "passed",
+  "checks": {
+    "one_native_read_only": true,
+    "live_requests_within_cap": true,
+    "no_forwarding_error": true,
+    "deadline": true,
+    "home_budget": true,
+    "original_tool_result_preserved": true,
+    "post_hook_observed_original_result": true,
+    "model_uses_file": true,
+    "model_uses_all_hook_markers": true,
+    "startup_once": true,
+    "tool_before_once": true,
+    "tool_after_once": true,
+    "stop_observed": true,
+    "authored_source_preserved": true,
+    "native_exited": true,
+    "native_exit_expected": true,
+    "provider_closed": true,
+    "timing_session.start": true,
+    "timing_tool.before": true,
+    "timing_tool.after": true,
+    "timing_turn.stop": true,
+    "stop_contract": true
+  },
+  "requests": 3,
+  "hook_events": 5,
+  "wall_seconds": 12.970008994918317,
+  "harness": "omp",
+  "model": "gemini-3.8-flash",
+  "real_model_inference": true,
+  "native_exit": 0,
+  "resource": {
+    "evidence_logical_bytes": 67409,
+    "home_allocated_bytes": 8634368,
+    "home_cap_bytes": 536870912,
+    "children_maxrss_kib": 383288
+  },
+  "protocol": "OpenAI Chat Completions",
+  "endpoint": "/v1/chat/completions",
+  "image_id": "sha256:c5699f285b1ea3789739ded168008408494cdb53b95bc87c426ffef90f568aeb",
+  "tarball_sha256": "a8c315cda53af8eef4758e4806b94ac0fbf9f2cd9b1ee01ea017a59743580ed2",
+  "container_controls": {
+    "uid": 1000,
+    "host_home_or_runtime_mounts": false,
+    "fresh_home_tmpfs": true,
+    "dropped_capabilities": true,
+    "no_new_privileges": true,
+    "read_only_root_flag": false,
+    "qualification": "Retained paid extension runs did not set --read-only; current reproduction recipe does."
+  },
+  "offline_strict_task_review": {
+    "harness": "omp",
+    "candidate_commit": "0d7d658035b7f144c81f30591fc7293d5900c317",
+    "source_receipt_sha256": "63c8097d8ed0c40de9c41d228c63b08130181ae86e70a1c3791cc4df88e8381c",
+    "review": "Stricter offline task assertions; original receipt retained unchanged.",
+    "checks": {
+      "final_json": true,
+      "exact_original_file": true,
+      "exact_hook_marker_set": true
+    },
+    "task_status": "passed",
+    "transport_checks_status": "passed"
+  },
+  "qualification": "Strict task pass bound to candidate01; later admission/reporting/cold-Codex changes did not alter native adapters or runtime.",
+  "source_receipts": [
+    {
+      "path": "live-extensions/omp-candidate01-attempt01/run/receipt.json",
+      "sha256": "63c8097d8ed0c40de9c41d228c63b08130181ae86e70a1c3791cc4df88e8381c"
+    },
+    {
+      "path": "live-extensions/omp-candidate01-attempt01/launcher.json",
+      "sha256": "a81610349ad2950cf729129434ba480c040f5c3fbb65ab86902aaf192af8f3bf"
+    },
+    {
+      "path": "live-extensions/omp-candidate01-attempt01/run/strict-task-review.json",
+      "sha256": "b232a6b2f812d520d834616e5d05c3f42c14c8cf261eda0edfe8e36c9dff5303"
+    }
+  ]
+}

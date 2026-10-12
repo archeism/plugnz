@@ -1,0 +1,18 @@
+{
+  "recorded_at": "2026-10-12T17:42:17.370940+00:00",
+  "proxy_container_id": "91ac1c058d0b936de85a4148c93bc01ffc41add268de1b7bdc614e0287efe354",
+  "proxy_removed": true,
+  "private_runtime_directory_removed": true,
+  "original_key_file_preserved": true,
+  "repository_files_checked_for_actual_runtime_credential_bytes": 482,
+  "credential_matches": [],
+  "dedicated_bridge_retained_for_registry_only_smoke": true,
+  "other_containers_or_host_agent_profiles_modified": false,
+  "schema_version": 1,
+  "source_receipts": [
+    {
+      "path": "verification/proxy-cleanup.json",
+      "sha256": "c4a23b45d60898457f6f65aacfc5cb922a70700ab2c91f45f7a85581fcb2dd0a"
+    }
+  ]
+}

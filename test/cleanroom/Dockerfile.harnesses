@@ -1,0 +1,9 @@
+FROM plugnz-hook-cleanroom-base:20261012
+RUN npm install --prefix /opt/harnesses/claude-code --no-audit --no-fund @anthropic-ai/claude-code@2.1.285
+RUN npm install --prefix /opt/harnesses/codex --no-audit --no-fund @openai/codex@0.161.0
+RUN npm install --prefix /opt/harnesses/omp --no-audit --no-fund @oh-my-pi/pi-coding-agent@18.8.7
+RUN npm install --prefix /opt/harnesses/pi --no-audit --no-fund @earendil-works/pi-coding-agent@1.1.0
+RUN npm install --prefix /opt/harnesses/opencode --no-audit --no-fund opencode-ai@1.19.0
+RUN cd /tmp && npm pack --ignore-scripts plugnz@0.0.16 && tar -xzf plugnz-0.0.16.tgz -C /opt/plugnz && rm plugnz-0.0.16.tgz
+USER node
+WORKDIR /work

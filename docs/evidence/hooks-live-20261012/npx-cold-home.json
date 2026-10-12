@@ -1,0 +1,52 @@
+{
+  "status": "passed",
+  "candidate_commit": "570e64d4d829d1a7f2480958a4b81da1523a64cb",
+  "candidate_tar_sha256": "e20a0988653aa9ac9becdfa9b1ce1ff151c87e0541d7d48fc76e1b42984fec0f",
+  "helper_sha256": "4b15e0080783b202369e739602ad53b6adbe39fad857a75764cb122c4a247a06",
+  "argv": [
+    "npx",
+    "--offline",
+    "--yes",
+    "--package",
+    "/opt/plugnz-candidate.tgz",
+    "plugnz",
+    "install",
+    "--target",
+    "pi",
+    "--json"
+  ],
+  "cwd": "/work/fixture",
+  "checks": {
+    "home_empty_before_install": true,
+    "npx_exit_zero": true,
+    "default_source_installed": true,
+    "authored_source_preserved": true,
+    "native_extension_exists": true,
+    "handler_not_executed_during_install": true
+  },
+  "authored_hashes": {
+    "context.mjs": "fb97ffed87e504ef1243602a7e6ff7d33832523e3c8c63e32c2367606ff32543",
+    "plugnz.hooks.json": "24de7826891fc13004e9a94bd55f22943a0b6a1b51833135cc04aeb966a068f5",
+    "plugin.json": "4f0b171a38a8cd8c9f0efb93aaef442d087908a91813b133b5f9fa7f9c976f19"
+  },
+  "inference_requests": 0,
+  "native_profile_scaffolded": false,
+  "exit_code": 0,
+  "schema_version": 1,
+  "runner_image": "sha256:dfa356df63f57491425cea1cb86ac0c1ad3f399256c83d3aa3a3321fcc92e0dc",
+  "network": "none",
+  "container_removed": true,
+  "evidence_mount_removed": true,
+  "elapsed_seconds": 2.122,
+  "qualification": "Separate candidate05 proof from truly empty HOME, without native-profile priming; real offline npx uses authored cwd and no source argument. Earlier candidate03 npx proof had an initialized empty Pi native profile.",
+  "source_receipts": [
+    {
+      "path": "npx-candidate05-cold-home/native/receipt.json",
+      "sha256": "a6f6b57531538a8b5efcdf92628844e21706345d61fbe778892fad12e7fc90c0"
+    },
+    {
+      "path": "npx-candidate05-cold-home/driver-result.json",
+      "sha256": "0d04e24497dc94897881175d0c469c1323e962e24b0dc1fa413630a8c64824c0"
+    }
+  ]
+}

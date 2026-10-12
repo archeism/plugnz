@@ -1,0 +1,11 @@
+ARG BASE_IMAGE=plugnz-hook-cleanroom-harnesses:20261012
+FROM ${BASE_IMAGE}
+USER root
+COPY plugnz-candidate.tgz /opt/plugnz-candidate.tgz
+RUN rm -rf /opt/plugnz/package && mkdir -p /opt/plugnz && tar -xzf /opt/plugnz-candidate.tgz -C /opt/plugnz
+COPY test/ /app/test/
+RUN mkdir -p /work /evidence && chown node:node /work /evidence
+ENV PATH=/opt/harnesses/claude-code/node_modules/.bin:/opt/harnesses/codex/node_modules/.bin:/opt/harnesses/omp/node_modules/.bin:/opt/harnesses/pi/node_modules/.bin:/opt/harnesses/opencode/node_modules/.bin:/opt/harnesses/zcode-cli:${PATH}
+ENV HOME=/work/home
+USER node
+WORKDIR /work

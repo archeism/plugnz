@@ -1,0 +1,162 @@
+{
+  "status": "passed",
+  "mode": "candidate-offline",
+  "candidate_commit": "570e64d4d829d1a7f2480958a4b81da1523a64cb",
+  "argv": [
+    "npx",
+    "--offline",
+    "--yes",
+    "--package",
+    "/opt/plugnz-candidate.tgz",
+    "plugnz",
+    "install",
+    "--json"
+  ],
+  "cwd": "/work/fixture",
+  "uid": 1000,
+  "privileges": [
+    "CapInh:\t0000000000000000",
+    "CapPrm:\t0000000000000000",
+    "CapEff:\t0000000000000000",
+    "CapBnd:\t0000000000000000",
+    "CapAmb:\t0000000000000000",
+    "NoNewPrivs:\t1"
+  ],
+  "harnesses": {
+    "claude-code": {
+      "binary": "/opt/harnesses/claude-code/node_modules/.bin/claude",
+      "package": "@anthropic-ai/claude-code",
+      "version": "2.1.285"
+    },
+    "codex": {
+      "binary": "/opt/harnesses/codex/node_modules/.bin/codex",
+      "package": "@openai/codex",
+      "version": "0.161.0"
+    },
+    "omp": {
+      "binary": "/opt/harnesses/omp/node_modules/.bin/omp",
+      "package": "@oh-my-pi/pi-coding-agent",
+      "version": "18.8.7"
+    },
+    "pi": {
+      "binary": "/opt/harnesses/pi/node_modules/.bin/pi",
+      "package": "@earendil-works/pi-coding-agent",
+      "version": "1.1.0"
+    },
+    "opencode": {
+      "binary": "/opt/harnesses/opencode/node_modules/.bin/opencode",
+      "package": "opencode-ai",
+      "version": "1.19.0"
+    }
+  },
+  "expected_targets": [
+    "claude-code",
+    "codex",
+    "omp",
+    "opencode",
+    "pi"
+  ],
+  "zcode_expected": false,
+  "native_profile_scaffolded": false,
+  "authored_hashes": {
+    "context.mjs": "6064d37805822f4a37b60d22548e2926b3f21782d261ae17b93b84e4a1deb36c",
+    "plugnz.hooks.json": "24de7826891fc13004e9a94bd55f22943a0b6a1b51833135cc04aeb966a068f5",
+    "plugin.json": "cf11ea0de6fca4d1340295cfd34dbee764949fdfdb3f2bc35a2c6a38a978b458"
+  },
+  "inference_requests": 0,
+  "scope": "Installation and native registration only; no harness session or hook trust prompt launched.",
+  "helper_sha256": "48a30a70750ec62351ad238ab51289c056c79eb16d0111676ffe0dbf7c48f53a",
+  "checks": {
+    "home_empty_before_install": true,
+    "five_installed_cli_identities_verified": true,
+    "package_tarball_identity_verified": true,
+    "npx_exit_zero": true,
+    "npx_package_identity_matches_tarball": true,
+    "npx_cli_matches_tarball": true,
+    "npx_runtime_matches_tarball": true,
+    "default_targets_exactly_all_five": true,
+    "all_five_installations_succeeded": true,
+    "install_summary_converged": true,
+    "default_cwd_source_registered": true,
+    "all_five_native_artifacts_and_registrations_verified": true,
+    "authored_source_preserved": true,
+    "handler_not_executed_during_install": true
+  },
+  "package": {
+    "name": "plugnz",
+    "version": "0.0.18",
+    "tarball_sha256": "e20a0988653aa9ac9becdfa9b1ce1ff151c87e0541d7d48fc76e1b42984fec0f",
+    "cli_sha256": "314e81982406b64f0af034e589662932dacd1dd2d4a0e735033f7e1b2a805a52",
+    "hook_runtime_sha256": "cf673f114dd18ba382d50a5f38eebe1163c2f0e844b5106ab087a20bcba1682c"
+  },
+  "exit_code": 0,
+  "authored_after_hashes": {
+    "context.mjs": "6064d37805822f4a37b60d22548e2926b3f21782d261ae17b93b84e4a1deb36c",
+    "plugnz.hooks.json": "24de7826891fc13004e9a94bd55f22943a0b6a1b51833135cc04aeb966a068f5",
+    "plugin.json": "cf11ea0de6fca4d1340295cfd34dbee764949fdfdb3f2bc35a2c6a38a978b458"
+  },
+  "elapsed_seconds": 4.654,
+  "schema_version": 1,
+  "runner_image": "sha256:f90b30f08ed187ddb3af9dabad3927c41b118d2daf9d4bb6587972c3eafbd78c",
+  "network": "none",
+  "container_removed": true,
+  "evidence_mount_removed": true,
+  "source_argument": null,
+  "target_selection_argument": null,
+  "native_artifact_checks": {
+    "claude-code": {
+      "one_compiled_package": true,
+      "handler_bytes_preserved": true,
+      "runtime_matches_package": true,
+      "portable_sidecar_removed": true,
+      "native_hooks_artifact_exists": true,
+      "native_manifest_identity": true,
+      "native_registration": true
+    },
+    "codex": {
+      "one_compiled_package": true,
+      "handler_bytes_preserved": true,
+      "runtime_matches_package": true,
+      "portable_sidecar_removed": true,
+      "native_hooks_artifact_exists": true,
+      "native_manifest_identity": true,
+      "native_registration": true
+    },
+    "omp": {
+      "one_compiled_package": true,
+      "handler_bytes_preserved": true,
+      "runtime_matches_package": true,
+      "portable_sidecar_removed": true,
+      "native_extension_metadata": true,
+      "native_extension_exists": true,
+      "native_registration": true
+    },
+    "pi": {
+      "one_compiled_package": true,
+      "handler_bytes_preserved": true,
+      "runtime_matches_package": true,
+      "portable_sidecar_removed": true,
+      "native_extension_exists": true,
+      "native_registration": true
+    },
+    "opencode": {
+      "one_compiled_package": true,
+      "handler_bytes_preserved": true,
+      "runtime_matches_package": true,
+      "portable_sidecar_removed": true,
+      "native_extension_exists": true,
+      "native_registration": true
+    }
+  },
+  "qualification": "Bare public install from authored cwd with never-initialized HOME selects exactly the five actual installed npm harnesses. Z is not installed in this image. First default-target smoke actual install passed all five, but external checker overcounted the Claude marketplace mirror; that failed checker receipt remains retained.",
+  "source_receipts": [
+    {
+      "path": "npx-candidate05-default-targets-02/native/receipt.json",
+      "sha256": "c81b6f18f3be500bccde76cf8433661236f3fd50df56f3b23f96d3d6b6024489"
+    },
+    {
+      "path": "npx-candidate05-default-targets-02/driver-result.json",
+      "sha256": "6180ac1da54e69d783bb2fd723b36999a3482826f1ab996386ef8784fde814dc"
+    }
+  ]
+}

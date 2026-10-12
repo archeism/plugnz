@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "harness": "claude-code",
+  "passed": true,
+  "checks": {
+    "native_exit_zero": true,
+    "no_native_budget_failure": true,
+    "proxy_budget_respected": true,
+    "selected_model_only": true,
+    "markers_absent_user_prompt": true,
+    "startup_in_first_request": true,
+    "kernel_read": true,
+    "tool_before_observed": true,
+    "tool_after_observed": true,
+    "post_in_later_request": true,
+    "one_stop_continuation": true,
+    "real_model_consumed_context": true,
+    "real_model_read_fixture": true,
+    "handlers_exited": true
+  },
+  "requests": 3,
+  "model": "gemini-3.8-flash",
+  "live_inference": true,
+  "protocol": "Anthropic Messages",
+  "endpoint": "/v1/messages",
+  "candidate_commit": "c4577147d5767299856d2f0089865a1c61469f4a",
+  "packaged_cli_sha256": "b8a2f4f676d1b0c431effc8bba4d57a06fe2dc477c07838d3687f63741e5babe",
+  "runtime_version": "2.1.285 (Claude Code)",
+  "runtime_sha256": "33dad1ec615a2e08cc78b494f05c110e49916de2c79d78ec8799ebf46b233d29",
+  "helper_sha256": "450b63af64c0437dd56b626b39106b88f743f0c39f20d5b2cc02130c4f925872",
+  "bounds": {
+    "seconds": 180,
+    "inference_requests": 6,
+    "evidence_bytes": 33554432
+  },
+  "native": {
+    "exit_code": 0,
+    "failure": null,
+    "wall_seconds": 18.21928442,
+    "child_user_seconds": 1.172458,
+    "child_system_seconds": 0.31353099999999995,
+    "maxrss_kib_children_cumulative": 257908,
+    "pid_absent": true
+  },
+  "qualification": "Completed native plugin-loader case at candidate02; no blanket hook trust or fabricated trust hashes. real_model_read_fixture checks the exact random fixture marker, without terminal-LF or byte-exact transcription requirements.",
+  "source_receipts": [
+    {
+      "path": "commands/claude-code-attempt-03/receipt.json",
+      "sha256": "235ac59354958116d652b6942ff05e2abfdf83964d756ee5211d12d6506188df"
+    },
+    {
+      "path": "commands/claude-code-attempt-03/invocation.json",
+      "sha256": "e991f603fcd4fc838ad010663e107d50a5b6feba0f828d2584a85ef3caebfb3c"
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "status": "passed",
+  "candidate_commit": "d436a15d5eb1105cd963d014cba6dd1d393c222a",
+  "candidate_tar_sha256": "3ab6800add5dca3dc6f7182b16a7aac61d769131e7efee0d7ebf8fad8350d141",
+  "helper_sha256": "5762f4a9cc884b9c1057a6980a954640f073b94605c5cecbd2411bd9bc510ef4",
+  "argv": [
+    "npx",
+    "--offline",
+    "--yes",
+    "--package",
+    "/opt/plugnz-candidate.tgz",
+    "plugnz",
+    "install",
+    "--target",
+    "pi",
+    "--json"
+  ],
+  "checks": {
+    "npx_exit_zero": true,
+    "default_source_installed": true,
+    "authored_source_preserved": true,
+    "native_extension_exists": true,
+    "handler_not_executed_during_install": true
+  },
+  "authored_hashes": {
+    "context.mjs": "fb97ffed87e504ef1243602a7e6ff7d33832523e3c8c63e32c2367606ff32543",
+    "plugnz.hooks.json": "24de7826891fc13004e9a94bd55f22943a0b6a1b51833135cc04aeb966a068f5",
+    "plugin.json": "4f0b171a38a8cd8c9f0efb93aaef442d087908a91813b133b5f9fa7f9c976f19"
+  },
+  "inference_requests": 0,
+  "exit_code": 0,
+  "recipe": {
+    "status": "passed",
+    "tarball_sha256": "3ab6800add5dca3dc6f7182b16a7aac61d769131e7efee0d7ebf8fad8350d141",
+    "Dockerfile_runner_sha256": "9567dc87eae564b47b2fffbfcb94afdaf9ba7ce8262b4ddf4d385ae6d1242e1f",
+    "npx_helper_sha256": "5762f4a9cc884b9c1057a6980a954640f073b94605c5cecbd2411bd9bc510ef4",
+    "image_id": "sha256:364d6cb38831943eee6fbe1c906fd5366fef7bd68a81d44bb1ef0c1fb0c63001",
+    "wall_seconds": 2.324273289879784,
+    "exit_code": 0,
+    "credentials_supplied": false,
+    "inference_requests": 0,
+    "container_cleanup_exit": 0
+  },
+  "container_controls": {
+    "network": "none",
+    "uid": 1000,
+    "root_filesystem": "read-only",
+    "work_tmpfs": "rw,exec,nosuid,nodev,512MiB",
+    "capabilities": "all dropped",
+    "no_new_privileges": true
+  },
+  "qualification": "Local exact candidate tarball via offline npx; no source argument, global installation, credentials, or inference.",
+  "source_receipts": [
+    {
+      "path": "npx-final-recipe/receipt.json",
+      "sha256": "60db98d3acd7abfb43770ad2d40229b1b7d71645dc0f4f0c3f1d74d25c9e80db"
+    },
+    {
+      "path": "npx-final-recipe/recipe-receipt.json",
+      "sha256": "163b25eed343b4b12bce257cdaee87cee6678a5544c327450137008c8011c094"
+    }
+  ],
+  "profile_qualification": "Earlier candidate03 recipe initialized an empty Pi native directory before npx. This proves public npx/default-source installation into that profile, not never-initialized host discovery; see npx-cold-home.json for candidate05 cold proof."
+}

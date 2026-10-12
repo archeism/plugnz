@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "scope": "Selected concrete failed Codex attempts; no replacement of original receipts. Other raw attempts remain in private evidence.",
+  "attempts": [
+    {
+      "attempt": "06",
+      "passed": false,
+      "checks": {
+        "native_exit_zero": true,
+        "no_native_budget_failure": true,
+        "proxy_budget_respected": true,
+        "selected_model_only": true,
+        "markers_absent_user_prompt": true,
+        "startup_in_first_request": false,
+        "kernel_read": false,
+        "tool_before_observed": true,
+        "tool_after_observed": true,
+        "post_in_later_request": true,
+        "one_stop_continuation": false,
+        "real_model_consumed_context": true,
+        "real_model_read_fixture": false,
+        "handlers_exited": true
+      },
+      "requests": 6,
+      "qualification": "Original raw receipt includes setup session; separate task scope passes12/14 but native namespace read fails. Native isError false despite shell failure; unchanged original retained.",
+      "source_receipts": [
+        {
+          "path": "commands/codex-attempt-06/receipt.json",
+          "sha256": "557dd816512de3ca6b6ddd600bbb65b76098ce30cf01d2e0313717dbbe1eba28"
+        },
+        {
+          "path": "commands/codex-attempt-06/session-scoped-receipt.json",
+          "sha256": "1965072f90c4645ae604eeae76532d40d21ebf65b9cf0faa8eb4acf0798c3ba3"
+        }
+      ],
+      "task_scoped": {
+        "pass": false,
+        "checks": {
+          "native_exit_zero": true,
+          "no_native_budget_failure": true,
+          "proxy_budget_respected": true,
+          "selected_model_only": true,
+          "markers_absent_user_prompt": true,
+          "startup_in_first_request": true,
+          "kernel_read": false,
+          "tool_before_observed": true,
+          "tool_after_observed": true,
+          "post_in_later_request": true,
+          "one_stop_continuation": true,
+          "real_model_consumed_context": true,
+          "real_model_read_fixture": false,
+          "handlers_exited": true
+        },
+        "passed_checks": 12,
+        "total_checks": 14,
+        "task_inference_requests": 3,
+        "setup_inference_requests": 3,
+        "total_inference_requests": 6
+      }
+    },
+    {
+      "attempt": "09",
+      "passed": false,
+      "checks": {
+        "native_exit_zero": true,
+        "no_native_budget_failure": true,
+        "proxy_budget_respected": true,
+        "selected_model_only": true,
+        "markers_absent_user_prompt": true,
+        "startup_in_first_request": true,
+        "kernel_read": true,
+        "tool_before_observed": true,
+        "tool_after_observed": true,
+        "post_in_later_request": true,
+        "one_stop_continuation": false,
+        "real_model_consumed_context": false,
+        "real_model_read_fixture": true,
+        "handlers_exited": true
+      },
+      "requests": 2,
+      "qualification": "Successful native read and pre/post context; Stop approval did not persist before UI shutdown. Failed continuation/context checks retained.",
+      "source_receipts": [
+        {
+          "path": "commands/codex-attempt-09/receipt.json",
+          "sha256": "c55bbd7dfa990948ccb12c403013d111f8035b8309cb6109e65391133d701dd9"
+        }
+      ]
+    }
+  ]
+}

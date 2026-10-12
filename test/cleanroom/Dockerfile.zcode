@@ -1,0 +1,41 @@
+# Prepare this build context with prepare-zcode-source.py from a verified official clone.
+# The context contains only source.tar.gz, its SHA256 manifest, and provenance.json.
+# Build with --network=host only when required for builder DNS; runtime uses a dedicated bridge.
+# Full cleanroom attempt/input/build/smoke receipts are linked in zcode-build-provenance.json.
+ARG BASE_IMAGE=plugnz-hook-cleanroom-base:20261012
+FROM ${BASE_IMAGE} AS builder
+USER root
+RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
+RUN mkdir /tmp/zcode-build && chown node:node /tmp/zcode-build
+USER node
+WORKDIR /tmp/zcode-build
+ARG ZCODE_REVISION=aac4755666d09fdcd70272fcf063c077a639015f
+COPY --chown=node:node source.tar.gz SOURCE-ARCHIVE-SHA256 ./
+RUN sha256sum -c SOURCE-ARCHIVE-SHA256 && mkdir source && tar -xzf source.tar.gz -C source --strip-components=1
+WORKDIR /tmp/zcode-build/source
+RUN pnpm --filter @zcode/cli... install --frozen-lockfile --ignore-scripts --child-concurrency=1 --network-concurrency=8
+# Preserve the locked dependency-layer sequence recorded by the successful cleanroom build.
+RUN pnpm --filter zcode-cli --filter @zcode/cli... --filter @zcode/node-repl-host... --filter @zcode/android-emulator-plugin... --filter @zcode/ios-simulator-plugin... --filter @zcode/browser-use-plugin... install --frozen-lockfile --ignore-scripts --child-concurrency=1 --network-concurrency=8
+# Complete the repository-root workspace installation before its recursive build.
+RUN pnpm install --frozen-lockfile --ignore-scripts --child-concurrency=1 --network-concurrency=8
+RUN pnpm -r --filter @zcode/cli... --filter @zcode/node-repl-host... --filter @zcode/android-emulator-plugin... --filter @zcode/ios-simulator-plugin... --filter @zcode/browser-use-plugin... --workspace-concurrency=2 run build
+# Official SEA packaging closes over runtime assets rather than copying a host/source tree.
+# The source-only shared workspace has an authored dist tsconfig but no build script.
+RUN pnpm exec tsc -p packages/shared/tsconfig.json
+RUN node apps/zcode-cli/packages/cli/scripts/build-sea.mjs --target linux-x64
+COPY --chown=node:node provenance.json /tmp/zcode-build/provenance.json
+RUN mkdir /tmp/zcode-runtime && \
+    cp apps/zcode-cli/packages/cli/dist/zcode-linux-x64 /tmp/zcode-runtime/zcode && \
+    chmod 755 /tmp/zcode-runtime/zcode && \
+    /tmp/zcode-runtime/zcode --version > /tmp/zcode-runtime/VERSION && \
+    test "$(cat /tmp/zcode-runtime/VERSION)" = "0.16.9" && \
+    printf '%s\n' "${ZCODE_REVISION}" > /tmp/zcode-runtime/SOURCE-REVISION && \
+    cp /tmp/zcode-build/SOURCE-ARCHIVE-SHA256 /tmp/zcode-build/provenance.json /tmp/zcode-runtime/ && \
+    printf 'https://github.com/zai-org/ZCode/commit/%s\n' "${ZCODE_REVISION}" > /tmp/zcode-runtime/SOURCE-URL
+
+FROM ${BASE_IMAGE}
+USER root
+COPY --from=builder /tmp/zcode-runtime/ /opt/harnesses/zcode-cli/
+RUN ln -s /opt/harnesses/zcode-cli/zcode /usr/local/bin/zcode
+USER node
+WORKDIR /work

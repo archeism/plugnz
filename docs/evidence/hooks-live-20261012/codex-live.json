@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "harness": "codex",
+  "passed": true,
+  "checks": {
+    "native_exit_zero": true,
+    "no_native_budget_failure": true,
+    "proxy_budget_respected": true,
+    "selected_model_only": true,
+    "markers_absent_user_prompt": true,
+    "startup_in_first_request": true,
+    "kernel_read": true,
+    "tool_before_observed": true,
+    "tool_after_observed": true,
+    "post_in_later_request": true,
+    "one_stop_continuation": true,
+    "real_model_consumed_context": true,
+    "real_model_read_fixture": true,
+    "handlers_exited": true
+  },
+  "requests": 3,
+  "setup_events": 0,
+  "task_events": 5,
+  "protocol": "OpenAI Responses",
+  "endpoint": "/v1/responses",
+  "model": "gemini-3.8-flash",
+  "live_inference": true,
+  "native": {
+    "exit_code": 0,
+    "failure": null,
+    "wall_seconds": 10.182473412,
+    "pid_absent": true
+  },
+  "bounds": {
+    "seconds": 180,
+    "inference_requests": 6,
+    "evidence_bytes": 33554432
+  },
+  "native_review": {
+    "exit_code": 0,
+    "wall_seconds": 409.5083210070152,
+    "policy": "Manual observed ordinary folder/exact hook UI review in fresh disposable container only; no trust-all or hash/config trust writes. The helper supplies no approval choices.",
+    "pid_absent": true,
+    "individually_trusted_events": [
+      "PostToolUse",
+      "PreToolUse",
+      "SessionStart",
+      "Stop"
+    ],
+    "automatic_prompt_matching": false
+  },
+  "durable_native_trust": {
+    "count": 4,
+    "read_only_capture": true,
+    "state_written_by": "ordinary native UI individual approvals only",
+    "config_sha256": "213629ef9bb1827c043723b070545f0998e27fbb3bd04b6ca4fff44bf60f6ac4",
+    "unchanged_at_ui_close": true,
+    "trust_states_read_only": true
+  },
+  "qualification": "Exact random fixture-marker recognition, not byte-exact transcription. web_search disabled for Gemini function-tool compatibility. Native read-only sandbox retained; disposable Docker uses a scoped seccomp namespace policy and apparmor=unconfined. Individual exact-definition approvals made in ordinary native UI; no fabricated trust hashes.",
+  "source_receipts": [
+    {
+      "path": "commands/codex-attempt-10/receipt.json",
+      "sha256": "b0774848dfa7bd0f01e0c96aca639bb30c87074ad2b391ec9c9c7349e9aebfc2"
+    },
+    {
+      "path": "commands/codex-attempt-10/invocation.json",
+      "sha256": "f98898c1604737c7b2090e0ec44933ffb578c7f8697d56f4d8a2cb19a0dcd40b"
+    },
+    {
+      "path": "commands/codex-attempt-10/native-review.json",
+      "sha256": "ee7a3f0af0a26e2ce90e57cbc1d85568811a76f853b36c5892884edf19452439"
+    },
+    {
+      "path": "commands/codex-attempt-10/native-trust-state.json",
+      "sha256": "013c154bd0a63ac402ca0e5264cfa8ce4e9b6743989cda04580ba75eba2dbc93"
+    },
+    {
+      "path": "commands/codex-attempt-10/native-ui-close.json",
+      "sha256": "b50321536e9342428cfd510d91d6df31ca9c94c4f269f8e69f3e176e3020e2c2"
+    },
+    {
+      "path": "commands/codex-attempt-10/boundary-policy-cleanup.json",
+      "sha256": "3f529c638bc6ecd3e83a8eeb1bb1544f144614b0833f9733c4ddea39d3dc0c6f"
+    }
+  ],
+  "candidate_commit": "d436a15d5eb1105cd963d014cba6dd1d393c222a",
+  "runtime_version": "codex-cli 0.161.0",
+  "runtime_sha256": "61b0194f3bb6534439c8d26a3ed57d0805f84b884588b761795323eeb92fcf70",
+  "helper_sha256": "d43f74da464381cbd6d8124404aa81547f92dff88795b77ea8515743e736f49a",
+  "packaged_cli_sha256": "6b25972c44e81b3acf7c4fe596f93eba83967d3704d3cbc811cdd556542711f2",
+  "additional_boundary_checks": {
+    "startup_before_request1": true,
+    "pre_and_post_before_request2": true,
+    "stop_before_request3": true,
+    "stop_flags_false_true": true,
+    "active_stop_empty": true,
+    "all_provider_status200": true,
+    "all_task_requests_exact_model": true,
+    "all_events_same_native_session": true,
+    "nonce_values_absent_user_prompt": true,
+    "post_contains_actual_file": true,
+    "owned_container_removed": true
+  },
+  "kernel_witness": {
+    "open": true,
+    "access": true,
+    "overflow": false,
+    "masks": [
+      32,
+      1
+    ]
+  },
+  "runtime_identity_qualification": "invocation runtime_sha256 hashes the npm CLI entry launcher; the immutable fresh image binds the native vendor executable and dependency closure; native --version confirms0.161.0. No hostbinary reused.",
+  "container_policy": "Container-only AppArmor unconfined plus exact Docker effective default seccomp and three user-namespace/filesystem setup allowance groups; all other baseline rules preserved. UID1000, cap-dropALL, no-new-privileges, read-onlyouterroot, native read-only sandbox, resource and dedicatednetworklimits retained. No hostsysctl/daemon/AppArmorprofileload change, no native bypass.",
+  "cleanup": "Owned Codex10 container removed; tmpfs home/work/tmp destroyed; raw writers stopped. Dedicated root-owned proxy remains forrootcleanup."
+}

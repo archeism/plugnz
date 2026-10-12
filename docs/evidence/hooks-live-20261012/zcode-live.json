@@ -1,0 +1,167 @@
+{
+  "schema_version": 1,
+  "harness": "zcode-cli",
+  "passed": true,
+  "checks": {
+    "native_exit_zero": true,
+    "no_native_budget_failure": true,
+    "proxy_budget_respected": true,
+    "selected_model_only": true,
+    "markers_absent_user_prompt": true,
+    "startup_in_first_request": true,
+    "kernel_read": true,
+    "tool_before_observed": true,
+    "tool_after_observed": true,
+    "post_in_later_request": true,
+    "one_stop_continuation": true,
+    "real_model_consumed_context": true,
+    "real_model_read_fixture": true,
+    "handlers_exited": true
+  },
+  "requests": 6,
+  "model": "gemini-3.8-flash",
+  "live_inference": true,
+  "protocol": "OpenAI Chat Completions",
+  "endpoint": "/v1/chat/completions",
+  "candidate_commit": "8046dcf5697a2ae468cef20d8201232610c1b523",
+  "candidate_tarball_sha256": "706f83aa4e99ba7cd92c4f7242e3d239c9115ee90fc22e4f009a6d8b81dbbbbd",
+  "runtime_image": "sha256:c7eb1048438b387657deaa7a03314fe219f8f8b0b56ab91ecd473ef8356ddb07",
+  "runner_image": "sha256:c9bb5e31113e5a8a95690f73a726f81792a7a061eef14f452962b961ab12465c",
+  "native": {
+    "exit_code": 0,
+    "failure": null,
+    "wall_seconds": 127.266034515,
+    "pid_absent": true
+  },
+  "kernel_witness": {
+    "open": true,
+    "access": true,
+    "overflow": false,
+    "masks": [
+      32,
+      1
+    ]
+  },
+  "bounds": {
+    "whole_container_seconds": 180,
+    "native_helper_seconds": 180,
+    "inference_requests": 6,
+    "evidence_tmpfs_bytes": 33554432,
+    "memory_bytes": 4294967296,
+    "cpus": 2,
+    "pids": 256,
+    "work_tmpfs_bytes": 536870912
+  },
+  "container_wall_seconds": 154.473,
+  "container_removed": true,
+  "evidence_mount_removed": true,
+  "qualification": "Official source-built ZCLI 0.16.9, not a registry-distributed runtime. Public default-cwd install and native auto-loading in fresh HOME. real_model_read_fixture checks the exact random fixture marker; it does not require terminal LF or byte-exact transcription. Of six requests, three max_tokens responses were continued by native Z before normal Stop; exactly one additional continuation was hook-triggered.",
+  "source_receipts": [
+    {
+      "path": "zcode-live/attempt-02/native/receipt.json",
+      "sha256": "567065ed639955b4847487961e579bc5c2b031b17b2cbc566facc43321fd4ebb"
+    },
+    {
+      "path": "zcode-live/attempt-02/native/invocation.json",
+      "sha256": "a91ebad4298c18e00b949a02421398e45d76b9cc6a3c9ce2e30fb36ac5909916"
+    },
+    {
+      "path": "zcode-live/attempt-02/driver-result.json",
+      "sha256": "c6311d62114ffbd50e0d9de25da2b29c084a02862da11b7f9ce5554697978fb3"
+    },
+    {
+      "path": "candidate-04/receipt.json",
+      "sha256": "1b4030c34b75dbbd48db983e2414636daf5fc144e0e92054e85a762e3e66bca4"
+    },
+    {
+      "path": "zcode-build/version-smoke-attempt-11.result.json",
+      "sha256": "81f57244e62ae1c4b5f4bb33a9f3c1c73ec5aaa9dd4bda4475ac31b94b277502"
+    },
+    {
+      "path": "verification/zcode-live-raw-recount.json",
+      "sha256": "23ec2dc8738e2b9f7f988e22d3b88a9469b4cd2f5d6b368a27ed9d6f771f105b"
+    }
+  ],
+  "runtime_version": "0.16.9",
+  "runtime_sha256": "b7427cd6e82674d649053bd93dde023910902b80cb6addccabaf31727e00763d",
+  "helper_sha256": "23f61034f11734b3abea8ee55b4e8a534f0bff14fec2586a4b416ce191d06a44",
+  "packaged_cli_sha256": "23592a37597627fc7b617293241b454e41e39d62953e1ab73d3f9e8df3823e35",
+  "package_version": "0.0.18",
+  "runtime_source_provenance": {
+    "pin": "aac4755666d09fdcd70272fcf063c077a639015f",
+    "source_repository": "https://github.com/zai-org/ZCode",
+    "acquisition": "git archive exact verified retained official commit; fresh networkclone/codeload attempts failed; no worktree/node_modules/runtime copied",
+    "sha256": "b70fdb32efe83cebcbdd476fd01d945fdd58c936eab1c3b969d159d70fb5b075",
+    "bytes": 89410271,
+    "builder_node": "v24.21.0"
+  },
+  "raw_recount": {
+    "event_counts": {
+      "session.start": 1,
+      "tool.before": 1,
+      "tool.after": 1,
+      "turn.stop": 2
+    },
+    "responses": [
+      {
+        "file": "response-00.body",
+        "finish_reasons": [
+          "tool_calls"
+        ],
+        "content_characters": 61,
+        "tool_names": [
+          "Read"
+        ]
+      },
+      {
+        "file": "response-01.body",
+        "finish_reasons": [
+          "max_tokens"
+        ],
+        "content_characters": 245,
+        "tool_names": []
+      },
+      {
+        "file": "response-02.body",
+        "finish_reasons": [
+          "max_tokens"
+        ],
+        "content_characters": 299,
+        "tool_names": []
+      },
+      {
+        "file": "response-03.body",
+        "finish_reasons": [
+          "max_tokens"
+        ],
+        "content_characters": 321,
+        "tool_names": []
+      },
+      {
+        "file": "response-04.body",
+        "finish_reasons": [
+          "stop"
+        ],
+        "content_characters": 240,
+        "tool_names": []
+      },
+      {
+        "file": "response-05.body",
+        "finish_reasons": [
+          "stop"
+        ],
+        "content_characters": 318,
+        "tool_names": []
+      }
+    ],
+    "same_read_call_id": true,
+    "read_is_error": false,
+    "stop_active": [
+      false,
+      true
+    ],
+    "all_runtime_markers_in_final_model_response": true,
+    "file_nonce_in_final_model_response": true,
+    "passed": true
+  }
+}

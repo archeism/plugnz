@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "attempts": [
+    {
+      "attempt": "omp-candidate01-attempt01",
+      "harness": "omp",
+      "candidate_commit": "0d7d658035b7f144c81f30591fc7293d5900c317",
+      "original_receipt_status": "passed",
+      "requests": 3,
+      "wall_seconds": 12.970008994918317,
+      "home_allocated_bytes": 8634368,
+      "evidence_logical_bytes": 67409,
+      "usage": {
+        "prompt_tokens": 8376,
+        "completion_tokens": 810,
+        "reasoning_tokens": 387,
+        "total_tokens": 9186
+      },
+      "receipt_sha256": "63c8097d8ed0c40de9c41d228c63b08130181ae86e70a1c3791cc4df88e8381c",
+      "strict_model_task_status": "passed by separate offline exact-file and marker-set assertions"
+    },
+    {
+      "attempt": "opencode-candidate01-attempt01",
+      "harness": "opencode",
+      "candidate_commit": "0d7d658035b7f144c81f30591fc7293d5900c317",
+      "original_receipt_status": "passed",
+      "requests": 2,
+      "wall_seconds": 16.85677876509726,
+      "home_allocated_bytes": 1253376,
+      "evidence_logical_bytes": 95190,
+      "usage": {
+        "prompt_tokens": 18116,
+        "completion_tokens": 385,
+        "reasoning_tokens": 180,
+        "total_tokens": 18501
+      },
+      "receipt_sha256": "299bc7a97cae2d72701244aad0fb7d4ca83cfc10c2f5b39de32dd96378976353",
+      "strict_model_task_status": "passed by separate offline exact-file and marker-set assertions"
+    },
+    {
+      "attempt": "pi-candidate01-attempt01",
+      "harness": "pi",
+      "candidate_commit": "0d7d658035b7f144c81f30591fc7293d5900c317",
+      "original_receipt_status": "passed",
+      "requests": 3,
+      "wall_seconds": 26.664220259990543,
+      "home_allocated_bytes": 86016,
+      "evidence_logical_bytes": 52651,
+      "usage": {
+        "prompt_tokens": 2704,
+        "completion_tokens": 3264,
+        "reasoning_tokens": 2974,
+        "total_tokens": 5968
+      },
+      "receipt_sha256": "a9bf9bee90a76e1cb67955879fcefacc06135f7715b856e58410a922166fefed",
+      "strict_model_task_status": "failed: appended hook feedback included in file field"
+    },
+    {
+      "attempt": "pi-candidate02-attempt02",
+      "harness": "pi",
+      "candidate_commit": "c4577147d5767299856d2f0089865a1c61469f4a",
+      "original_receipt_status": "failed",
+      "requests": 3,
+      "wall_seconds": 44.365878717042506,
+      "home_allocated_bytes": 86016,
+      "evidence_logical_bytes": 51484,
+      "usage": {
+        "prompt_tokens": 2857,
+        "completion_tokens": 4270,
+        "reasoning_tokens": 4094,
+        "total_tokens": 7127
+      },
+      "receipt_sha256": "33053bab9579a60c15ef3b7919a0e96a3fe30ef1118261861674c4788e9ce6cb",
+      "strict_model_task_status": "failed: output budget exhausted, incomplete JSON"
+    },
+    {
+      "attempt": "pi-candidate03-attempt03",
+      "harness": "pi",
+      "candidate_commit": "d436a15d5eb1105cd963d014cba6dd1d393c222a",
+      "original_receipt_status": "failed",
+      "requests": 3,
+      "wall_seconds": 35.834438191959634,
+      "home_allocated_bytes": 86016,
+      "evidence_logical_bytes": 59053,
+      "usage": {
+        "prompt_tokens": 3042,
+        "completion_tokens": 4724,
+        "reasoning_tokens": 4305,
+        "total_tokens": 7766
+      },
+      "receipt_sha256": "d31d98bc15afa70c97add485bdbd63ed154c7eb76d673ba6b368c2b4ca4723a6",
+      "strict_model_task_status": "failed for exact bytes; qualified context task passed with exactly one terminal LF omission"
+    }
+  ],
+  "total_model_requests": 14,
+  "total_case_wall_seconds": 136.69132492900826,
+  "total_usage": {
+    "prompt_tokens": 35095,
+    "completion_tokens": 13453,
+    "reasoning_tokens": 11940,
+    "total_tokens": 48548
+  },
+  "qualification": "OMP and OpenCode strict task checks pass offline atcandidate01. Pi finalcandidate03 context-delivery/model-marker/continuation/native-original-bytes checks pass; model omits exactly one terminalLF, so strict byte transcription remains false. No additional paid retry. Earlier Pi feedbackpollution and budgetexhaustion outcomes retained. Finalpreflight guards and reporting/coldCodex changes reviewed separately; nativeadapter/runtime code unchanged fromcandidate01.",
+  "excludes": "Full native prompts, model outputs, protocol packet bodies, authentication headers, secret configuration, and pending Codex/ZCode claims.",
+  "source_receipts": [
+    {
+      "path": "live-extensions/extension-lane-summary.json",
+      "sha256": "24b0a2adbbb99785b41923fc5f603390e560a546dfb2ab8221a0624ad3394a81"
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "proxy_version": "8.0.26",
+  "official_catalog_selected_model": [
+    {
+      "name": "models/gemini-3.8-flash",
+      "displayName": "Gemini 3.8 Flash",
+      "inputTokenLimit": 1048576,
+      "outputTokenLimit": 65536,
+      "thinking": true
+    }
+  ],
+  "protocol_preflights": [
+    {
+      "format": "chat",
+      "path": "/v1/chat/completions",
+      "model": "gemini-3.8-flash",
+      "status": 200,
+      "passed": true,
+      "seconds": 2.735
+    },
+    {
+      "format": "responses",
+      "path": "/v1/responses",
+      "model": "gemini-3.8-flash",
+      "status": 200,
+      "passed": true,
+      "seconds": 4.405
+    },
+    {
+      "format": "anthropic",
+      "path": "/v1/messages",
+      "model": "gemini-3.8-flash",
+      "status": 200,
+      "passed": true,
+      "seconds": 2.486
+    }
+  ],
+  "budget_change": {
+    "status": "passed",
+    "previous_max_output_tokens": 2048,
+    "max_output_tokens": 4096,
+    "models": [
+      "gemini-3.8-flash"
+    ],
+    "inference_requests": 0,
+    "same_container_and_frontend_token": true,
+    "credential_values_logged": false
+  },
+  "excluded": "All request/response bodies, provider thought signatures, client tokens, and upstream configuration.",
+  "source_receipts": [
+    {
+      "path": "setup/proxy-format-preflight.json",
+      "sha256": "666262f1e9ac91194fb51ddfb9b16ededbd8e161d549648889236ad1c5630bb6"
+    },
+    {
+      "path": "setup/proxy-budget-4096.json",
+      "sha256": "16df41f45ecf874a5b37bc26bf4fc7b4eba5d160d7e1f244d9cf0b3d76ad476b"
+    },
+    {
+      "path": "gemini-model-catalog.json",
+      "sha256": "ecb55a8572dde5cd028c4988ca81bb6043080775334d4625aaf477075643c796"
+    }
+  ]
+}

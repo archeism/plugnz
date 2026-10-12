@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-12T17:04:46.008092+00:00",
+  "scope": "Selected sanitized complete source/proxy/preflight/npx/full-gate/six-harness live evidence with preserved failed-attempt qualifications.",
+  "final_reviewed_production_commit": "570e64d4d829d1a7f2480958a4b81da1523a64cb",
+  "files": [
+    {
+      "file": "candidate-03.json",
+      "sha256": "255e749021d343619bdd124ff7baae2429b7d3c672e2ec4893e3d2b7faa3b3c9",
+      "bytes": 752
+    },
+    {
+      "file": "candidate-04.json",
+      "sha256": "758e1ef8578235bb0fe1e1dd4289c15618ef5aa0acbe7214d839e9d8b8566ca6",
+      "bytes": 747
+    },
+    {
+      "file": "candidate-05.json",
+      "sha256": "a56e78b4a6c685303196cc7a9dac06fc23d1f987243250e185e0a36b13e7fb18",
+      "bytes": 747
+    },
+    {
+      "file": "claude-code-live.json",
+      "sha256": "2bcad7d5db95caf4387e0d02ee29bdd0e6f930b18a0a4764d25a31710486f289",
+      "bytes": 2036
+    },
+    {
+      "file": "codex-live.json",
+      "sha256": "08e6485ba5fbc451744b8b8e4bcf3e5ccb836f6a2759da50b340e55a8a00fc08",
+      "bytes": 4836
+    },
+    {
+      "file": "command-attempt-history.json",
+      "sha256": "b3e4fbcb8fb4a2569a060f4293575c21755ba591f59c847673b1e0bb2c55f9e3",
+      "bytes": 3272
+    },
+    {
+      "file": "extension-attempt-history.json",
+      "sha256": "e96a7a6efdd94e0b50911b4748f7cfe955586d0b2be3efa291776eaf82d70fc2",
+      "bytes": 4511
+    },
+    {
+      "file": "final-full-gate.json",
+      "sha256": "196e04a432828d48ffd745ec681226b4ac3516f0f288db721710026ae09548cc",
+      "bytes": 3176
+    },
+    {
+      "file": "final-production-full-gate.json",
+      "sha256": "e8d2a30d8ba855d7254b687f1ea49796c82f2c338448226a1c23321405897d08",
+      "bytes": 3253
+    },
+    {
+      "file": "integration-full-gate.json",
+      "sha256": "39723cc0264ee3d08925f5d16ad84ce79f931a706cf2cc1919dcf2761da3dd84",
+      "bytes": 3264
+    },
+    {
+      "file": "npx-cold-home.json",
+      "sha256": "4b571406daf77a51073bbbdc7298c87a4b55d1e441bb754f86fda49891f2c82f",
+      "bytes": 1907
+    },
+    {
+      "file": "npx-default-targets.json",
+      "sha256": "f4b6bd3f5580c512e45df247ffe4f77ad3274a3d691d99584814d8b8e633237f",
+      "bytes": 5708
+    },
+    {
+      "file": "npx-final-recipe.json",
+      "sha256": "15d79eb6c22d4e6ad0a5f33292bd6dfc30e910b4fe373fcc761839c012156877",
+      "bytes": 2537
+    },
+    {
+      "file": "omp-live.json",
+      "sha256": "9e7f1472c5f9268f52f7d0e26d89ad41f8b55afb82af01ae2d7dc1627af50694",
+      "bytes": 3191
+    },
+    {
+      "file": "opencode-live.json",
+      "sha256": "25a65832ef95f0b2f7f6d64542a23891f11b170b79125613f409ed26257801a8",
+      "bytes": 3187
+    },
+    {
+      "file": "pi-live.json",
+      "sha256": "c2427dbddba44077c1fe44d922f427a6adb58aa1bc4d0d1de79176a76244b951",
+      "bytes": 3508
+    },
+    {
+      "file": "proxy-and-protocols.json",
+      "sha256": "a68a0ba2f993b3c4ea11525a3c25608d4522b5273d5aed63f02c1020ab782a45",
+      "bytes": 1693
+    },
+    {
+      "file": "proxy-cleanup.json",
+      "sha256": "1bf970c770d9b840d2046b134d244c120d5403fa7fe11b32c4e0d1545ff154c7",
+      "bytes": 673
+    },
+    {
+      "file": "zcode-live.json",
+      "sha256": "5abd607feb2aa7ff5af352232a8c56108eac4c11d4295733dc054fb1854aa59f",
+      "bytes": 5305
+    },
+    {
+      "file": "zcode-production-full-gate.json",
+      "sha256": "872fd60de81ebc5ade9f3cd0f21675adaf70d6eddb754a74e4445f1c0f5713b1",
+      "bytes": 3253
+    }
+  ],
+  "exclusions": [
+    "all secret configs and environment files",
+    "authentication values",
+    "full user/system prompts and native UI transcripts",
+    "raw model protocol bodies and thought signatures"
+  ],
+  "updated_at": "2026-10-12T17:59:36.324232+00:00",
+  "prior_reviewed_hook_candidate": "d436a15d5eb1105cd963d014cba6dd1d393c222a"
+}

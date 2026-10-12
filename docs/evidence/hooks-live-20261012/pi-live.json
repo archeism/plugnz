@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "candidate_commit": "d436a15d5eb1105cd963d014cba6dd1d393c222a",
+  "helper_sha256": "61a4d082906a075e56ca08f4f9952f84b906d65693c1f636341f9a01ce046763",
+  "candidate_cli_sha256": "6b25972c44e81b3acf7c4fe596f93eba83967d3704d3cbc811cdd556542711f2",
+  "candidate_package_version": "0.0.16",
+  "status": "failed",
+  "checks": {
+    "final_json": true,
+    "exact_original_file": false,
+    "exact_hook_marker_set": true,
+    "one_native_read_only": true,
+    "live_requests_within_cap": true,
+    "no_forwarding_error": true,
+    "deadline": true,
+    "home_budget": true,
+    "original_tool_result_preserved": true,
+    "post_hook_observed_original_result": true,
+    "model_uses_file": true,
+    "model_uses_all_hook_markers": true,
+    "startup_once": true,
+    "tool_before_once": true,
+    "tool_after_once": true,
+    "stop_observed": true,
+    "authored_source_preserved": true,
+    "native_exited": true,
+    "native_exit_expected": true,
+    "provider_closed": true,
+    "timing_session.start": true,
+    "timing_tool.before": true,
+    "timing_tool.after": true,
+    "timing_turn.stop": true,
+    "stop_contract": true
+  },
+  "requests": 3,
+  "hook_events": 5,
+  "wall_seconds": 35.834438191959634,
+  "harness": "pi",
+  "model": "gemini-3.8-flash",
+  "real_model_inference": true,
+  "native_exit": 0,
+  "resource": {
+    "evidence_logical_bytes": 59053,
+    "home_allocated_bytes": 86016,
+    "home_cap_bytes": 536870912,
+    "children_maxrss_kib": 136276
+  },
+  "protocol": "OpenAI Chat Completions",
+  "endpoint": "/v1/chat/completions",
+  "image_id": "sha256:66137f049e57ffdae82225a854c3404dda0246fbac3a5c0e393ade3b47b36bd8",
+  "tarball_sha256": "3ab6800add5dca3dc6f7182b16a7aac61d769131e7efee0d7ebf8fad8350d141",
+  "container_controls": {
+    "uid": 1000,
+    "host_home_or_runtime_mounts": false,
+    "fresh_home_tmpfs": true,
+    "dropped_capabilities": true,
+    "no_new_privileges": true,
+    "read_only_root_flag": false,
+    "qualification": "Retained paid extension runs did not set --read-only; current reproduction recipe does."
+  },
+  "offline_terminal_lf_qualification": {
+    "candidate_commit": "d436a15d5eb1105cd963d014cba6dd1d393c222a",
+    "source_receipt_sha256": "d31d98bc15afa70c97add485bdbd63ed154c7eb76d673ba6b368c2b4ca4723a6",
+    "qualification": "Offline assertion permits only omission of this single terminal LF. No generic strip, feedback removal, or alteration of the original failed strict receipt.",
+    "checks": {
+      "native_original_file_bytes_exact": true,
+      "model_file_differs_only_by_one_terminal_lf": true,
+      "strict_exact_file_transcription": false,
+      "exact_marker_set": true
+    },
+    "qualified_context_task_status": "passed"
+  },
+  "qualification": "Delivery, continuation, native original bytes and exact marker set pass. Original strict receipt remains failed: model omits exactly one terminal LF. No generic whitespace normalization or hidden retry.",
+  "source_receipts": [
+    {
+      "path": "live-extensions/pi-candidate03-attempt03/run/receipt.json",
+      "sha256": "d31d98bc15afa70c97add485bdbd63ed154c7eb76d673ba6b368c2b4ca4723a6"
+    },
+    {
+      "path": "live-extensions/pi-candidate03-attempt03/launcher.json",
+      "sha256": "8a034bbbf6d16852218c5d069869344fda944920373f69f7ca5ad683a07fdfd1"
+    },
+    {
+      "path": "live-extensions/pi-candidate03-attempt03/run/terminal-lf-qualified-review.json",
+      "sha256": "1f7ce7614e234beb187ab92233c2a02a6f458cda5153be2e80c088144357c249"
+    }
+  ]
+}

@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "harness": "zcode-cli",
+  "version": "0.16.9",
+  "source": {
+    "repository": "https://github.com/zai-org/ZCode",
+    "commit": "aac4755666d09fdcd70272fcf063c077a639015f",
+    "archiveSha256": "b70fdb32efe83cebcbdd476fd01d945fdd58c936eab1c3b969d159d70fb5b075",
+    "archiveBytes": 89410271,
+    "acquisition": "Exact git archive of a retained, verified official commit after fresh network acquisitions failed; no worktree, installed dependencies, or old built runtime copied.",
+    "sourcePreparationReproduced": true
+  },
+  "build": {
+    "image": "sha256:c7eb1048438b387657deaa7a03314fe219f8f8b0b56ab91ecd473ef8356ddb07",
+    "architecture": "linux/amd64",
+    "node": "24.21.0",
+    "pnpm": "10.33.2",
+    "qualification": "The upstream package engine requests Node 24.14.0; its warning is retained. Unmodified selected workspace build scripts, the authored shared-package tsconfig, and official SEA packaging succeeded using the Node 24 base.",
+    "dependencyIsolation": "Fresh Docker dependency store for this task, subsequently reused only across the recorded build attempts. No host node_modules mounted or imported.",
+    "network": "Host network used for build-time DNS; native version smoke used no network and the live runtime used the dedicated bridge.",
+    "successfulAttempt": "attempt-11",
+    "recipe": "Dockerfile.zcode",
+    "recipeSha256": "490b61a0dea499d0c93547ef221d617c372854bbdd29bd43b6fab1a715468f53",
+    "executedDockerfileSha256": "bcc7940e8905b20804004035c1a1206434d7c4a3e591b2ddee6fd7b86408463f",
+    "preparedSourceHelper": "prepare-zcode-source.py",
+    "preparedSourceHelperSha256": "475e34097c68811337d34866d3ad68b6a93fb411fc4d7cbc50ce7bf9abfd3fa9"
+  },
+  "runtime": {
+    "binarySha256": "b7427cd6e82674d649053bd93dde023910902b80cb6addccabaf31727e00763d",
+    "binaryBytes": 250875072,
+    "uid": 1000,
+    "capabilities": "all zero",
+    "noNewPrivileges": true,
+    "versionSmokePassed": true,
+    "versionSmokeContainerRemoved": true
+  },
+  "failuresPreserved": [
+    "Attempts 01\u201303: fresh network source acquisition failed.",
+    "Attempt 04: pnpm package-store rename failure.",
+    "Attempts 05/07/08: nested build command could not resolve turbo.",
+    "Attempt 06: corepack registry fetch failed without the build host-network workaround.",
+    "Dependency diagnostic 01: quoting failure; corrected diagnostic 02 confirmed workspace tools.",
+    "Attempt 09: upstream nested Turbo inputs resolved outside the CLI root.",
+    "Attempt 10: root recursive builds succeeded; SEA exposed the shared package missing emitted dist.",
+    "Attempt 11: authored shared tsconfig emitted dist; official SEA and actual native version check passed."
+  ],
+  "live": {
+    "candidateCommit": "8046dcf5697a2ae468cef20d8201232610c1b523",
+    "candidateArchiveSha256": "706f83aa4e99ba7cd92c4f7242e3d239c9115ee90fc22e4f009a6d8b81dbbbbd",
+    "runnerImage": "sha256:c9bb5e31113e5a8a95690f73a726f81792a7a061eef14f452962b961ab12465c",
+    "passed": true,
+    "checks": {
+      "native_exit_zero": true,
+      "no_native_budget_failure": true,
+      "proxy_budget_respected": true,
+      "selected_model_only": true,
+      "markers_absent_user_prompt": true,
+      "startup_in_first_request": true,
+      "kernel_read": true,
+      "tool_before_observed": true,
+      "tool_after_observed": true,
+      "post_in_later_request": true,
+      "one_stop_continuation": true,
+      "real_model_consumed_context": true,
+      "real_model_read_fixture": true,
+      "handlers_exited": true
+    },
+    "requests": 6,
+    "nativeSeconds": 127.266034515,
+    "containerSeconds": 154.473,
+    "rawEvidenceBytes": 506957,
+    "containerRemoved": true,
+    "evidenceTmpfsRemoved": true,
+    "qualification": "Fresh native home, automatic portable-hook installation and native autoload, real Gemini 3.8 Flash, one Read and exactly one hook Stop continuation; no trust override."
+  },
+  "evidenceRoot": "/root/workspace/plugnz-hook-cleanroom-20261012-evidence",
+  "receipts": [
+    {
+      "path": "zcode-build/attempt-11.result.json",
+      "sha256": "107ba5dd4256e5c2ca60c5653102d69bdca9381bb685a321d3afc306c7a267b1",
+      "bytes": 1586
+    },
+    {
+      "path": "zcode-build/version-smoke-attempt-11.result.json",
+      "sha256": "81f57244e62ae1c4b5f4bb33a9f3c1c73ec5aaa9dd4bda4475ac31b94b277502",
+      "bytes": 4195
+    },
+    {
+      "path": "zcode-build/source-prepare-repro-01.result.json",
+      "sha256": "195d9123645df979f84bc9094689377bd9f52c232009aaa8548393c19b904b3d",
+      "bytes": 1205
+    },
+    {
+      "path": "zcode-build/live-runner-02.result.json",
+      "sha256": "abf4b873e3b4d27ea9cce117c50877900f324e94be1642cac223779c38fa5732",
+      "bytes": 1512
+    },
+    {
+      "path": "zcode-live/attempt-01/driver-result.json",
+      "sha256": "931a187c2ea1f016be7fd33e44e9deb497b30a897ec2018c9809e75164350117",
+      "bytes": 2684
+    },
+    {
+      "path": "zcode-live/attempt-02/driver-result.json",
+      "sha256": "c6311d62114ffbd50e0d9de25da2b29c084a02862da11b7f9ce5554697978fb3",
+      "bytes": 3238
+    },
+    {
+      "path": "zcode-live/attempt-02/native/receipt.json",
+      "sha256": "567065ed639955b4847487961e579bc5c2b031b17b2cbc566facc43321fd4ebb",
+      "bytes": 2341
+    },
+    {
+      "path": "verification/zcode-live-raw-recount.json",
+      "sha256": "23ec2dc8738e2b9f7f988e22d3b88a9469b4cd2f5d6b368a27ed9d6f771f105b",
+      "bytes": 4270
+    }
+  ]
+}

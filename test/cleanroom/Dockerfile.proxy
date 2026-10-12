@@ -1,0 +1,4 @@
+FROM plugnz-hook-cleanroom-base:20261012
+RUN curl -fL --retry 0 https://github.com/router-for-me/CLIProxyAPI/releases/download/v8.0.26/CLIProxyAPI_8.0.26_linux_amd64.tar.gz -o /tmp/proxy.tgz && echo "252171485fe4c1f3f865ca063176a50f002a071a446f6305e36c456053677c07  /tmp/proxy.tgz" | sha256sum -c - && tar -xzf /tmp/proxy.tgz -C /usr/local/bin cli-proxy-api && rm /tmp/proxy.tgz
+USER node
+ENTRYPOINT ["/usr/local/bin/cli-proxy-api", "-local-model", "-config", "/run/secrets/proxy.yaml"]

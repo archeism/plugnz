@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "production_commit": "570e64d4d829d1a7f2480958a4b81da1523a64cb",
+  "status": "completed",
+  "passed": true,
+  "source_archive_sha256": "724a4eeab9fa826558e36d4b7f5b196174d7b92328e5d016a9b3956002519216",
+  "lock_sha256": "404ccbedd999c4eb9586b3ecc357e171569137f533013be98394c054591f2735",
+  "runtimes": {
+    "bun": {
+      "version": "1.4.3",
+      "sha256": "7ce7d6b654eddeec20afddf2396317fba6dc19ab52788a27e894e1806bf8f24b"
+    },
+    "node": {
+      "version": "v22.23.1",
+      "sha256": "93956de2e59480474a7b46571da1651180b1a050cdf32641ebec4ce6e478e068"
+    }
+  },
+  "runs": [
+    {
+      "status": "completed",
+      "exit_code": 0,
+      "elapsed_seconds": 0.466,
+      "log_sha256": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92",
+      "log_bytes": 15,
+      "summary": [
+        "$ tsc --noEmit"
+      ],
+      "skips": [],
+      "passed": true
+    },
+    {
+      "status": "completed",
+      "exit_code": 0,
+      "elapsed_seconds": 211.444,
+      "log_sha256": "c7cf65ed38ccafadd60065c17fcc66e2da6923794120e8feec98e758ee159512",
+      "log_bytes": 131558,
+      "summary": [
+        "(skip) real Grok loader reads a local bundle from an isolated home and empty cwd",
+        "(skip) codex lifecycle > keeps the new active slot when cleanup of an older owned version fails",
+        "",
+        " 1037 pass",
+        " 6 skip",
+        " 0 fail",
+        " 7400 expect() calls",
+        "Ran 1043 tests across 100 files. [211.39s]"
+      ],
+      "skips": [
+        {
+          "file": "test/zcode-cli-lifecycle.test.ts",
+          "test": "official ZCode CLI default detection > without an override, the desktop-bundled CLI under an isolated home is detected"
+        },
+        {
+          "file": "test/zcode-cli-lifecycle.test.ts",
+          "test": "official ZCode CLI default detection > an isolated home never falls through to the system-wide desktop bundle"
+        },
+        {
+          "file": "test/hermes-native-loader.test.ts",
+          "test": "current Hermes loader registers ordinary discovery and queues a prompt command into CLI input"
+        },
+        {
+          "file": "test/hermes-native-loader.test.ts",
+          "test": "public CLI admits official editable and native forwarder launchers without source or venv writes"
+        },
+        {
+          "file": "test/grok-native-loader.test.ts",
+          "test": "real Grok loader reads a local bundle from an isolated home and empty cwd"
+        },
+        {
+          "file": "test/codex-lifecycle.test.ts",
+          "test": "codex lifecycle > keeps the new active slot when cleanup of an older owned version fails"
+        }
+      ],
+      "passed": true
+    }
+  ],
+  "privilege_proof": {
+    "uid": 65534,
+    "euid": 65534,
+    "caps": [
+      "CapEff:\t0000000000000000",
+      "CapBnd:\t0000000000000000",
+      "NoNewPrivs:\t1"
+    ]
+  },
+  "workspace_cleaned": true,
+  "qualification": "Required final full gate after detection-only Pi/OMP/OpenCode cold-profile fix. Prior gates remain separate; six skips retained explicitly.",
+  "source_receipts": [
+    {
+      "path": "verification/full-suite-570e64d.json",
+      "sha256": "b8b8695c1185ec27c8aea2bae35ab1ca86bc3a84f3753b40d407b6d63b6272d3"
+    }
+  ]
+}

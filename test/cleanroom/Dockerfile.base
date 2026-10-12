@@ -1,0 +1,6 @@
+FROM node:24.21.0-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20
+RUN apt-get update && apt-get install -y --no-install-recommends python3 ca-certificates curl git unzip procps bubblewrap build-essential && rm -rf /var/lib/apt/lists/*
+RUN npm install --prefix /opt/bun --no-audit --no-fund bun@1.4.3 && ln -s /opt/bun/node_modules/.bin/bun /usr/local/bin/bun
+RUN mkdir -p /work /evidence /opt/plugnz && chown node:node /work /evidence
+ENV NODE_COMPILE_CACHE= NODE_DISABLE_COMPILE_CACHE=1
+WORKDIR /work

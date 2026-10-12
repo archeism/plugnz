@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "source_commit": "570e64d4d829d1a7f2480958a4b81da1523a64cb",
+  "package_version": "0.0.18",
+  "tarball_sha256": "e20a0988653aa9ac9becdfa9b1ce1ff151c87e0541d7d48fc76e1b42984fec0f",
+  "tarball_bytes": 325297,
+  "source_archive_sha256": "724a4eeab9fa826558e36d4b7f5b196174d7b92328e5d016a9b3956002519216",
+  "dist": {
+    "dist/hook-runtime.mjs": "cf673f114dd18ba382d50a5f38eebe1163c2f0e844b5106ab087a20bcba1682c",
+    "dist/plugnz.mjs": "314e81982406b64f0af034e589662932dacd1dd2d4a0e735033f7e1b2a805a52"
+  },
+  "passed": true,
+  "workspace_cleaned": true,
+  "source_receipts": [
+    {
+      "path": "candidate-05/receipt.json",
+      "sha256": "dcef8366171c22b9df90c690f8293faf08b2647b7ab6bee4961b77150cc3f7dd"
+    }
+  ]
+}

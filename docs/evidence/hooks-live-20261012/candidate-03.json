@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "production_commit": "d436a15d5eb1105cd963d014cba6dd1d393c222a",
+  "package_version": "0.0.16",
+  "tarball_sha256": "3ab6800add5dca3dc6f7182b16a7aac61d769131e7efee0d7ebf8fad8350d141",
+  "tarball_bytes": 324911,
+  "dist_sha256": {
+    "dist/hook-runtime.mjs": "cf673f114dd18ba382d50a5f38eebe1163c2f0e844b5106ab087a20bcba1682c",
+    "dist/plugnz.mjs": "6b25972c44e81b3acf7c4fe596f93eba83967d3704d3cbc811cdd556542711f2"
+  },
+  "pack_exit_code": 0,
+  "qualification": "Version is the pre-release candidate version; this receipt makes no npm publication claim.",
+  "source_receipts": [
+    {
+      "path": "candidate-03/receipt.json",
+      "sha256": "bc472d2336b7e94ab26904bd590b6594b4727b2ca909c0f5cd3ac4a6a1efb9cc"
+    }
+  ]
+}
