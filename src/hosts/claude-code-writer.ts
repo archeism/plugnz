@@ -933,7 +933,8 @@ function claudeVersionObservation(observed: ReturnType<typeof observeClaudeCodeV
 // These are loader/store observations, not a semver compatibility range.
 // 2.1.275: docs/hosts/claude-code.md and native root-command probe.
 // 2.1.295: native-plugin-update-capabilities-2026-10-09.md sandbox probe.
-const CLAUDE_MANAGED_RELEASES = new Set(['2.1.275', '2.1.295']);
+// 2.1.296: docs/evidence/claude-code-2.1.296-native-20261013.json isolated native loader/refresh probe.
+const CLAUDE_MANAGED_RELEASES = new Set(['2.1.275', '2.1.295', '2.1.296']);
 
 function claudeEvidenceProfiles(
   version: string | undefined,
@@ -974,6 +975,7 @@ function claudeProfile(
     evidence: [
       'docs/hosts/claude-code.md',
       'docs/research/native-plugin-update-capabilities-2026-10-09.md',
+      ...(version === '2.1.296' ? ['docs/evidence/claude-code-2.1.296-native-20261013.json'] : []),
     ],
   });
 }

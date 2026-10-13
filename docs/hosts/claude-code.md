@@ -49,7 +49,13 @@ Lifecycle admission requires both an observed executable version and evidence
 for that release. Managed loader/store profiles currently cover `2.1.275`
 (the native loader and command-root probe above) and `2.1.295` (the isolated
 native store/update probe in
-`docs/research/native-plugin-update-capabilities-2026-10-09.md`). A successfully
+`docs/research/native-plugin-update-capabilities-2026-10-09.md`), and `2.1.296`
+([isolated native loader/refresh receipt](../evidence/claude-code-2.1.296-native-20261013.json)).
+The 2.1.296 probe used separate `OPEN_PLUGIN_CLAUDE_CODE_ROOT` and
+`CLAUDE_CONFIG_DIR` roots, without provider authentication: native `plugin details`
+loaded a skill and command, observed a same-version skill-directory refresh,
+then observed restoration of the original source and removal from `plugin list`.
+This proves the Managed store route; it does not add a native remote-update contract. A successfully
 parsed older, intermediate, or future release is still `capability.unverified`:
 a version string alone is not proof of its registry layout or semantics.
 This is an evidence inventory, not a claim those other releases are incompatible.
@@ -86,3 +92,14 @@ Claude continues to load through the registry's newly marked `installPath`.
 Tests set `OPEN_PLUGIN_CLAUDE_CODE_ROOT` to an isolated temporary root. The
 adapter never writes `~/.claude.json`; user-level MCP entries remain reader
 only. `pin` only rewrites plugin-local `.mcp.json` / `mcp.json` files.
+
+The 2.1.296 probe is reproducible with
+`bun docs/evidence/claude-code-2.1.296-native-probe.ts` on this Mac.
+Focused verification: `bun test test/claude-code-lifecycle-route.test.ts
+ test/claude-lifecycle.test.ts` passed 35 tests and 168 assertions.
+A broader public-catalog run initially exposed a separate macOS canonical-path
+binding defect before mutation; that result is not loader incompatibility.
+Two exploratory native attempts were retained under `/tmp/plugnz-claude296-*`:
+`plugin details` inventories component directory names rather than descriptions
+or frontmatter aliases, so the final refresh probe changes the skill directory
+and verifies that changed native inventory.

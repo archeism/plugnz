@@ -181,6 +181,15 @@ function recorded(installed: TargetInstallationData) {
 }
 
 describe('claude-code lifecycle route', () => {
+  test('admits the native-probed 2.1.296 release without opening a version range', async () => {
+    await withClaude(async root => {
+      process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'] = binary(root, '2.1.296 (Claude Code)\n');
+      expect(await route(createClaudeCodeLifecycleHost(), root, { attemptId: 'proven-296', version: '1.1.0' })).toBe('managed');
+      process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'] = binary(root, '2.1.297 (Claude Code)\n');
+      expect(await route(createClaudeCodeLifecycleHost(), root, { attemptId: 'unproven-297', version: '1.1.0' })).toBe('capability-gap');
+    });
+  });
+
   test('keeps Managed unless a pinned version, git source, and update pass the sandbox contract', async () => {
     await withClaude(async (root) => {
       const blocked = createClaudeCodeLifecycleHost();

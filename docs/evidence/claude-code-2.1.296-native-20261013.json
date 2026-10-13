@@ -1,0 +1,71 @@
+{
+  "recordedAt": "2026-10-13T14:38:25.789Z",
+  "base": "/tmp/plugnz-claude296-6snPmE",
+  "checks": [
+    "native loader skills and commands",
+    "native registry readback",
+    "same-version refresh",
+    "original-source recovery",
+    "retirement"
+  ],
+  "results": [
+    {
+      "args": [
+        "--version"
+      ],
+      "status": 0,
+      "stdout": "2.1.296 (Claude Code)\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "plugin",
+        "list",
+        "--json"
+      ],
+      "status": 0,
+      "stdout": "[\n  {\n    \"id\": \"profile-proof@profile296\",\n    \"version\": \"1.0.0\",\n    \"scope\": \"user\",\n    \"enabled\": true,\n    \"installPath\": \"/tmp/plugnz-claude296-6snPmE/profile/plugins/cache/profile296/profile-proof/1.0.0\",\n    \"readFromFolder\": \"/tmp/plugnz-claude296-6snPmE/profile/plugins/marketplaces/.plgnz-profile296/plugins/profile-proof\",\n    \"folderVersion\": \"1.0.0\",\n    \"installedAt\": \"2026-10-13T14:38:22.432Z\",\n    \"lastUpdated\": \"2026-10-13T14:38:22.432Z\",\n    \"projectEnabled\": false\n  }\n]\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "plugin",
+        "details",
+        "profile-proof@profile296"
+      ],
+      "status": 0,
+      "stdout": "profile-proof 1.0.0\n  Source: profile-proof@profile296\n\nComponent inventory\n  Skills (2)  check, proof\n  Agents (0)\n  Hooks (0)\n  MCP servers (0)\n  LSP servers (0)\n\nProjected token cost\n  Always-on:   ~21 tok   added to every session\n\nPer-component (rounded)\n  component  always-on  on-invoke\n  proof           < 20       < 20\n  check           < 20       < 20\n\n  On-invoke cost is paid each time a skill or agent fires.\n  Token counts are estimates and may differ from actual usage.\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "plugin",
+        "details",
+        "profile-proof@profile296"
+      ],
+      "status": 0,
+      "stdout": "profile-proof 1.0.0\n  Source: profile-proof@profile296\n\nComponent inventory\n  Skills (2)  check, refreshed-proof\n  Agents (0)\n  Hooks (0)\n  MCP servers (0)\n  LSP servers (0)\n\nProjected token cost\n  Always-on:   ~24 tok   added to every session\n\nPer-component (rounded)\n  component        always-on  on-invoke\n  refreshed-proof       < 20       < 20\n  check                 < 20       < 20\n\n  On-invoke cost is paid each time a skill or agent fires.\n  Token counts are estimates and may differ from actual usage.\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "plugin",
+        "details",
+        "profile-proof@profile296"
+      ],
+      "status": 0,
+      "stdout": "profile-proof 1.0.0\n  Source: profile-proof@profile296\n\nComponent inventory\n  Skills (2)  check, proof\n  Agents (0)\n  Hooks (0)\n  MCP servers (0)\n  LSP servers (0)\n\nProjected token cost\n  Always-on:   ~21 tok   added to every session\n\nPer-component (rounded)\n  component  always-on  on-invoke\n  proof           < 20       < 20\n  check           < 20       < 20\n\n  On-invoke cost is paid each time a skill or agent fires.\n  Token counts are estimates and may differ from actual usage.\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "plugin",
+        "list",
+        "--json"
+      ],
+      "status": 0,
+      "stdout": "[]\n",
+      "stderr": ""
+    }
+  ]
+}
