@@ -5,10 +5,10 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runDoctor, sameSha, type DoctorFinding } from '../src/doctor';
+import { runDoctor, type DoctorFinding } from '../src/doctor';
 import { gitRemoteHead, isGitUrl } from '../src/exec';
 import { claudeCode } from '../src/hosts/claude-code';
 import { codex } from '../src/hosts/codex';
@@ -390,23 +390,57 @@ describe('doctor · output shape', () => {
   });
 });
 
-describe('sameSha staleness guard (issue #2)', () => {
+// PR #85 review: exercise staleness through public findings, not a test-only export.
+describe('doctor staleness guard (issue #2)', () => {
   const FULL = 'a'.repeat(40);
-  test('identical full shas and legit short prefixes read fresh', () => {
-    expect(sameSha(FULL, FULL)).toBe(true);
-    expect(sameSha(FULL.slice(0, 12), FULL)).toBe(true);
-    expect(sameSha(FULL, FULL.slice(0, 12))).toBe(true);
-    expect(sameSha(FULL.slice(0, 7), FULL)).toBe(true);
-  });
-  test('empty, tiny, and too-short shas read stale, never fresh', () => {
-    expect(sameSha('', FULL)).toBe(false);
-    expect(sameSha(FULL.slice(0, 1), FULL)).toBe(false);
-    expect(sameSha(FULL.slice(0, 6), FULL)).toBe(false);
-    expect(sameSha('', '')).toBe(false);
-  });
-  test('prefix-match only when one side is a full sha', () => {
-    expect(sameSha(FULL.slice(0, 12), FULL.slice(0, 13))).toBe(false);
-    expect(sameSha('a'.repeat(8), 'a'.repeat(8))).toBe(true);
-    expect(sameSha('a'.repeat(8), 'b'.repeat(8))).toBe(false);
-  });
+  const cases: Array<[string, string, string, 'fresh' | 'stale' | 'unknown']> = [
+    ['identical full SHAs', FULL, FULL, 'fresh'],
+    ['native 12-character prefix', FULL.slice(0, 12), FULL, 'fresh'],
+    ['abbreviated source head', FULL, FULL.slice(0, 12), 'fresh'],
+    ['minimum seven-character prefix', FULL.slice(0, 7), FULL, 'fresh'],
+    ['case-insensitive prefix', FULL.slice(0, 12).toUpperCase(), FULL, 'fresh'],
+    ['empty installed SHA', '', FULL, 'stale'],
+    ['one-character prefix', FULL.slice(0, 1), FULL, 'stale'],
+    ['six-character prefix', FULL.slice(0, 6), FULL, 'stale'],
+    ['two unequal abbreviations', FULL.slice(0, 12), FULL.slice(0, 13), 'stale'],
+    ['identical abbreviations', 'a'.repeat(8), 'a'.repeat(8), 'fresh'],
+    ['different abbreviations', 'a'.repeat(8), 'b'.repeat(8), 'stale'],
+    ['different full SHAs', FULL, 'b'.repeat(40), 'stale'],
+    ['missing source head', '', '', 'unknown'],
+  ];
+  for (const [label, installed, head, expected] of cases) {
+    test(label, () => {
+      withHostEnv('claude-code', (home) => {
+        const bin = join(home, 'sha-guard-bin');
+        const source = join(home, 'sha-guard-source');
+        mkdirSync(bin); mkdirSync(source);
+        // Control only the external source-head response. Doctor still resolves
+        // it, validates it, compares the record, and emits the public finding.
+        writeFileSync(join(bin, 'git'), '#!/bin/sh\n' +
+          'test "$1" = "-C" && test "$3" = "rev-parse" && test "$4" = "HEAD" || exit 42\n' +
+          'printf "%s\\n" "$PLUGNZ_TEST_SOURCE_HEAD"\n');
+        chmodSync(join(bin, 'git'), 0o755);
+        const host: HostReader = {
+          id: 'sha-guard-host', gui: false, detect: () => true,
+          stores: () => [], mcpEntries: () => [],
+          listInstalled: () => [{ id: 'sha-guard', name: 'sha-guard', path: source, enabled: true }],
+        };
+        const previousPath = process.env['PATH'];
+        const previousHead = process.env['PLUGNZ_TEST_SOURCE_HEAD'];
+        process.env['PATH'] = `${bin}:${previousPath ?? ''}`;
+        process.env['PLUGNZ_TEST_SOURCE_HEAD'] = head;
+        try {
+          const result = runDoctor([host], [{ host: host.id, id: 'sha-guard', source, sourceSha: installed }]);
+          const findings = result.findings.filter(f => /is at source head|is stale|staleness unknown/u.test(f.message));
+          expect(findings).toHaveLength(1);
+          expect(findings[0]!.mark).toBe(expected === 'fresh' ? '✓' : expected === 'stale' ? '✗' : '!');
+          expect(result.exitCode).toBe(expected === 'stale' ? 1 : 0);
+          expect(result.findings.some(f => f.message.includes('is at source head'))).toBe(expected === 'fresh');
+        } finally {
+          if (previousPath === undefined) delete process.env['PATH']; else process.env['PATH'] = previousPath;
+          if (previousHead === undefined) delete process.env['PLUGNZ_TEST_SOURCE_HEAD']; else process.env['PLUGNZ_TEST_SOURCE_HEAD'] = previousHead;
+        }
+      });
+    });
+  }
 });

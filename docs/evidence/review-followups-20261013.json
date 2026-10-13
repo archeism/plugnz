@@ -1,0 +1,87 @@
+{
+  "source_commit": "9c2423b55135fe97026109abd3f25383c2ab45ec",
+  "source_archive_sha256": "76c6c56eb5dcf94c39f2893b98abf984dcce0af980ec3f3eb9ed4013efb8d4cd",
+  "started_at": "2026-10-13T13:40:37.548198+00:00",
+  "finished_at": "2026-10-13T13:44:09.993753+00:00",
+  "runtimes": {
+    "bun": "1.4.3",
+    "node": "v22.23.1"
+  },
+  "uid": 65534,
+  "capabilities": "all dropped",
+  "no_new_privileges": true,
+  "status": "passed",
+  "passed": true,
+  "temporary_workspace_removed": true,
+  "runs": [
+    {
+      "label": "build",
+      "exit_code": 0,
+      "seconds": 0.116,
+      "log_sha256": "71873ad1b86155692edd60d120d0c26972f496eefc819fbce870518ac21e3aec",
+      "log_bytes": 49,
+      "tail": [
+        "$ bun scripts/build.mjs",
+        "dist/plugnz.mjs 1544 KiB"
+      ]
+    },
+    {
+      "label": "check",
+      "exit_code": 0,
+      "seconds": 0.468,
+      "log_sha256": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92",
+      "log_bytes": 15,
+      "tail": [
+        "$ tsc --noEmit"
+      ]
+    },
+    {
+      "label": "test",
+      "exit_code": 0,
+      "seconds": 211.715,
+      "log_sha256": "635b92dfbfd76a0dd8b0666f7ff73599aafd28de07a43301af681f2962cc136c",
+      "log_bytes": 132400,
+      "tail": [
+        "(skip) official ZCode CLI default detection > without an override, the desktop-bundled CLI under an isolated home is detected",
+        "(skip) official ZCode CLI default detection > an isolated home never falls through to the system-wide desktop bundle",
+        "(skip) current Hermes loader registers ordinary discovery and queues a prompt command into CLI input",
+        "(skip) public CLI admits official editable and native forwarder launchers without source or venv writes",
+        "(skip) real Grok loader reads a local bundle from an isolated home and empty cwd",
+        "(skip) codex lifecycle > keeps the new active slot when cleanup of an older owned version fails",
+        "",
+        " 1050 pass",
+        " 6 skip",
+        " 0 fail",
+        " 7465 expect() calls",
+        "Ran 1056 tests across 100 files. [211.68s]"
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "pr": 81,
+      "review_id": 5488656215,
+      "fix": "e2c644c29aef3f2df00c25c0666a669421db700d"
+    },
+    {
+      "pr": 85,
+      "review_id": 5493662591,
+      "fix": "b0a1d44765313a445982c2d8e91e0df3ef4e6b79"
+    },
+    {
+      "pr": 82,
+      "review_id": 5491513044,
+      "fix": "9c2423b55135fe97026109abd3f25383c2ab45ec"
+    }
+  ],
+  "plain_node_probe": {
+    "source_commit": "9c2423b55135fe97026109abd3f25383c2ab45ec",
+    "build_stdout": "Bundled 73 modules in 9ms\n\n  yaml.mjs  239.35 KB  (entry point)\n\n",
+    "node_result": {
+      "runtime": "v22.23.1",
+      "checks": 5,
+      "status": "passed"
+    },
+    "bundle_sha256": "0863b64deb5f4bf2f3c5f25ee1c4ee01cf6f1feb63c3f2f2f5d7b974cf485704"
+  }
+}

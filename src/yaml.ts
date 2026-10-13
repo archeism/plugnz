@@ -105,24 +105,30 @@ function renderNumber(value: number): string {
   return String(value);
 }
 
-export function yamlStringify(value: unknown): string {
-  if (value === null || value === undefined) return "null";
+// Known document values always render text. Unknown inputs may be omitted by
+// Bun's writer; keep that absence explicit rather than manufacturing YAML null.
+export function yamlStringify(value: undefined | symbol): undefined;
+export function yamlStringify(value: string | number | boolean | null | readonly unknown[] | Record<string, unknown>): string;
+export function yamlStringify(value: unknown): string | undefined;
+export function yamlStringify(value: unknown): string | undefined {
+  if (value === undefined || typeof value === "function" || typeof value === "symbol") return undefined;
+  if (value === null) return "null";
   if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "number") return renderNumber(value);
   if (typeof value === "string") return renderScalar(value);
   if (Array.isArray(value)) {
     const entries: string[] = [];
     for (const entry of value) {
-      if (entry === undefined) continue; // observed: undefined array elements are dropped
-      entries.push(yamlStringify(entry));
+      const rendered = yamlStringify(entry);
+      if (rendered !== undefined) entries.push(rendered);
     }
     return `[${entries.join(",")}]`;
   }
   if (typeof value === "object") {
     const entries: string[] = [];
     for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-      if (entry === undefined) continue; // observed: undefined-valued keys are dropped
-      entries.push(`${renderScalar(key)}: ${yamlStringify(entry)}`);
+      const rendered = yamlStringify(entry);
+      if (rendered !== undefined) entries.push(`${renderScalar(key)}: ${rendered}`);
     }
     return `{${entries.join(",")}}`;
   }

@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { yamlParse, yamlStringify } from '../src/yaml';
 
 declare const Bun: {
-  YAML: { parse(input: string): unknown; stringify(value: unknown): string };
+  YAML: { parse(input: string): unknown; stringify(value: unknown): string | undefined };
   CryptoHasher: new (algorithm: string) => { update(value: string): { digest(format: 'hex'): string } };
 };
 
@@ -245,5 +245,47 @@ describe("runtime.spawn option forwarding", () => {
     const code = await child.exited;
     expect(performance.now() - started).toBeLessThan(5_000);
     expect(code).toBe(-1);
+  });
+});
+
+// PR #81 review: omitted JavaScript values must not become YAML text or null.
+describe("omitted JavaScript values match the pinned Bun writer", () => {
+  test("top-level undefined, functions, and symbols produce no document", () => {
+    let calls = 0;
+    const fn = () => { calls += 1; return "must not execute"; };
+    for (const value of [undefined, fn, Symbol("omitted")]) {
+      expect(Bun.YAML.stringify(value)).toBeUndefined();
+      expect(yamlStringify(value)).toBeUndefined();
+    }
+    expect(calls).toBe(0);
+    expect(yamlStringify(null)).toBe("null");
+  });
+
+  test("arrays omit functions and symbols without dropping representable falsy values", () => {
+    const fn = () => { throw new Error("serialization must not invoke functions"); };
+    const values: Array<[unknown, string]> = [
+      [[fn, 1, Symbol("omitted")], "[1]"],
+      [[undefined, fn, Symbol("omitted")], "[]"],
+      [[fn, null, false, 0, "", Symbol("omitted")], '[null,false,0,""]'],
+      [[[fn, 1], [Symbol("omitted"), 2]], "[[1],[2]]"],
+    ];
+    for (const [value, expected] of values) {
+      expect(Bun.YAML.stringify(value)).toBe(expected);
+      expect(yamlStringify(value)).toBe(expected);
+    }
+  });
+
+  test("object properties omit functions and symbols recursively", () => {
+    const fn = () => { throw new Error("serialization must not invoke functions"); };
+    const values: Array<[unknown, string]> = [
+      [{ drop: fn, keep: 1, symbol: Symbol("omitted") }, "{keep: 1}"],
+      [{ drop: fn, symbol: Symbol("omitted"), missing: undefined }, "{}"],
+      [{ nested: { drop: fn, keep: [Symbol("omitted"), 2] } }, "{nested: {keep: [2]}}"],
+      [{ drop: fn, keep: null, flag: false, count: 0, text: "" }, '{keep: null,flag: false,count: 0,text: ""}'],
+    ];
+    for (const [value, expected] of values) {
+      expect(Bun.YAML.stringify(value)).toBe(expected);
+      expect(yamlStringify(value)).toBe(expected);
+    }
   });
 });

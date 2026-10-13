@@ -34,8 +34,9 @@ jobs:
         # outrun the regression net added in tests.yml: wait for the Tests run
         # of this exact commit and publish only on success. A red (or absent)
         # suite fails this step, so a regression can never ride a merge out.
-        # Dispatch releases skip the gate — dispatch is already a deliberate
-        # human action on a commit that passed its own push's Tests run.
+        # Manual dispatch is an intentional operator override, not proof that
+        # the chosen ref passed Tests. It skips this same-SHA gate; the operator
+        # must independently verify the exact commit before dispatching.
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
