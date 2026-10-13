@@ -114,17 +114,20 @@ function shortSha(sha: string): string {
   return sha.slice(0, 8);
 }
 
+const MIN_SHA_PREFIX_LENGTH = 7;
+const FULL_SHA_LENGTH = 40;
+
 /** sha equality tolerant of the host recording a short sha (claude-code records 12 chars).
  * A prefix only counts when it is meaningful: at least 7 chars on the short side,
  * and one side a full-length sha — an empty or tiny recorded sha must read stale,
  * never fresh. */
-export function sameSha(installed: string, head: string): boolean {
+function sameSha(installed: string, head: string): boolean {
   const a = installed.toLowerCase();
   const b = head.toLowerCase();
   if (a === b && a.length > 0) return true;
   const short = a.length < b.length ? a : b;
   const full = a.length < b.length ? b : a;
-  if (short.length < 7 || full.length < 40) return false;
+  if (short.length < MIN_SHA_PREFIX_LENGTH || full.length < FULL_SHA_LENGTH) return false;
   return full.startsWith(short);
 }
 
