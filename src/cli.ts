@@ -5,6 +5,7 @@ import { cleanupWriters, writers } from './hosts/writers';
 import { resolveSource, sourceBindingForArgument, type PluginSource, type SourceBinding } from './source';
 import { runFrozenLifecycle } from './lifecycle-command';
 import { mergeAddReports } from './add-report';
+import { installationVerification } from './installation-verification';
 import { createLifecyclePlannerHosts, lifecyclePlannerHostKinds } from './lifecycle-hosts';
 import { isScopeId, projectScopeInventory, renderScopeInventory, sameSourceBinding } from './scope-inventory';
 import { parseSyncManifest, SyncManifestValidationError } from './sync-manifest';
@@ -595,6 +596,10 @@ function printReport(report: LifecycleReport, mode: MutationOutputMode): void {
     }
     const legacy = serializeLegacyInstallOutcomes(report);
     for (const item of legacy) console.log(`${item.target}\t${item.status}\t${item.plugin}${item.diagnostic ? `\t${item.diagnostic}` : ''}`);
+    for (const facts of report.verification?.operations ?? []) {
+      const outcome = report.outcomes.find(row => row.operationId === facts.operationId)!;
+      console.log(`${outcome.scope.target.kind}\t${outcome.package}\tcompatibility=${facts.compatibility} registration=${facts.registration} executionApproval=${facts.executionApproval} delivery=${facts.delivery}`);
+    }
   }
 }
 
@@ -1320,6 +1325,7 @@ async function runRecordedLifecycleUpdate(flags: VerbFlags, state: LifecycleStat
 }
 
 function emitAddReport(report: LifecycleReport, mode: MutationOutputMode): number {
+  report = parseLifecycleReport({ ...report, verification: installationVerification(report) });
   if (mode === 'json') return emitValidatedReport(report, true);
   printReport(report, mode);
   return exitCodeForLifecycleReport(report);

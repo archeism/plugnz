@@ -14,10 +14,11 @@ const runtime = join(temporary, 'runtime.mjs');
 const built = spawnSync(process.execPath, ['build', join(import.meta.dir, '../src/hooks.ts'), '--target=node', '--format=esm', '--outfile=' + runtime], { encoding: 'utf8' });
 if (built.status !== 0) throw new Error('Cannot bundle test hook runtime: ' + built.stderr);
 
+for (const version of [1, 2] as const) {
 function run(adapter: HookAdapter, event: HookEvent, native: Record<string, unknown>, resultExpression: string) {
   const root = mkdtempSync(join(temporary, adapter.id + '-'));
   const handler = `let raw='';for await(const chunk of process.stdin)raw+=chunk;const input=JSON.parse(raw);process.stdout.write(JSON.stringify(${resultExpression}));`;
-  const config: HookConfig = { version: 1, hooks: { [event]: [{ command: ['node', '--input-type=module', '-e', handler], timeoutMs: 2_000 }] } };
+  const config: HookConfig = { version, hooks: { [event]: [{ ...(version === 2 ? { requires: event === 'turn.stop' ? { context: true, continue: true } : { context: true } } : {}), command: ['node', '--input-type=module', '-e', handler], timeoutMs: 2_000 }] } };
   const files = adapter.emit(config);
   for (const [path, contents] of Object.entries(files)) {
     mkdirSync(dirname(join(root, path)), { recursive: true });
@@ -29,7 +30,7 @@ function run(adapter: HookAdapter, event: HookEvent, native: Record<string, unkn
   return { processResult, output: processResult.stdout ? JSON.parse(processResult.stdout) : undefined, files };
 }
 
-for (const adapter of [claude, codex, zcode]) describe(adapter.id + ' command hook adapter', () => {
+for (const adapter of [claude, codex, zcode]) describe('v' + version + ' ' + adapter.id + ' command hook adapter', () => {
   test('session context and normalized identity reach native envelope', () => {
     const receipt = run(adapter, 'session.start', { hook_event_name: 'SessionStart', session_id: 'fixture-session', source: 'resume' }, "{context:input.harness+':'+input.sessionId+':'+input.reason}");
     expect(receipt.processResult.status).toBe(0);
@@ -111,3 +112,5 @@ for (const [adapter, manifestPath] of [[claude, '.claude-plugin/plugin.json'], [
     expect(() => adapter.prepare(stage)).toThrow('custom native hooks route');
   });
 });
+
+}

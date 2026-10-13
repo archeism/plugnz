@@ -1,4 +1,4 @@
-import { HOOK_CONFIG_FILE, readHookConfig } from './hooks';
+import { HOOK_CONFIG_FILE, readHookConfig, type HookEffects, type HookEvent } from './hooks';
 import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { parse as parseToml } from 'smol-toml';
@@ -105,6 +105,8 @@ export type HookHandlerFacet =
   | 'status-message-invalid';
 
 export interface HookGroupDeclaration {
+  /** Config-v2 effects for this exact handler; native and v1 declarations omit it. */
+  requiredEffects?: HookEffects;
   event: string;
   matcher: string | null;
   matcherKind: HookMatcherKind;
@@ -175,7 +177,12 @@ export function inventoryPackageSemantics(plugin: PluginSource): PackageSemantic
     hookInventory.declarations.push({
       source: HOOK_CONFIG_FILE, manifestPath: null, form: 'portable-hooks', events,
       handlerTypes: ['command'], handlerFacets: [],
-      groups: events.map(event => ({ event, matcher: null, matcherKind: 'all', handlerTypes: ['command'], handlerFacets: [] })),
+      groups: portableHooks.version === 1
+        ? events.map(event => ({ event, matcher: null, matcherKind: 'all', handlerTypes: ['command'], handlerFacets: [] }))
+        : events.flatMap(event => (portableHooks.hooks[event as HookEvent] ?? []).map(handler => ({
+          event, matcher: null, matcherKind: 'all' as const, handlerTypes: ['command'], handlerFacets: [],
+          requiredEffects: handler.requires ?? {},
+        }))),
     });
   }
   const resources = files.filter((path) =>

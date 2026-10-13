@@ -46,8 +46,8 @@ def main():
         "console.log(JSON.stringify(input.event==='turn.stop'?{}:{context:"
         + json.dumps(nonce + ":") + "+input.event+':'+input.sessionId}));\n"
     )
-    save(source / "plugnz.hooks.json", {"version": 1, "hooks": {
-        event: [{"command": ["node", "${PLUGIN_ROOT}/context.mjs"]}]
+    save(source / "plugnz.hooks.json", {"version": 2, "hooks": {
+        event: [{"command": ["node", "${PLUGIN_ROOT}/context.mjs"], "requires": {} if event == "turn.stop" else {"context": True}}]
         for event in ["session.start", "turn.stop", "tool.before", "tool.after"]
     }})
     build = [args.bun, "bin/plugnz.mjs", "hooks", "build", str(source),
@@ -104,7 +104,7 @@ def main():
     save(config_dir / "opencode.json", config)
     env = {key: os.environ[key] for key in ["PATH", "HOME", "LANG"] if key in os.environ}
     env.update(XDG_CONFIG_HOME=str(root / "config"), XDG_DATA_HOME=str(root / "data"),
-               XDG_STATE_HOME=str(root / "state"), XDG_CACHE_HOME=str(args.runtime / "probe-cache"),
+               XDG_STATE_HOME=str(root / "state"), XDG_CACHE_HOME=str(root / "cache"),
                OPENCODE_CONFIG=str(config_dir / "opencode.json"), OPENCODE_CONFIG_DIR=str(config_dir))
     for flag in ["OPENCODE_DISABLE_AUTOUPDATE", "OPENCODE_DISABLE_MODELS_FETCH", "OPENCODE_DISABLE_DEFAULT_PLUGINS",
                  "OPENCODE_DISABLE_EXTERNAL_SKILLS", "OPENCODE_DISABLE_CLAUDE_CODE", "OPENCODE_DISABLE_LSP_DOWNLOAD",
@@ -206,7 +206,7 @@ def main():
         with socket.socket() as check_socket:
             check_socket.settimeout(1)
             native_listener_closed = check_socket.connect_ex(("127.0.0.1", port)) != 0
-        summary = {"status": status, "elapsed_seconds": round(time.monotonic() - started, 3),
+        summary = {"hook_config_version": 2, "status": status, "elapsed_seconds": round(time.monotonic() - started, 3),
                    "allocated_growth_bytes": allocated(root) - before, "model_request_count": len(requests),
                    "fake_model_usage_only": True, "sessions": sessions, "fixture_errors": fixture_errors,
                    "child_maxrss_kib": resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss,

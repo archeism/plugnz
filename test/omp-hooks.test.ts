@@ -9,16 +9,20 @@ import { hookAdapter } from '../src/hosts/omp-hooks';
 type Context = { cwd: string; sessionManager: { getSessionId(): string } };
 type Handler = (event: Record<string, unknown>, ctx: Context) => unknown | Promise<unknown>;
 
-test('OMP generated callbacks use native context effects without changing tool input or output', async () => {
+for (const version of [1, 2] as const) {
+test('v' + version + ' OMP generated callbacks use native context effects without changing tool input or output', async () => {
   const root = mkdtempSync(join(tmpdir(), 'plugnz-omp-hooks-'));
   try {
     const command = [process.execPath, '${PLUGIN_ROOT}/handler.mjs', '${PLUGIN_ROOT}/inputs.jsonl'];
-    const config: HookConfig = { version: 1, hooks: {
+    const config: HookConfig = { version, hooks: {
       'session.start': [{ command }],
       'tool.before': [{ command, tools: ['read'] }],
       'tool.after': [{ command, tools: ['read'] }],
       'turn.stop': [{ command }],
     } };
+    if (version === 2) for (const [event, handlers] of Object.entries(config.hooks)) {
+      for (const handler of handlers) handler.requires = event === 'turn.stop' ? { context: true, continue: true } : { context: true };
+    }
     writeFileSync(join(root, 'handler.mjs'), `import { readFileSync, appendFileSync } from 'node:fs';
 const input = JSON.parse(readFileSync(0, 'utf8'));
 appendFileSync(process.argv[2], JSON.stringify(input) + '\\n');
@@ -71,3 +75,5 @@ process.stdout.write(JSON.stringify(result));
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+}

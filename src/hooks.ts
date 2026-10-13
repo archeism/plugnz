@@ -9,13 +9,29 @@ export const DEFAULT_HOOK_TIMEOUT_MS = 10_000;
 export const MAX_HOOK_TIMEOUT_MS = 60_000;
 export const MAX_HOOK_OUTPUT_BYTES = 1_048_576;
 
+/** Capabilities this handler may use; absence means no effect in config v2. */
+export interface HookEffects { context?: boolean; continue?: boolean }
+export const HOOK_EFFECTS = ['context', 'continue'] as const;
+
+/** Shared comparison used by package admission and explicit compilation. */
+export function hookEffectGap(required: HookEffects | undefined, supported: HookEffects | undefined): {
+  effect: typeof HOOK_EFFECTS[number]; status: 'unsupported' | 'unverified';
+} | null {
+  for (const effect of HOOK_EFFECTS) {
+    if (required?.[effect] !== true) continue;
+    if (supported?.[effect] !== true) return { effect, status: supported?.[effect] === false ? 'unsupported' : 'unverified' };
+  }
+  return null;
+}
+
 export interface HookHandler {
   command: string[];
   tools?: string[];
   timeoutMs?: number;
+  requires?: HookEffects;
 }
 export interface HookConfig {
-  version: 1;
+  version: 1 | 2;
   hooks: Partial<Record<HookEvent, HookHandler[]>>;
 }
 export interface HookInput {
@@ -65,7 +81,8 @@ function isHookEvent(value: unknown): value is HookEvent {
 export function validateHookConfig(value: unknown): HookConfig {
   const root = record(value, 'Hook configuration');
   keys(root, ['version', 'hooks'], 'Hook configuration');
-  if (root['version'] !== 1) throw new Error('Hook configuration version must be 1');
+  const version = root['version'];
+  if (version !== 1 && version !== 2) throw new Error('Hook configuration version must be 1 or 2');
   const sourceHooks = record(root['hooks'], 'hooks');
   keys(sourceHooks, HOOK_EVENTS, 'hooks');
   const hooks: HookConfig['hooks'] = {};
@@ -76,7 +93,20 @@ export function validateHookConfig(value: unknown): HookConfig {
     hooks[event] = handlers.map((value, index) => {
       const label = event + '[' + index + ']';
       const handler = record(value, label);
-      keys(handler, ['command', 'tools', 'timeoutMs'], label);
+      keys(handler, version === 1 ? ['command', 'tools', 'timeoutMs'] : ['command', 'tools', 'timeoutMs', 'requires'], label);
+      let requires: HookEffects | undefined;
+      if (version === 2) {
+        const effects = handler['requires'] === undefined ? {} : record(handler['requires'], label + '.requires');
+        keys(effects, HOOK_EFFECTS, label + '.requires');
+        for (const effect of HOOK_EFFECTS) {
+          if (effects[effect] !== undefined && typeof effects[effect] !== 'boolean') throw new Error(label + '.requires.' + effect + ' must be boolean');
+        }
+        requires = { ...effects } as HookEffects;
+        if (requires.continue === true && event !== 'turn.stop') throw new Error(label + ': continue is only available at turn.stop');
+        if (event === 'turn.stop' && (requires.context === true) !== (requires.continue === true)) {
+          throw new Error(label + ': turn.stop requires context:true and continue:true together');
+        }
+      }
       const command = handler['command'];
       if (!Array.isArray(command) || command.length === 0) throw new Error(label + '.command must be a nonempty argv array');
       const argv = command.map((argument, i) => text(argument, label + '.command[' + i + ']', i === 0));
@@ -91,10 +121,10 @@ export function validateHookConfig(value: unknown): HookConfig {
       if (timeout !== undefined && (typeof timeout !== 'number' || !Number.isInteger(timeout) || timeout < 1 || timeout > MAX_HOOK_TIMEOUT_MS)) {
         throw new Error(label + '.timeoutMs must be an integer from 1 to ' + MAX_HOOK_TIMEOUT_MS);
       }
-      return { command: argv, ...(tools === undefined ? {} : { tools }), ...(timeout === undefined ? {} : { timeoutMs: timeout as number }) };
+      return { command: argv, ...(tools === undefined ? {} : { tools }), ...(timeout === undefined ? {} : { timeoutMs: timeout as number }), ...(requires === undefined ? {} : { requires }) };
     });
   }
-  return { version: 1, hooks };
+  return { version, hooks };
 }
 
 export function readHookConfig(pluginRoot: string): HookConfig | undefined {
@@ -194,6 +224,10 @@ export async function runHooks(configValue: unknown, inputValue: unknown, plugin
         catch { throw new Error('stdout must contain one JSON result object'); }
       }
       const result = validateHookResult(raw, input);
+      if (config.version === 2) {
+        if (result.context !== undefined && handler.requires?.context !== true) throw new Error('undeclared context effect; declare requires.context:true');
+        if (result.continue === true && handler.requires?.continue !== true) throw new Error('undeclared continuation effect; declare requires.continue:true');
+      }
       if (result.context !== undefined) contexts.push(result.context);
       if (result.continue !== undefined) requestedContinuation = requestedContinuation === true || result.continue;
     } catch (error) {

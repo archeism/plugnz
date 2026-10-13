@@ -1,3 +1,4 @@
+import { installationVerification } from '../src/installation-verification';
 import { describe, expect, test } from 'bun:test';
 import {
   LIFECYCLE_ACTIVATION_STATES,
@@ -1478,4 +1479,26 @@ describe('lifecycle report contract', () => {
       },
     ]);
   });
+});
+
+
+test('installation verification separates admission, registration, approval and delivery', () => {
+  const report = validReport(); report.command.name = 'add';
+  report.verification = installationVerification(report);
+  expect(parseLifecycleReport(report).verification!.operations[0]).toEqual({ operationId: 'op-1',
+    compatibility: 'admitted', registration: 'verified', executionApproval: 'not-checked', delivery: 'not-observed' });
+  for (const field of ['compatibility', 'registration', 'executionApproval', 'delivery', 'operationId']) {
+    const bad = JSON.parse(JSON.stringify(report));
+    bad.verification.operations[0][field] = 'fabricated';
+    expect(() => parseLifecycleReport(bad)).toThrow('verification');
+  }
+  const omitted = JSON.parse(JSON.stringify(report)); omitted.verification.operations = [];
+  expect(() => parseLifecycleReport(omitted)).toThrow('verification');
+  const duplicate = JSON.parse(JSON.stringify(report)); duplicate.verification.operations.push(duplicate.verification.operations[0]);
+  expect(() => parseLifecycleReport(duplicate)).toThrow('verification');
+  report.command.dryRun = true; report.outcomes[0]!.changed = false;
+  report.summary.changed = false; report.summary.mutationStarted = false;
+  expect(() => parseLifecycleReport(report)).toThrow('verification');
+  report.verification = installationVerification(report);
+  expect(parseLifecycleReport(report).verification!.operations[0]!.registration).toBe('not-checked');
 });

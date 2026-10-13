@@ -17,13 +17,14 @@ function run(args) {
   return JSON.parse(result.stdout);
 }
 try {
+ for (const version of [1, 2]) {
   const inventory = run([cli, 'hooks', 'targets']);
   assert.equal(inventory.version, 1);
   assert.equal(inventory.targets.length, 6);
-  const source = join(root, 'source');
-  const out = join(root, 'out');
+  const source = join(root, 'source-' + version);
+  const out = join(root, 'out-' + version);
   mkdirSync(source);
-  const config = { version: 1, hooks: { 'session.start': [{ command: [process.execPath, '$' + '{PLUGIN_ROOT}/handler.mjs'] }] } };
+  const config = { version, hooks: { 'session.start': [{ ...(version === 2 ? { requires: { context: true } } : {}), command: [process.execPath, '$' + '{PLUGIN_ROOT}/handler.mjs'] }] } };
   writeFileSync(join(source, 'plugnz.hooks.json'), JSON.stringify(config));
   writeFileSync(join(source, 'plugin.json'), JSON.stringify({ name: 'hook-node-smoke', version: '1.0.0' }));
   writeFileSync(join(source, 'handler.mjs'), [
@@ -43,7 +44,8 @@ try {
   const code = 'import {runHooks} from ' + JSON.stringify(join(target, 'hook-runtime.mjs')) + ';' +
     'console.log(JSON.stringify(await runHooks(' + JSON.stringify(config) + ',' + JSON.stringify(input) + ',' + JSON.stringify(target) + ')));';
   assert.deepEqual(run(['--input-type=module', '-e', code]), { context: 'standalone:node-smoke' });
-  console.log(JSON.stringify({ node: process.version, targets: result.targets.map(target => target.id), standaloneRuntime: true, bunOnPath: false }));
+  console.log(JSON.stringify({ node: process.version, hookConfigVersion: version, targets: result.targets.map(target => target.id), standaloneRuntime: true, bunOnPath: false }));
+ }
 } finally {
   rmSync(root, { recursive: true, force: true });
 }

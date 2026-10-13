@@ -374,3 +374,80 @@ for (const position of ['first', 'middle'] as const) {
     expect(existsSync(installed)).toBe(false);
   }, 30_000);
 }
+
+function v2(event: string, requires: Record<string, boolean> = {}): void {
+  writeFileSync(join(source, 'plugnz.hooks.json'), JSON.stringify({ version: 2, hooks: {
+    [event]: [{ command: [process.execPath, '${PLUGIN_ROOT}/context.mjs'], requires }],
+  } }));
+}
+
+for (const id of ['claude-code', 'codex', 'omp', 'pi', 'opencode', 'zcode-cli']) {
+  test(id + ' v2 startup admission and install report keep runtime proof separate', () => {
+    const native = id === 'zcode-cli' ? zcodeOnPath() : target(id);
+    v2('session.start', { context: true });
+    const before = existsSync(native) ? fingerprintTree(native) : null;
+    const dry = success(['install', '--target', id, '--dry-run']);
+    expect(dry.verification.schemaVersion).toBe(1);
+    expect(dry.verification.operations[0]).toEqual({ operationId: dry.outcomes[0].operationId,
+      compatibility: 'admitted', registration: 'not-checked', executionApproval: 'not-checked', delivery: 'not-observed' });
+    expect(existsSync(native) ? fingerprintTree(native) : null).toBe(before);
+    const applied = success(['install', '--target', id]);
+    expect(applied.verification.operations[0]).toEqual({ operationId: applied.outcomes[0].operationId,
+      compatibility: 'admitted', registration: 'verified', executionApproval: 'not-checked', delivery: 'not-observed' });
+    expect(readFileSync(join(installedRoot(native), 'context.mjs'), 'utf8')).toContain('first-context');
+  }, 30_000);
+}
+
+for (const verb of ['install', 'update']) {
+  test(verb + ' refuses required OpenCode stop feedback without changing prior activation', () => {
+    const native = target('opencode');
+    success(['install', '--target', 'opencode']);
+    const previous = fingerprintTree(native), ledger = readFileSync(join(home, 'state.json'), 'utf8');
+    v2('turn.stop', { context: true, continue: true });
+    const result = cli([verb, ...(verb === 'update' ? ['automatic-hooks'] : []), '--target', 'opencode']);
+    expect(result.status).toBe(1);
+    const report = parseLifecycleReport(JSON.parse(result.stdout));
+    expect(report.summary.reason?.code).toBe('capability.unsupported');
+    expect(report.summary.reason?.diagnostic).toContain('context');
+    expect(report.summary.mutationStarted).toBe(false);
+    expect(fingerprintTree(native)).toBe(previous);
+    expect(readFileSync(join(home, 'state.json'), 'utf8')).toBe(ledger);
+  });
+}
+
+test('a required effect refusal remains visible beside a supported native route', () => {
+  const oc = target('opencode'), codex = target('codex');
+  const before = fingerprintTree(oc);
+  v2('turn.stop', { context: true, continue: true });
+  const result = cli(['install', '--target', 'codex', '--target', 'opencode']);
+  expect(result.status).toBe(1);
+  const report = parseLifecycleReport(JSON.parse(result.stdout));
+  expect(report.summary.changed).toBe(true);
+  expect(report.outcomes.find(row => row.scope.target.kind === 'codex')!.result).toBe('succeeded');
+  const refusal = report.outcomes.find(row => row.scope.target.kind === 'opencode')!;
+  expect(refusal.reason!.code).toBe('capability.unsupported');
+  expect(report.verification!.operations.find(row => row.operationId === refusal.operationId)!.compatibility).toBe('unsupported');
+  expect(fingerprintTree(oc)).toBe(before);
+  expect(existsSync(join(installedRoot(codex), 'hook-runtime.mjs'))).toBe(true);
+});
+
+test('a v2 unknown runtime is unverified, not assumed compatible with the adapter baseline', () => {
+  const native = target('pi', '9.9.9');
+  const before = fingerprintTree(native);
+  v2('session.start', { context: true });
+  const result = cli(['install', '--target', 'pi', '--dry-run']);
+  expect(result.status).toBe(1);
+  const report = parseLifecycleReport(JSON.parse(result.stdout));
+  expect(report.verification!.operations[0]!.compatibility).toBe('unverified');
+  expect(report.verification!.operations[0]!.registration).toBe('not-checked');
+  expect(fingerprintTree(native)).toBe(before);
+});
+
+test('v2 checks-only OpenCode stop remains installable and installation never invokes the handler', () => {
+  target('opencode');
+  v2('turn.stop');
+  const marker = join(root, 'unexpected-execution');
+  writeFileSync(join(source, 'context.mjs'), 'import {writeFileSync} from "node:fs"; writeFileSync(' + JSON.stringify(marker) + ', "bad");');
+  success(['install', '--target', 'opencode']);
+  expect(existsSync(marker)).toBe(false);
+});

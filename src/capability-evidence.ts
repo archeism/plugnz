@@ -14,12 +14,15 @@ import {
 } from './semantic-inventory';
 
 import { CryptoHasher } from './runtime';
+import { HOOK_EFFECTS, hookEffectGap, type HookEffects } from './hooks';
 
 
 export type CapabilityStatus = 'supported' | 'unsupported' | 'unverified';
 export type CapabilityRoute = 'managed' | 'native';
 
 export interface HookCapabilityEvidence {
+  /** Per-event effect evidence. Missing entries are unverified, never false support. */
+  supportedEffects?: Readonly<Record<string, Readonly<HookEffects>>>;
   /** Native manifest selection order; generic inventory does not assign this precedence. */
   manifestPrecedence: readonly string[];
   supportedForms: readonly HookDeclarationForm[];
@@ -405,6 +408,8 @@ function hookDeclarationProblem(
     }
     const unsupportedFacet = group.handlerFacets.find((facet) => policy.unsupportedHandlerFacets.includes(facet));
     if (unsupportedFacet !== undefined) return unsupportedHookProblem(hookHandlerFacetProblem(unsupportedFacet));
+    const gap = hookEffectGap(group.requiredEffects, policy.supportedEffects?.[group.event]);
+    if (gap !== null) return { status: gap.status, diagnostic: `event '${group.event}' requires ${gap.effect}, but that effect is ${gap.status}` };
   }
   return null;
 }
@@ -436,7 +441,17 @@ function normalizeHookPolicy(input: HookCapabilityEvidence | null): HookCapabili
   const matcherlessEvents = uniqueStrings(input.matcherlessEvents, 'matcherless hook event').sort();
   const supportedMatcherKinds = uniqueStrings(input.supportedMatcherKinds, 'hook matcher kind').sort() as HookMatcherKind[];
   const unsupportedHandlerFacets = uniqueStrings(input.unsupportedHandlerFacets, 'unsupported hook handler facet').sort() as HookHandlerFacet[];
+  let supportedEffects: Readonly<Record<string, Readonly<HookEffects>>> | undefined;
+  if (input.supportedEffects !== undefined) {
+    supportedEffects = Object.freeze(Object.fromEntries(Object.entries(input.supportedEffects).sort(([a], [b]) => a.localeCompare(b)).map(([event, effects]) => {
+      if (!supportedEvents.includes(event) || effects === null || typeof effects !== 'object' || Array.isArray(effects)
+        || Object.keys(effects).some(key => !(HOOK_EFFECTS as readonly string[]).includes(key))
+        || Object.values(effects).some(value => typeof value !== 'boolean')) throw new Error('Invalid hook effect evidence for ' + event);
+      return [event, Object.freeze(Object.fromEntries(HOOK_EFFECTS.filter(effect => effects[effect] !== undefined).map(effect => [effect, effects[effect]])))];
+    })));
+  }
   return Object.freeze({
+    ...(supportedEffects === undefined ? {} : { supportedEffects }),
     manifestPrecedence: Object.freeze(manifestPrecedence),
     supportedForms: Object.freeze(supportedForms),
     supportedEvents: Object.freeze(supportedEvents),

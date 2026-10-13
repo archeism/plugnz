@@ -14,11 +14,11 @@ const stage = resolve(stageArgument);
 mkdirSync(stage);
 const command = [process.execPath, '${PLUGIN_ROOT}/handler.mjs', '${PLUGIN_ROOT}/handler-receipts.jsonl'];
 const tools = mode === 'structured' ? ['read', 'structured_probe'] : ['read'];
-const config: HookConfig = { version: 1, hooks: mode === 'baseline' ? {} : {
-  'session.start': [{ command }],
-  'tool.before': [{ command, tools }],
-  'tool.after': [{ command, tools }],
-  'turn.stop': [{ command }],
+const config: HookConfig = { version: 2, hooks: mode === 'baseline' ? {} : {
+  'session.start': [{ command, requires: { context: true } }],
+  'tool.before': [{ command, tools, requires: { context: true } }],
+  'tool.after': [{ command, tools, requires: { context: true } }],
+  'turn.stop': [{ command, requires: { context: true, continue: true } }],
 } };
 writeFileSync(join(stage, 'handler.mjs'), `import { readFileSync, appendFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';

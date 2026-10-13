@@ -1,4 +1,5 @@
 import type { SourceSnapshotReference } from './source-reference';
+import { installationVerification, type InstallationVerification } from './installation-verification';
 import {
   createDeploymentScopeIdentity,
   validateSourceBinding,
@@ -155,6 +156,8 @@ export interface LifecycleReportSummary {
 }
 
 export interface LifecycleReport {
+  /** Optional read-only installation evidence; never native execution consent. */
+  verification?: InstallationVerification;
   schemaVersion: typeof LIFECYCLE_REPORT_SCHEMA_VERSION;
   command: {
     name: LifecycleCommandName;
@@ -210,7 +213,7 @@ export function parseLifecycleReport(value: unknown): LifecycleReport {
   if (!isObject(value)) {
     throw invalid('lifecycle report must be an object');
   }
-  exactFields(value, ['schemaVersion', 'command', 'plan', 'outcomes', 'summary', 'recovery', 'adoptions'], 'lifecycle report');
+  exactFields(value, ['schemaVersion', 'command', 'plan', 'outcomes', 'summary', 'recovery', 'adoptions', 'verification'], 'lifecycle report');
   if (value['schemaVersion'] !== LIFECYCLE_REPORT_SCHEMA_VERSION) {
     throw invalid('lifecycle report schemaVersion must be 1');
   }
@@ -322,6 +325,15 @@ export function parseLifecycleReport(value: unknown): LifecycleReport {
     if (modern !== undefined) assertAdoptionRecoveryStatus(receipt, modern);
   }
   assertSummary(summary, outcomes, command['dryRun'] as boolean, receipts, adoptions);
+  if (value['verification'] !== undefined) {
+    if (commandName !== 'add' && commandName !== 'update') throw invalid('installation verification only applies to add/update');
+    // Exact comparison rejects inflated approval/delivery claims, duplicate or
+    // omitted rows, and evidence inconsistent with this invocation's outcomes.
+    const expected = installationVerification(value as unknown as LifecycleReport);
+    if (canonicalAdoptionJson(value['verification']) !== canonicalAdoptionJson(expected)) {
+      throw contradiction('installation verification contradicts its outcomes or claims unobserved approval/delivery');
+    }
+  }
 
   return value as unknown as LifecycleReport;
 }

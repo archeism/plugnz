@@ -4,7 +4,7 @@ import { HOOK_EVENTS, type HookAdapter } from './hooks';
 import { PACKAGE_SEMANTICS, type CapabilityOperation, type PackageSemantic } from './semantic-inventory';
 
 export function portableHookProfile(
-  adapter: Pick<HookAdapter, 'id' | 'baselineVersion'>,
+  adapter: Pick<HookAdapter, 'id' | 'baselineVersion' | 'capabilities'>,
   route: CapabilityRoute,
   operations: readonly CapabilityOperation[],
 ): CapabilityEvidenceProfile {
@@ -25,6 +25,7 @@ export function portableHookProfile(
       semantic, supported.has(semantic) ? 'supported' : 'unsupported',
     ])) as Record<PackageSemantic, CapabilityStatus>,
     hookPolicy: {
+      supportedEffects: Object.fromEntries(HOOK_EVENTS.map(event => [event, { context: adapter.capabilities[event].context, continue: adapter.capabilities[event].continue }])),
       manifestPrecedence: ['plugin.json', '.plugin/plugin.json', '.claude-plugin/plugin.json', '.codex-plugin/plugin.json', '.zcode-plugin/plugin.json'],
       supportedForms: ['portable-hooks'],
       supportedEvents: HOOK_EVENTS,

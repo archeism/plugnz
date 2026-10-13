@@ -21,6 +21,7 @@ export function runHookCli(args: string[]): number {
       if (args.length !== 1) throw new Error('targets takes no arguments');
       console.log(JSON.stringify({
         version: 1,
+        configVersions: [1, 2],
         targets: hookAdapters.map(({ id, baselineVersion, capabilities }) => ({ id, baselineVersion, capabilities })),
       }, null, 2));
       return 0;

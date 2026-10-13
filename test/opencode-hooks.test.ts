@@ -8,14 +8,15 @@ import type { HookConfig, HookEvent } from '../src/hooks';
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 
+for (const version of [1, 2] as const) {
 async function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'plugnz-opencode-hooks-'));
   roots.push(root);
   const cwd = join(root, 'workspace');
   mkdirSync(cwd);
-  const config: HookConfig = { version: 1, hooks: {} };
+  const config: HookConfig = { version, hooks: {} };
   for (const event of ['session.start', 'turn.stop', 'tool.before', 'tool.after'] as HookEvent[]) {
-    config.hooks[event] = [{ command: [process.execPath, '${PLUGIN_ROOT}/handler.mjs'] }];
+    config.hooks[event] = [{ command: [process.execPath, '${PLUGIN_ROOT}/handler.mjs'], ...(version === 2 ? { requires: event === 'turn.stop' ? {} : { context: true } } : {}) }];
   }
   writeFileSync(join(root, 'handler.mjs'),
     "import { appendFileSync } from 'node:fs';\n" +
@@ -32,7 +33,7 @@ async function fixture() {
   return { root, cwd, hooks, events };
 }
 
-test('OpenCode start is awaited once per session, including concurrent requests and a second warm session', async () => {
+test('v' + version + ' OpenCode start is awaited once per session, including concurrent requests and a second warm session', async () => {
   const { hooks, events, cwd } = await fixture();
   const first = { system: ['original'] }, concurrent = { system: ['original'] };
   await Promise.all([
@@ -48,7 +49,7 @@ test('OpenCode start is awaited once per session, including concurrent requests 
   expect(events().every(event => event.cwd === cwd)).toBe(true);
 });
 
-test('OpenCode appends pre/post feedback without changing arguments, original output, or metadata', async () => {
+test('v' + version + ' OpenCode appends pre/post feedback without changing arguments, original output, or metadata', async () => {
   const { hooks, events } = await fixture();
   const args = { filePath: '/project/file.txt' };
   await hooks['tool.execute.before']({ tool: 'read', sessionID: 'one', callID: 'call1' }, { args });
@@ -63,7 +64,7 @@ test('OpenCode appends pre/post feedback without changing arguments, original ou
   expect(events()[1].tool.output).toBe('original file contents');
 });
 
-test('OpenCode preserves MCP structured content while appending feedback to its content array', async () => {
+test('v' + version + ' OpenCode preserves MCP structured content while appending feedback to its content array', async () => {
   const { hooks } = await fixture();
   const structuredContent = { answer: 42 }, content = [{ type: 'text', text: 'original' }];
   const result = { content, structuredContent, isError: false };
@@ -73,7 +74,7 @@ test('OpenCode preserves MCP structured content while appending feedback to its 
   expect(result.isError).toBe(false);
 });
 
-test('OpenCode pre feedback survives a failed tool and stays in the correct session', async () => {
+test('v' + version + ' OpenCode pre feedback survives a failed tool and stays in the correct session', async () => {
   const { hooks } = await fixture();
   await hooks['tool.execute.before']({ tool: 'read', sessionID: 'one', callID: 'failed' }, { args: {} });
   const unrelated = { system: [] };
@@ -87,7 +88,7 @@ test('OpenCode pre feedback survives a failed tool and stays in the correct sess
   expect(later.system).toEqual(['session.start:one']);
 });
 
-test('OpenCode stop runs a check once per completed activity and exposes its missing continuation capability', async () => {
+test('v' + version + ' OpenCode stop runs a check once per completed activity and exposes its missing continuation capability', async () => {
   const { hooks, events } = await fixture();
   await hooks['chat.message']({ sessionID: 'one' });
   await hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'one' } } });
@@ -96,3 +97,5 @@ test('OpenCode stop runs a check once per completed activity and exposes its mis
   expect(hookAdapter.capabilities['turn.stop'].context).toBe(false);
   expect(hookAdapter.capabilities['turn.stop'].continue).toBe(false);
 });
+
+}

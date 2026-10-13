@@ -2,7 +2,8 @@ import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { HOOK_CONFIG_FILE, readHookConfig, validateHookConfig, type HookAdapter, type HookConfig } from './hooks';
+import { HOOK_CONFIG_FILE, HOOK_EVENTS, hookEffectGap, readHookConfig, validateHookConfig, type HookAdapter, type HookConfig } from './hooks';
+import { CompatibilityError } from './compatibility';
 import { hookAdapter as claudeCode } from './hosts/claude-code-hooks';
 import { hookAdapter as codex } from './hosts/codex-hooks';
 import { hookAdapter as omp } from './hosts/omp-hooks';
@@ -76,6 +77,13 @@ function artifactPath(root: string, path: string): string {
  */
 export function emitHooksToDirectory(adapter: HookAdapter, configValue: HookConfig, stagingRoot: string): string[] {
   const config = validateHookConfig(configValue);
+  for (const event of HOOK_EVENTS) {
+    for (const [index, handler] of (config.hooks[event] ?? []).entries()) {
+      const gap = hookEffectGap(handler.requires, adapter.capabilities[event]);
+      if (gap !== null) throw new CompatibilityError(adapter.id, 'hooks', gap.status, 'docs/hooks.md',
+        `${adapter.id}: ${event}[${index}] requires ${gap.effect}, but that effect is ${gap.status}`);
+    }
+  }
   const root = resolve(stagingRoot);
   if (!existsSync(root) || lstatSync(root).isSymbolicLink() || !lstatSync(root).isDirectory()) throw new Error('Hook staging root must be a directory');
   adapter.prepare?.(root);

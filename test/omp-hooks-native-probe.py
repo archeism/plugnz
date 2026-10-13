@@ -130,7 +130,7 @@ def run_case(args, mode):
     task, raw, structured = ("TASK_" + uuid.uuid4().hex, "READ_" + uuid.uuid4().hex, "STRUCTURED_" + uuid.uuid4().hex)
     (work / "requested.txt").write_text(raw + "\n")
     save(case / "expectations.json", {"harness":args.harness,"mode":mode,"task":task,"raw":raw,"structured":structured})
-    setup = subprocess.run(["/root/.bun/bin/bun",str(REPO / "test/omp-hooks-native-emit.ts"), args.harness, str(case / "package"), mode],
+    setup = subprocess.run([shutil.which("bun") or "bun",str(REPO / "test/omp-hooks-native-emit.ts"), args.harness, str(case / "package"), mode],
         cwd=REPO, capture_output=True, text=True, timeout=60)
     (case / "compiler.stdout").write_text(setup.stdout)
     (case / "compiler.stderr").write_text(setup.stderr)
@@ -280,7 +280,7 @@ def main():
     for name in ["test/omp-hooks-native-probe.py","test/omp-hooks-native-emit.ts","src/hosts/omp-hooks.ts","src/hosts/pi-hooks.ts","src/hooks.ts","src/hook-build.ts"]:
         dest = source / name; dest.parent.mkdir(parents=True,exist_ok=True); shutil.copyfile(REPO / name,dest)
     modes = ["structured"] if args.structured else ["baseline","context"]
-    save(args.evidence / "plan.json", {"harness":args.harness,"modes":modes,"bounds":{"seconds_per_case":SECONDS,"requests_per_case":MAX_REQUESTS,
+    save(args.evidence / "plan.json", {"harness":args.harness,"hook_config_version":2,"modes":modes,"bounds":{"seconds_per_case":SECONDS,"requests_per_case":MAX_REQUESTS,
         "request_body_bytes":MAX_BODY,"raw_lane_allocated_bytes":RAW_LIMIT},"permission_overrides":[],"native_tool":"read",
         "boundary":"Real generated adapter, real command hook process, native CLI and tools; synthetic loopback model only."})
     results = []
