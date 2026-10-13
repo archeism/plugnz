@@ -1,0 +1,656 @@
+{
+  "schemaVersion": 1,
+  "tested_production_commit": "0329618719421032a47a40970cf9caf3263491cc",
+  "fixture_commit": "a74753af4622d1e40503cfea1ef6bd84d19f590a",
+  "production_files_identical_to_tested_commit": true,
+  "gate": {
+    "commit": "0329618719421032a47a40970cf9caf3263491cc",
+    "archive_sha256": "7fe81a23c287bd3d3843616ddcbb639c3d8322fa19e64191c5ad13aaf1edb80f",
+    "status": "passed",
+    "uid": 65534,
+    "capabilities": "none",
+    "runs": [
+      {
+        "check": "typecheck",
+        "exit": 0,
+        "seconds": 0.519,
+        "log_sha256": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92",
+        "tail": [
+          "$ tsc --noEmit"
+        ]
+      },
+      {
+        "check": "tests",
+        "exit": 0,
+        "seconds": 253.748,
+        "log_sha256": "bf108d9a527172955508bab3bf1923842ce51330768de7c38f3ab5291d2d6e85",
+        "tail": [
+          "(skip) official ZCode CLI default detection > without an override, the desktop-bundled CLI under an isolated home is detected",
+          "(skip) official ZCode CLI default detection > an isolated home never falls through to the system-wide desktop bundle",
+          "(skip) current Hermes loader registers ordinary discovery and queues a prompt command into CLI input",
+          "(skip) public CLI admits selected official launchers without source or venv writes",
+          "(skip) real Grok loader reads a local bundle from an isolated home and empty cwd",
+          "(skip) codex lifecycle > keeps the new active slot when cleanup of an older owned version fails",
+          "",
+          " 1142 pass",
+          " 6 skip",
+          " 0 fail",
+          " 7893 expect() calls",
+          "Ran 1148 tests across 104 files. [253.69s]"
+        ]
+      },
+      {
+        "check": "build",
+        "exit": 0,
+        "seconds": 0.115,
+        "log_sha256": "d18f3cc13d3d196457ef0760c8611b0b1d284ac37628e9886d2a9863746611df",
+        "tail": [
+          "$ bun scripts/build.mjs",
+          "dist/plugnz.mjs 1554 KiB"
+        ]
+      },
+      {
+        "check": "node-hooks",
+        "exit": 0,
+        "seconds": 0.566,
+        "log_sha256": "56c5e2e1118a7ee387a2eaefb209d93d8023d859b337b197ba40df80030e0739",
+        "tail": [
+          "{\"node\":\"v22.23.1\",\"hookConfigVersion\":1,\"targets\":[\"claude-code\",\"codex\",\"omp\",\"pi\",\"opencode\",\"zcode-cli\"],\"standaloneRuntime\":true,\"bunOnPath\":false}",
+          "{\"node\":\"v22.23.1\",\"hookConfigVersion\":2,\"targets\":[\"claude-code\",\"codex\",\"omp\",\"pi\",\"opencode\",\"zcode-cli\"],\"standaloneRuntime\":true,\"bunOnPath\":false}"
+        ]
+      }
+    ],
+    "bundles": {
+      "plugnz.mjs": "ad6eab93ef10b51152e836bf9ad205f9471ee9ae212d19486c621dfad6b4ffe9",
+      "hook-runtime.mjs": "53ae192f2801752cfc02b12a0c2cb3dc8ad951183cd7fbe6a66fa3997d23ce11"
+    },
+    "workspace_removed": true
+  },
+  "native": [
+    {
+      "harness": "pi",
+      "structured": false,
+      "commit": "541836fcfaca32675489324954b73d6fbca3761d",
+      "exit_code": 0,
+      "results": [
+        {
+          "run": {
+            "harness": "pi",
+            "mode": "baseline",
+            "status": "completed",
+            "pid": 21,
+            "exit_code": 0,
+            "native_pid_absent": true,
+            "process_group_absent": true,
+            "listener_closed": true,
+            "server_thread_stopped": true,
+            "actual_requests": 2,
+            "fixture_errors": []
+          },
+          "verification": {
+            "assertions": {
+              "native_completed": true,
+              "actual_request_count": true,
+              "all_requests_belong_to_task": true,
+              "builtin_read_file_accessed": true,
+              "native_original_read_result": true,
+              "handler_pids_absent": true,
+              "cleanup": true,
+              "original_tool_result_preserved": true,
+              "baseline_has_no_hook_invocations": true
+            },
+            "pass": true,
+            "actual_requests": 2,
+            "hook_invocations": 0,
+            "observed_roles": []
+          }
+        },
+        {
+          "run": {
+            "harness": "pi",
+            "mode": "context",
+            "status": "completed",
+            "pid": 55,
+            "exit_code": 0,
+            "native_pid_absent": true,
+            "process_group_absent": true,
+            "listener_closed": true,
+            "server_thread_stopped": true,
+            "actual_requests": 3,
+            "fixture_errors": []
+          },
+          "verification": {
+            "assertions": {
+              "native_completed": true,
+              "actual_request_count": true,
+              "all_requests_belong_to_task": true,
+              "builtin_read_file_accessed": true,
+              "native_original_read_result": true,
+              "handler_pids_absent": true,
+              "cleanup": true,
+              "original_tool_result_preserved": true,
+              "all_handlers_use_same_native_session": true,
+              "handler_event_counts": true,
+              "stop_active_transition": true,
+              "one_continuation_decision": true,
+              "receiver_nonce_SESSION_START_668e66f8-5dc6-407e-83f4-e6eee63239da": true,
+              "user_role_SESSION_START_668e66f8-5dc6-407e-83f4-e6eee63239da": true,
+              "nonce_not_present_earlier_SESSION_START_668e66f8-5dc6-407e-83f4-e6eee63239da": true,
+              "receiver_nonce_TOOL_BEFORE_a5e939de-933d-44ea-82b8-daeb764486a9": true,
+              "user_role_TOOL_BEFORE_a5e939de-933d-44ea-82b8-daeb764486a9": true,
+              "nonce_not_present_earlier_TOOL_BEFORE_a5e939de-933d-44ea-82b8-daeb764486a9": true,
+              "receiver_nonce_TOOL_AFTER_4bd2bea9-b1e5-4d4c-bf98-de6ed977dc97": true,
+              "tool_role_TOOL_AFTER_4bd2bea9-b1e5-4d4c-bf98-de6ed977dc97": true,
+              "nonce_not_present_earlier_TOOL_AFTER_4bd2bea9-b1e5-4d4c-bf98-de6ed977dc97": true,
+              "receiver_nonce_TURN_STOP_740adfa0-4387-4c72-8313-eba2b75165c9": true,
+              "user_role_TURN_STOP_740adfa0-4387-4c72-8313-eba2b75165c9": true,
+              "nonce_not_present_earlier_TURN_STOP_740adfa0-4387-4c72-8313-eba2b75165c9": true
+            },
+            "pass": true,
+            "actual_requests": 3,
+            "hook_invocations": 5,
+            "observed_roles": [
+              {
+                "event": "session.start",
+                "tool": null,
+                "nonce": "SESSION_START_668e66f8-5dc6-407e-83f4-e6eee63239da",
+                "request_index": 0,
+                "roles": [
+                  "user"
+                ]
+              },
+              {
+                "event": "tool.before",
+                "tool": "read",
+                "nonce": "TOOL_BEFORE_a5e939de-933d-44ea-82b8-daeb764486a9",
+                "request_index": 1,
+                "roles": [
+                  "user"
+                ]
+              },
+              {
+                "event": "tool.after",
+                "tool": "read",
+                "nonce": "TOOL_AFTER_4bd2bea9-b1e5-4d4c-bf98-de6ed977dc97",
+                "request_index": 1,
+                "roles": [
+                  "tool"
+                ]
+              },
+              {
+                "event": "turn.stop",
+                "tool": null,
+                "nonce": "TURN_STOP_740adfa0-4387-4c72-8313-eba2b75165c9",
+                "request_index": 2,
+                "roles": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "container_removed": true
+    },
+    {
+      "harness": "pi",
+      "structured": true,
+      "commit": "541836fcfaca32675489324954b73d6fbca3761d",
+      "exit_code": 0,
+      "results": [
+        {
+          "run": {
+            "harness": "pi",
+            "mode": "structured",
+            "status": "completed",
+            "pid": 21,
+            "exit_code": 0,
+            "native_pid_absent": true,
+            "process_group_absent": true,
+            "listener_closed": true,
+            "server_thread_stopped": true,
+            "actual_requests": 3,
+            "fixture_errors": []
+          },
+          "verification": {
+            "assertions": {
+              "native_completed": true,
+              "actual_request_count": true,
+              "all_requests_belong_to_task": true,
+              "builtin_read_file_accessed": true,
+              "native_original_read_result": true,
+              "handler_pids_absent": true,
+              "cleanup": true,
+              "original_tool_result_preserved": true,
+              "all_handlers_use_same_native_session": true,
+              "handler_event_counts": true,
+              "stop_active_transition": true,
+              "one_continuation_decision": true,
+              "receiver_nonce_SESSION_START_4337af9f-de31-472a-a9ac-15d47d84a601": true,
+              "user_role_SESSION_START_4337af9f-de31-472a-a9ac-15d47d84a601": true,
+              "nonce_not_present_earlier_SESSION_START_4337af9f-de31-472a-a9ac-15d47d84a601": true,
+              "receiver_nonce_TOOL_BEFORE_682cff7d-31b6-442f-abe5-28ea55906374": true,
+              "user_role_TOOL_BEFORE_682cff7d-31b6-442f-abe5-28ea55906374": true,
+              "nonce_not_present_earlier_TOOL_BEFORE_682cff7d-31b6-442f-abe5-28ea55906374": true,
+              "receiver_nonce_TOOL_BEFORE_3b6809ef-fe4c-45a3-b459-a99cbfaee345": true,
+              "user_role_TOOL_BEFORE_3b6809ef-fe4c-45a3-b459-a99cbfaee345": true,
+              "nonce_not_present_earlier_TOOL_BEFORE_3b6809ef-fe4c-45a3-b459-a99cbfaee345": true,
+              "receiver_nonce_TOOL_AFTER_0a785d7a-f8ba-442a-805a-889ad32bce79": true,
+              "tool_role_TOOL_AFTER_0a785d7a-f8ba-442a-805a-889ad32bce79": true,
+              "nonce_not_present_earlier_TOOL_AFTER_0a785d7a-f8ba-442a-805a-889ad32bce79": true,
+              "receiver_nonce_TOOL_AFTER_0ffbf8b9-2048-47d6-b42b-ac8718586d18": true,
+              "tool_role_TOOL_AFTER_0ffbf8b9-2048-47d6-b42b-ac8718586d18": true,
+              "nonce_not_present_earlier_TOOL_AFTER_0ffbf8b9-2048-47d6-b42b-ac8718586d18": true,
+              "receiver_nonce_TURN_STOP_ec337c4f-baa7-4e75-a87b-8490cabef2d8": true,
+              "user_role_TURN_STOP_ec337c4f-baa7-4e75-a87b-8490cabef2d8": true,
+              "nonce_not_present_earlier_TURN_STOP_ec337c4f-baa7-4e75-a87b-8490cabef2d8": true,
+              "native_structured_content_preserved": true,
+              "native_details_preserved": true
+            },
+            "pass": true,
+            "actual_requests": 3,
+            "hook_invocations": 7,
+            "observed_roles": [
+              {
+                "event": "session.start",
+                "tool": null,
+                "nonce": "SESSION_START_4337af9f-de31-472a-a9ac-15d47d84a601",
+                "request_index": 0,
+                "roles": [
+                  "user"
+                ]
+              },
+              {
+                "event": "tool.before",
+                "tool": "read",
+                "nonce": "TOOL_BEFORE_682cff7d-31b6-442f-abe5-28ea55906374",
+                "request_index": 1,
+                "roles": [
+                  "user"
+                ]
+              },
+              {
+                "event": "tool.before",
+                "tool": "structured_probe",
+                "nonce": "TOOL_BEFORE_3b6809ef-fe4c-45a3-b459-a99cbfaee345",
+                "request_index": 1,
+                "roles": [
+                  "user"
+                ]
+              },
+              {
+                "event": "tool.after",
+                "tool": "structured_probe",
+                "nonce": "TOOL_AFTER_0a785d7a-f8ba-442a-805a-889ad32bce79",
+                "request_index": 1,
+                "roles": [
+                  "tool"
+                ]
+              },
+              {
+                "event": "tool.after",
+                "tool": "read",
+                "nonce": "TOOL_AFTER_0ffbf8b9-2048-47d6-b42b-ac8718586d18",
+                "request_index": 1,
+                "roles": [
+                  "tool"
+                ]
+              },
+              {
+                "event": "turn.stop",
+                "tool": null,
+                "nonce": "TURN_STOP_ec337c4f-baa7-4e75-a87b-8490cabef2d8",
+                "request_index": 2,
+                "roles": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "container_removed": true
+    },
+    {
+      "harness": "omp",
+      "structured": false,
+      "commit": "541836fcfaca32675489324954b73d6fbca3761d",
+      "exit_code": 0,
+      "results": [
+        {
+          "run": {
+            "harness": "omp",
+            "mode": "baseline",
+            "status": "completed",
+            "pid": 21,
+            "exit_code": 0,
+            "native_pid_absent": true,
+            "process_group_absent": true,
+            "listener_closed": true,
+            "server_thread_stopped": true,
+            "actual_requests": 2,
+            "fixture_errors": []
+          },
+          "verification": {
+            "assertions": {
+              "native_completed": true,
+              "actual_request_count": true,
+              "all_requests_belong_to_task": true,
+              "builtin_read_file_accessed": true,
+              "native_original_read_result": true,
+              "handler_pids_absent": true,
+              "cleanup": true,
+              "original_tool_result_preserved": true,
+              "baseline_has_no_hook_invocations": true
+            },
+            "pass": true,
+            "actual_requests": 2,
+            "hook_invocations": 0,
+            "observed_roles": []
+          }
+        },
+        {
+          "run": {
+            "harness": "omp",
+            "mode": "context",
+            "status": "completed",
+            "pid": 74,
+            "exit_code": 0,
+            "native_pid_absent": true,
+            "process_group_absent": true,
+            "listener_closed": true,
+            "server_thread_stopped": true,
+            "actual_requests": 3,
+            "fixture_errors": []
+          },
+          "verification": {
+            "assertions": {
+              "native_completed": true,
+              "actual_request_count": true,
+              "all_requests_belong_to_task": true,
+              "builtin_read_file_accessed": true,
+              "native_original_read_result": true,
+              "handler_pids_absent": true,
+              "cleanup": true,
+              "original_tool_result_preserved": true,
+              "all_handlers_use_same_native_session": true,
+              "handler_event_counts": true,
+              "stop_active_transition": true,
+              "one_continuation_decision": true,
+              "receiver_nonce_SESSION_START_5a32909c-5835-437e-922f-56c3791eefa8": true,
+              "user_role_SESSION_START_5a32909c-5835-437e-922f-56c3791eefa8": true,
+              "nonce_not_present_earlier_SESSION_START_5a32909c-5835-437e-922f-56c3791eefa8": true,
+              "receiver_nonce_TOOL_BEFORE_df30501a-9426-42fe-86b2-1e5f33c94ab0": true,
+              "native_context_outside_tool_TOOL_BEFORE_df30501a-9426-42fe-86b2-1e5f33c94ab0": true,
+              "nonce_not_present_earlier_TOOL_BEFORE_df30501a-9426-42fe-86b2-1e5f33c94ab0": true,
+              "receiver_nonce_TOOL_AFTER_85cf2165-2f64-45d0-8e64-1b40a14393f7": true,
+              "native_context_outside_tool_TOOL_AFTER_85cf2165-2f64-45d0-8e64-1b40a14393f7": true,
+              "nonce_not_present_earlier_TOOL_AFTER_85cf2165-2f64-45d0-8e64-1b40a14393f7": true,
+              "receiver_nonce_TURN_STOP_6aebd889-5623-4428-8cf1-82916e82f04e": true,
+              "user_role_TURN_STOP_6aebd889-5623-4428-8cf1-82916e82f04e": true,
+              "nonce_not_present_earlier_TURN_STOP_6aebd889-5623-4428-8cf1-82916e82f04e": true,
+              "omp_stop_same_turn_and_session": true
+            },
+            "pass": true,
+            "actual_requests": 3,
+            "hook_invocations": 5,
+            "observed_roles": [
+              {
+                "event": "session.start",
+                "tool": null,
+                "nonce": "SESSION_START_5a32909c-5835-437e-922f-56c3791eefa8",
+                "request_index": 0,
+                "roles": [
+                  "user"
+                ]
+              },
+              {
+                "event": "tool.before",
+                "tool": "read",
+                "nonce": "TOOL_BEFORE_df30501a-9426-42fe-86b2-1e5f33c94ab0",
+                "request_index": 1,
+                "roles": [
+                  "user"
+                ]
+              },
+              {
+                "event": "tool.after",
+                "tool": "read",
+                "nonce": "TOOL_AFTER_85cf2165-2f64-45d0-8e64-1b40a14393f7",
+                "request_index": 1,
+                "roles": [
+                  "user"
+                ]
+              },
+              {
+                "event": "turn.stop",
+                "tool": null,
+                "nonce": "TURN_STOP_6aebd889-5623-4428-8cf1-82916e82f04e",
+                "request_index": 2,
+                "roles": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "container_removed": true
+    },
+    {
+      "harness": "opencode",
+      "commit": "a74753af4622d1e40503cfea1ef6bd84d19f590a",
+      "exit_code": 0,
+      "results": {
+        "hook_config_version": 2,
+        "status": "passed",
+        "elapsed_seconds": 4.615,
+        "allocated_growth_bytes": 2240512,
+        "setup_allocated_bytes": 65503232,
+        "model_request_count": 4,
+        "fake_model_usage_only": true,
+        "sessions": [
+          "ses_ec9a2229affegU5X5hoJiQrVnt",
+          "ses_ec9a21c7bffeJIBvWo5IBXQPZD"
+        ],
+        "fixture_errors": [],
+        "child_maxrss_kib": 593576,
+        "cleanup": {
+          "native_process_exited": true,
+          "native_process_group_absent": true,
+          "native_listener_closed": true,
+          "provider_listener_closed": true,
+          "provider_thread_stopped": true
+        }
+      },
+      "container_removed": true,
+      "dependency_seed": {
+        "sdk": "1.19.0",
+        "lock_sha256": "ece3369bba1b11d8bd308c599ab378bb65f3d5e18db9625a86f00cbc80dcfdd5",
+        "purpose": "Official SDK bootstrap dependencies only; native runtime and hook consumer are unmodified"
+      }
+    }
+  ],
+  "candidate_smoke": {
+    "tarball_sha256": "d00e098df25e4c55fd7e69e22a09095228501c1a0657a5d5429f4d0b69f93bfe",
+    "network": "none",
+    "paid_model_calls": 0,
+    "uid": 1000,
+    "checks": {
+      "exit-0": true,
+      "exit-1": true,
+      "config-versions": true,
+      "empty-native-profiles": true,
+      "exit-2": true,
+      "dry-admitted-all-five": true,
+      "dry-facts": true,
+      "dry-no-active-registration": true,
+      "exit-3": true,
+      "auto-installed-all-five": true,
+      "registration-not-runtime-proof": true,
+      "authored-bytes-preserved": true,
+      "exit-4": true,
+      "pi-update-preserves-settings-bytes": true,
+      "pi-updated-actual-package": true,
+      "exit-5": true,
+      "partial-result-preserved": true,
+      "codex-stop-admitted": true,
+      "opencode-refusal-explicit": true,
+      "opencode-prior-bytes-preserved": true,
+      "no-handler-execution-during-lifecycle": true,
+      "exit-6": true,
+      "manifest-symlink-refused": true,
+      "no-output-on-manifest-refusal": true
+    },
+    "invocations": [
+      {
+        "argv": [
+          "npx",
+          "--offline",
+          "--yes",
+          "--package",
+          "/input/plugnz.tgz",
+          "plugnz",
+          "--version",
+          "--json"
+        ],
+        "exit": 0
+      },
+      {
+        "argv": [
+          "npx",
+          "--offline",
+          "--yes",
+          "--package",
+          "/input/plugnz.tgz",
+          "plugnz",
+          "hooks",
+          "targets"
+        ],
+        "exit": 0
+      },
+      {
+        "argv": [
+          "npx",
+          "--offline",
+          "--yes",
+          "--package",
+          "/input/plugnz.tgz",
+          "plugnz",
+          "install",
+          "--dry-run",
+          "--json"
+        ],
+        "exit": 0
+      },
+      {
+        "argv": [
+          "npx",
+          "--offline",
+          "--yes",
+          "--package",
+          "/input/plugnz.tgz",
+          "plugnz",
+          "install",
+          "--json"
+        ],
+        "exit": 0
+      },
+      {
+        "argv": [
+          "npx",
+          "--offline",
+          "--yes",
+          "--package",
+          "/input/plugnz.tgz",
+          "plugnz",
+          "update",
+          "effects-proof",
+          "--target",
+          "pi",
+          "--json"
+        ],
+        "exit": 0
+      },
+      {
+        "argv": [
+          "npx",
+          "--offline",
+          "--yes",
+          "--package",
+          "/input/plugnz.tgz",
+          "plugnz",
+          "install",
+          "--target",
+          "codex",
+          "--target",
+          "opencode",
+          "--json"
+        ],
+        "exit": 1
+      },
+      {
+        "argv": [
+          "npx",
+          "--offline",
+          "--yes",
+          "--package",
+          "/input/plugnz.tgz",
+          "plugnz",
+          "hooks",
+          "build",
+          "/work/source",
+          "--target",
+          "pi",
+          "--out",
+          "/work/refused-build"
+        ],
+        "exit": 2
+      }
+    ],
+    "version": {
+      "name": "plugnz",
+      "version": "0.0.22"
+    },
+    "dry_version_probe_files": [
+      ".codex/tmp/arg0/codex-arg0CTiwoe/.lock",
+      ".codex/tmp/arg0/codex-arg0CTiwoe/apply_patch",
+      ".codex/tmp/arg0/codex-arg0CTiwoe/applypatch",
+      ".codex/tmp/arg0/codex-arg0CTiwoe/codex-execve-wrapper",
+      ".codex/tmp/arg0/codex-arg0CTiwoe/codex-linux-sandbox",
+      ".open-plugin/cache/source-snapshots/c44af05e83ee43c06228752cda72d13c143eb581a60bfc4fb5a24d74fa576e08/context.mjs",
+      ".open-plugin/cache/source-snapshots/c44af05e83ee43c06228752cda72d13c143eb581a60bfc4fb5a24d74fa576e08/plugin.json",
+      ".open-plugin/cache/source-snapshots/c44af05e83ee43c06228752cda72d13c143eb581a60bfc4fb5a24d74fa576e08/plugnz.hooks.json"
+    ],
+    "status": "passed"
+  },
+  "candidate_is_not_a_new_publication_of_0_0_22": true,
+  "paid_model_requests": 0,
+  "regression_log_hashes": {
+    "defects-baseline.log": {
+      "sha256": "3011c6b6b720eb8a029bda31aa6ad88e3bc3d3b64878b5e3271dab9fc6426afe",
+      "bytes": 6369
+    },
+    "defects-fixed.log": {
+      "sha256": "cd8610087d0ffc3d6540a5f72db6eb2756748328f1bca9e8c95e1beb5440699d",
+      "bytes": 6504
+    },
+    "effects-baseline.log": {
+      "sha256": "8a407ea46225bed71ad183ac74b23a7d130293d5c6748df27c5e027702deb37d",
+      "bytes": 7776
+    },
+    "effects-integrated-fixed.log": {
+      "sha256": "32bca016f4f3327c0d3f97cce97d0719971830e274a385bcc9420ad4047b2572",
+      "bytes": 19132
+    },
+    "mixed-update-baseline.log": {
+      "sha256": "a60347a6991338d6dd1b35d3c29c3ceb5a15fb50037e75e8f8f7de167d07b77e",
+      "bytes": 2894
+    }
+  },
+  "retained_failed_attempts": [
+    "OpenCode cold setup with no SDK seed: no session or model request before timeout, both offline and network-enabled attempts",
+    "First package check expected no directories after native --version; native housekeeping probe disproved that assumption",
+    "Next package check exposed existing bare-name/mixed-ledger update failure; reproduced in two repository tests, then repaired"
+  ]
+}
