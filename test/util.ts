@@ -6,7 +6,7 @@
  * real store records an absolute path; materialization rewrites it to the
  * temp dir after copying.
  */
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, readdirSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { delimiter, dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
@@ -70,7 +70,7 @@ export function materializeInto(home: string, host: string): void {
  * `materializeInto` when a test spans hosts (as pin's default-target rule does).
  */
 export function materialize(host: string): HostEnv {
-  const home = mkdtempSync(join(tmpdir(), `open-plugin-${host}-`));
+  const home = realpathSync(mkdtempSync(join(tmpdir(), `open-plugin-${host}-`)));
   materializeInto(home, host);
   const env = isolatedHostEnv(home);
   if (host === 'omp') {

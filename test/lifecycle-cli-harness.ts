@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, readdirSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -200,7 +200,7 @@ class LifecycleCliHarnessImpl implements LifecycleCliHarness {
   private readonly fakeNatives = new Map<string, FakeNative>();
 
   constructor() {
-    this.root = mkdtempSync(join(tmpdir(), 'plgnz-lifecycle-cli-'));
+    this.root = realpathSync(mkdtempSync(join(tmpdir(), 'plgnz-lifecycle-cli-')));
     this.home = join(this.root, 'managed-home');
     this.ambientHome = join(this.root, 'ambient-home');
     this.sources = join(this.root, 'sources');
