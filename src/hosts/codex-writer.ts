@@ -1122,6 +1122,8 @@ function captureNativeCacheSnapshots(projection: PinsAppliedProjection): void {
     const parentIdentity = nativeCacheParentIdentity(path);
     const parentMode = statSync(dirname(path)).mode & 0o7777;
     cpSync(path, snapshot, { recursive: true });
+    // Recursive copy may create missing destination parents with the default mode.
+    chmodSync(snapshot, statSync(path).mode & 0o7777);
     if (nativeCacheFingerprint(snapshot) !== fingerprint || nativeCacheFingerprint(path) !== fingerprint) throw new Error('Codex complete native cache changed during capture');
     const slot = { nativeId, path, saved, fingerprint, parentIdentity, parentMode };
     assertNativeCacheParent(slot);

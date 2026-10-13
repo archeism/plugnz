@@ -105,3 +105,10 @@ Native MCP pointers must name an existing file inside the plugin. When canonical
 and native MCP files coexist, their server objects must agree (JSON object key
 order and `$schema` do not affect comparison); conflicts refuse the candidate
 and preserve the previous installed bytes and user config.
+
+Complete native cache rollback capture explicitly restores the copied root's
+permission bits before comparing its physical fingerprint. Bun 1.4.3 on macOS
+can otherwise create that root as `0755` when recursive copy also creates missing
+parents, even when the source is `0750`; nested modes still copy correctly. The
+existing complete-slot rollback and CAS tests cover mode preservation and refusal
+of later mode changes without weakening physical-fingerprint checks.
