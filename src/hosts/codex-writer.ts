@@ -331,7 +331,9 @@ function ensureNativeManifest(stage: string, fallbackName: string, fallbackVersi
     }
   }
   mkdirSync(dirname(native), { recursive: true });
-  writeFileSync(native, JSON.stringify({ ...overlay, name, version, description, skills: overlay['skills'] ?? './skills/' }));
+  writeFileSync(native, JSON.stringify({ ...overlay, name, version, description, skills: overlay['skills'] ?? './skills/',
+    ...(overlay['mcpServers'] === undefined && existsSync(join(stage, 'mcp.json')) && !existsSync(join(stage, '.mcp.json')) ? { mcpServers: './mcp.json' } : {}),
+  }));
 }
 
 function assertManagedPath(root: string, target: string): void {
@@ -483,7 +485,7 @@ function nativeUpgradeTimeout(): number {
 }
 const RELOAD_EFFECTIVE = { requirement: 'reload', status: 'effective' } as const;
 const UPDATE_SEMANTICS = ['ordinary-skills', 'resources', 'auto-update-control', 'readback', 'rollback', 'activation-reload'] as const satisfies readonly PackageSemantic[];
-const MANAGED_SEMANTICS = [...UPDATE_SEMANTICS, 'retirement', 'retention-safety'] as const satisfies readonly PackageSemantic[];
+const MANAGED_SEMANTICS = [...UPDATE_SEMANTICS, 'retirement', 'retention-safety', 'model-invocation-control', 'commands', 'mcp'] as const satisfies readonly PackageSemantic[];
 
 const codexEvidenceProfiles: readonly CapabilityEvidenceProfile[] = [
   portableHookProfile(portableHookAdapter, 'managed', ['install', 'update', 'retire']),
@@ -491,6 +493,7 @@ const codexEvidenceProfiles: readonly CapabilityEvidenceProfile[] = [
   codexRouteProfile('managed', ['install', 'update', 'retire'], MANAGED_SEMANTICS, [
     'docs/hosts/codex.md',
     'docs/adr/0004-retain-plugin-state-on-removal.md',
+    'docs/evidence/codex-policy-mcp-20261013.json',
     'docs/evidence/codex-native-released-20261011.md',
   ]),
 ];

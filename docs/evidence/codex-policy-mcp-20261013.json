@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-13",
+  "host": {
+    "binary": "/Users/cfeng1/.bun/bin/codex",
+    "version": "0.162.0"
+  },
+  "command": "CODEX_NATIVE_POLICY=1 bun test test/codex-native-policy.test.mjs",
+  "result": "1 pass; native discovery plus two local HTTP model-request captures; 437ms",
+  "environment": "disposable HOME/CODEX_HOME and source; localhost fake MCP server; localhost fake Responses provider; no credentials copied and no remote model requests",
+  "proof": {
+    "skills_list": [
+      "ordinary native skill discovered",
+      "manual skill translated from disable-model-invocation:true discovered",
+      "sidecar policy allow_implicit_invocation:false skill discovered",
+      "source Markdown prompt command projected as native skill discovered"
+    ],
+    "automatic_model_request": [
+      "ordinary skill appears in available skills catalog",
+      "manual skill excluded",
+      "sidecar-only manual skill excluded",
+      "projected manual command excluded"
+    ],
+    "explicit_model_request": [
+      "$policy-probe:run alpha beta injects projected command-proof body"
+    ],
+    "mcp": [
+      "portable mcp.json-only package initially returned empty native inventory",
+      "generated .codex-plugin/plugin.json mcpServers:\"./mcp.json\" fixes native discovery",
+      "mcpServerStatus/list returns pluginId policy-probe@audit and actual local probe_echo tool"
+    ]
+  },
+  "admitted": "Exact0.162.0 managed profile gains model-invocation-control, prompt commands, and MCP. Native marketplace update evidence unchanged. User-invocation suppression, agents, and permissions/preprocessing stay unsupported.",
+  "limitations": [
+    "Captured actual outbound request bodies; fake provider intentionally returns400 and no model inference occurs",
+    "MCP proof covers plugin-local stdio wiring/discovery, not external server authentication or arbitrary host commands",
+    "Addy declares4 native agent definitions which these adapters do not preserve; full package correctly remains unsupported"
+  ],
+  "sources": [
+    "https://developers.openai.com/plugins/build/plugins",
+    "https://learn.chatgpt.com/docs/build-skills"
+  ],
+  "resources": {
+    "model_tokens": "0; no real model calls",
+    "wall_ms": 437,
+    "memory": "unavailable",
+    "cpu": "unavailable"
+  }
+}

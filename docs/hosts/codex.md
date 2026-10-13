@@ -80,3 +80,22 @@ config and is never touched. codex is not a GUI host, so it is not a default
 - Relative commands in user config (`./…`) are resolved against `~/.codex`;
   the codex client's actual cwd at launch is not knowable from config — such
   entries can be false ✗s (one measured: the disabled `computer-use` entry).
+
+## Exact 0.162.0 policy and MCP evidence (2026-10-13)
+
+The Managed profile admits model-invocation control, projected prompt commands
+and MCP after the isolated native probe in
+[`evidence/codex-policy-mcp-20261013.json`](../evidence/codex-policy-mcp-20261013.json).
+The real `skills/list` enumerates ordinary, manual and projected command skills.
+Two actual outbound request captures to a localhost fake Responses provider
+prove automatic catalog exclusion for both frontmatter and sidecar manual
+policies, and explicit projected command-body injection. No model inference or
+external provider request occurs.
+
+A portable `mcp.json` without `.mcp.json` requires an explicit native manifest
+`mcpServers: "./mcp.json"` pointer. The writer now generates it when the source
+has no existing pointer or default `.mcp.json`; native `mcpServerStatus/list`
+then discovers the local server and its tool. Existing authored pointers stay
+intact. This proves wiring and native discovery, not third-party authentication.
+Agents and user-invocation suppression remain unsupported; declaring agent
+files still prevents full-package admission rather than silently dropping them.
