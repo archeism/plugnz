@@ -353,7 +353,10 @@ function verifiedSourceImportClosure(root: string): boolean {
     // after another source module resolves before that source module.
     if (hasImportShadow(directory, modules, allowed)) return false;
     for (const entry of entries) {
-      if (entry.startsWith('.') || entry === '__pycache__') continue;
+      // Hermes's native TUI install creates npm workspace symlinks here.
+      // This dependency tree is not the tracked Python import source tree.
+      // Keep the root's module-name collision check above (node_modules.py).
+      if (entry.startsWith('.') || entry === '__pycache__' || entry === 'node_modules') continue;
       const path = join(directory, entry);
       const stat = lstatSync(path);
       if (stat.isSymbolicLink()) {
@@ -491,7 +494,9 @@ const hermesManagedProfiles = hermesProvenManagedRevisions.map(detectedVersion =
   evidence: [
     detectedVersion === 'c0d7294769a38c17ceae51d8f7995e66e1dcae27'
       ? 'docs/evidence/hermes-native-loader-c0d7294-20260923.json'
-      : 'docs/evidence/hermes-native-loader-dce1e9b-20261011.json',
+      : detectedVersion === '6e7b83a2f1c093e992a8d838ed77ea320fbd8e51'
+        ? 'docs/evidence/hermes-native-loader-6e7b83a-20261013.json'
+        : 'docs/evidence/hermes-native-loader-dce1e9b-20261011.json',
     'docs/hosts/hermes.md',
     'docs/research/native-plugin-update-capabilities-2026-10-09.md',
   ],

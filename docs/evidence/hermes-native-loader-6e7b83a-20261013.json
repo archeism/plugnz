@@ -1,0 +1,75 @@
+{
+  "date": "2026-10-13",
+  "scope": "Exact-source isolated native loader install/removal, command input-queue and native launcher admission; no model execution.",
+  "hermes_source": {
+    "repository": "https://github.com/NousResearch/hermes-agent",
+    "revision": "6e7b83a2f1c093e992a8d838ed77ea320fbd8e51",
+    "tracked_status": "clean",
+    "method": "Local Git clone of installed clean revision into /private/tmp/plugnz-hermes-6e7b83a-proof; fresh Python 3.14.7 venv; ruamel.yaml, python-dotenv, rich and PyYAML installed only into scratch environment"
+  },
+  "isolation": {
+    "source_allocated_mib": 501,
+    "home_profile_cwd": "fresh temporary directories",
+    "installed_executable": "/Users/cfeng1/.hermes/hermes-agent/.hermes/bin/hermes",
+    "runtime_observation": "Read-only launcher/source binding; launcher not executed"
+  },
+  "native_loader": {
+    "installed": {
+      "stdout": "{\"result\": null, \"queued\": \"Plugin root: /private/var/folders/n3/fxqv728s68lc9zp15zn6d3tm0000gn/T/plgnz-hermes-native-6yNpsI/hermes-home/plugins/native-proof\\nResolve relative skill, agent, and reference paths from that plugin root.\\n\\nqueued \\\"alpha beta\\\" \\\"literal $1\\\" first=alpha beta second=literal $1\", \"manual_result\": null, \"manual_queued\": \"Plugin root: /private/var/folders/n3/fxqv728s68lc9zp15zn6d3tm0000gn/T/plgnz-hermes-native-6yNpsI/hermes-home/plugins/native-proof\\nResolve relative skill, agent, and reference paths from that plugin root.\\n\\nRead and follow the user-invoked skill at .plgnz-user-skills/manual/SKILL.md relative to the plugin root above. Treat it as the governing instructions for this turn. User arguments: manual args\", \"commands\": [\"native-proof:manual\", \"native-proof:run\"], \"skills\": [\"agent-plugin-native-proof-b80346ee:ordinary\"], \"sections\": [\"native-proof.plgnz-commands.skills\"]}\n",
+      "stderr": "Failed to load plugin 'browser-browser-use': No module named 'requests'\nFailed to load plugin 'browser-browserbase': No module named 'requests'\nFailed to load plugin 'browser-firecrawl': No module named 'requests'\nFailed to load plugin 'basic': No module named 'httpx'\nFailed to load plugin 'drain': No module named 'httpx'\nFailed to load plugin 'nous': No module named 'httpx'\nFailed to load plugin 'self-hosted': No module named 'httpx'\nFailed to load plugin 'krea': No module named 'requests'\nFailed to load plugin 'xai': No module named 'requests'\nFailed to load plugin 'xai': No module named 'httpx'\nFailed to load plugin 'web-brave-free': No module named 'httpx'\nFailed to load plugin 'web-ddgs': No module named 'httpx'\nFailed to load plugin 'web-exa': No module named 'httpx'\nFailed to load plugin 'web-firecrawl': No module named 'httpx'\nFailed to load plugin 'web-keenable': No module named 'httpx'\nFailed to load plugin 'web-openai-native': No module named 'httpx'\nFailed to load plugin 'web-parallel': No module named 'httpx'\nFailed to load plugin 'web-perplexity': No module named 'httpx'\nFailed to load plugin 'web-searxng': No module named 'httpx'\nFailed to load plugin 'web-tavily': No module named 'httpx'\nFailed to load plugin 'web-xai': No module named 'httpx'\n",
+      "status": 0
+    },
+    "removed": {
+      "stdout": "{\"commands\": [], \"skills\": [], \"sections\": []}\n",
+      "stderr": "Failed to load plugin 'browser-browser-use': No module named 'requests'\nFailed to load plugin 'browser-browserbase': No module named 'requests'\nFailed to load plugin 'browser-firecrawl': No module named 'requests'\nFailed to load plugin 'basic': No module named 'httpx'\nFailed to load plugin 'drain': No module named 'httpx'\nFailed to load plugin 'nous': No module named 'httpx'\nFailed to load plugin 'self-hosted': No module named 'httpx'\nFailed to load plugin 'krea': No module named 'requests'\nFailed to load plugin 'xai': No module named 'requests'\nFailed to load plugin 'xai': No module named 'httpx'\nFailed to load plugin 'web-brave-free': No module named 'httpx'\nFailed to load plugin 'web-ddgs': No module named 'httpx'\nFailed to load plugin 'web-exa': No module named 'httpx'\nFailed to load plugin 'web-firecrawl': No module named 'httpx'\nFailed to load plugin 'web-keenable': No module named 'httpx'\nFailed to load plugin 'web-openai-native': No module named 'httpx'\nFailed to load plugin 'web-parallel': No module named 'httpx'\nFailed to load plugin 'web-perplexity': No module named 'httpx'\nFailed to load plugin 'web-searxng': No module named 'httpx'\nFailed to load plugin 'web-tavily': No module named 'httpx'\nFailed to load plugin 'web-xai': No module named 'httpx'\n",
+      "status": 0
+    }
+  },
+  "acceptance": {
+    "ordinary_skill_registered": true,
+    "user_only_excluded_from_ordinary_discovery": true,
+    "ordinary_prompt_catalog_registered": true,
+    "namespaced_commands_queue_exact_prompt": true,
+    "user_only_command_registered": true,
+    "removal_clears_commands_skills_sections_and_owned_directories": true,
+    "native_loader_assertions": 15
+  },
+  "limitations": [
+    "No model turn or gateway injection.",
+    "Optional bundled provider plugins log missing requests/httpx in deliberately minimal scratch environment; portable target plugin and companion load and removal pass.",
+    "New revision evidence covers native launcher layout. Existing editable recognition remains byte-exact and fail-closed; no new editable layout admitted."
+  ],
+  "public_cli": {
+    "command": "TMPDIR=/private/tmp HERMES_SOURCE_ROOT=/private/tmp/plugnz-hermes-6e7b83a-proof HERMES_NATIVE_ONLY=1 HERMES_PROBE_INSTALLED_BIN=/Users/cfeng1/.hermes/hermes-agent/.hermes/bin/hermes bun test test/hermes-native-loader.test.ts",
+    "passed": 2,
+    "failed": 0,
+    "assertions": 23,
+    "admitted_executables": [
+      "official scratch-source native forwarder",
+      "actual installed standalone-Python native launcher"
+    ],
+    "source_and_profile_unchanged": true
+  },
+  "source_binding_adjustment": {
+    "observed_failure": "Official native TUI npm workspace node_modules/hermes-tui -> ../ui-tui was rejected as a Python source symlink.",
+    "scope": "Exclude node_modules dependency trees from Python source recursion, retaining module collision checks at their parent. Existing Python source extension/package shadow refusal unchanged.",
+    "evidence": "Installed clean source .gitignore excludes node_modules; workspace target ui-tui is JavaScript/TypeScript TUI."
+  },
+  "regressions": {
+    "public_admission_and_dependency_symlink": {
+      "passed": 43,
+      "failed": 0,
+      "assertions": 249
+    },
+    "managed_lifecycle_and_writer": {
+      "passed": 12,
+      "failed": 0,
+      "assertions": 105
+    },
+    "typescript_check": "passed"
+  },
+  "observed_failed_attempts": [
+    "Initial minimal dependency loader import failed for missing ruamel.yaml; scratch-only dependency installed and probe rerun.",
+    "Initial public tests encountered preexisting macOS path alias scope/source mismatch. Root agent fixed source canonicalization; TMPDIR=/private/tmp rerun passed."
+  ]
+}

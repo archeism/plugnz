@@ -100,6 +100,18 @@ print(json.dumps({
     expect(evidence.manual_queued).toContain('.plgnz-user-skills/manual/SKILL.md');
     expect(evidence.manual_queued).toContain('manual args');
     expect(evidence.sections).toContain('native-proof.plgnz-commands.skills');
+    await hermesWriter.remove('native-proof');
+    const removed = spawnSync(python, ['-c', `import json, sys\nsys.path.insert(0, ${JSON.stringify(sourceRoot)})\nfrom hermes_cli.plugins import PluginManager\nmanager = PluginManager(${JSON.stringify(home)})\nmanager.discover_and_load()\nprint(json.dumps({"commands": sorted(manager._plugin_commands), "skills": sorted(manager._plugin_skills), "sections": sorted(manager._system_prompt_sections)}))`], {
+      cwd, env: nativeEnv, encoding: 'utf8',
+    });
+    if (removed.status !== 0) throw new Error(`Hermes native removal probe failed: ${removed.stderr}`);
+    const retired = JSON.parse(removed.stdout.trim()) as { commands: string[]; skills: string[]; sections: string[] };
+    expect(retired.commands.some(name => name.startsWith('native-proof:'))).toBe(false);
+    expect(retired.skills.some(name => name.includes('native-proof'))).toBe(false);
+    expect(retired.sections.includes('native-proof.plgnz-commands.skills')).toBe(false);
+    expect(existsSync(join(home, 'plugins', 'native-proof'))).toBe(false);
+    expect(existsSync(join(home, 'plugins', 'native-proof.plgnz-commands'))).toBe(false);
+    if (evidencePath !== undefined) writeFileSync(evidencePath, JSON.stringify({ installed: { stdout: result.stdout, stderr: result.stderr, status: result.status }, removed: { stdout: removed.stdout, stderr: removed.stderr, status: removed.status } }, null, 2));
   } finally {
     if (savedRoot === undefined) delete process.env.OPEN_PLUGIN_HERMES_ROOT; else process.env.OPEN_PLUGIN_HERMES_ROOT = savedRoot;
     if (savedConfig === undefined) delete process.env.OPEN_PLUGIN_HERMES_CONFIG_PATH; else process.env.OPEN_PLUGIN_HERMES_CONFIG_PATH = savedConfig;
@@ -107,7 +119,7 @@ print(json.dumps({
   }
 });
 
-conditionalTest.if(hermesSource !== undefined)('public CLI admits official editable and native forwarder launchers without source or venv writes', async () => {
+conditionalTest.if(hermesSource !== undefined)('public CLI admits selected official launchers without source or venv writes', async () => {
   await withLifecycleCliHarness(harness => {
     harness.writeHome({ '.hermes/config.yaml': 'model: preserved\n' });
     const source = harness.source('hermes-real-admission', {
@@ -126,11 +138,16 @@ conditionalTest.if(hermesSource !== undefined)('public CLI admits official edita
     const forwarder = join(source, 'hermes-forwarder');
     writeFileSync(forwarder, `#!/bin/sh\nexec ${JSON.stringify(native)} "$@"\n`);
     chmodSync(forwarder, 0o755);
-    for (const executable of [join(hermesSource!, '.venv', 'bin', 'hermes'), forwarder]) {
+    const executables = process.env.HERMES_NATIVE_ONLY === '1'
+      ? [forwarder]
+      : [join(hermesSource!, '.venv', 'bin', 'hermes'), forwarder];
+    if (process.env.HERMES_PROBE_INSTALLED_BIN) executables.push(process.env.HERMES_PROBE_INSTALLED_BIN);
+    for (const executable of executables) {
       const before = sourceDigest(hermesSource!);
       const result = harness.run(['add', source, '--target', 'hermes', '--dry-run', '--json'], {
         env: { OPEN_PLUGIN_HERMES_BIN: executable },
       });
+      if (!result.stdout.trim()) throw new Error(`Hermes public admission probe failed: ${result.stderr}`);
       const report = parseLifecycleReport(JSON.parse(result.stdout));
       expect({ code: result.exitCode, reason: report.outcomes[0]?.reason }).toEqual({ code: 0, reason: null });
       expect(sourceDigest(hermesSource!)).toBe(before);

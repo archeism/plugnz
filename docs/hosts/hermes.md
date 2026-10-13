@@ -1,6 +1,6 @@
 # Hermes
 
-Hermes Agent at evidenced source revisions `c0d7294` and `dce1e9b` loads portable Agent Plugins from
+Hermes Agent at evidenced source revisions `c0d7294`, `dce1e9b` and `6e7b83a` loads portable Agent Plugins from
 `$HERMES_HOME/plugins/<name>/plugin.json`. Portable packages are native and
 opt-in: `plugins.enabled` activates a package and `plugins.disabled` overrides
 it (`hermes_cli/plugins_cmd.py`).
@@ -43,7 +43,8 @@ to bind a source directory through a recognized launcher, then a read-only Git
 probe of that exact directory must identify an evidenced, clean tracked revision.
 The current exact revisions are
 `c0d7294769a38c17ceae51d8f7995e66e1dcae27` and
-`dce1e9b37581dd62e480a9064dc04a709c2940d3`.
+`dce1e9b37581dd62e480a9064dc04a709c2940d3` and
+`6e7b83a2f1c093e992a8d838ed77ea320fbd8e51`.
 Unknown revisions, locally modified tracked source, missing executables,
 non-Git installs, unrecognized launcher layouts, or an unparseable source identity report
 `capability.unverified` before native or lifecycle-ledger mutation. This means
@@ -73,7 +74,7 @@ ones: untracked package, initializer or extension alternatives must not replace
 tracked Python modules such as `hermes_bootstrap` or nested `hermes_cli.main`.
 Editable bin/site roots are additionally checked for the source's root modules.
 The read-only traversal is bounded to 20,000 entries and excludes hidden
-repository/venv directories and `__pycache__`; ordinary untracked documents are
+repository/venv directories, JavaScript `node_modules` dependency trees, and `__pycache__`; ordinary untracked documents are
 allowed. This is import-shadow validation, not an attestation of all untracked
 content or arbitrary import hooks. See the [public shadow regression receipt](../evidence/issue35-hermes-import-shadow-20261011.md).
 The observed uv venv hook is allowed only with its exact verified helper bytes. Other installer bodies,
@@ -86,7 +87,8 @@ hooks; no Python process, startup recovery, bytecode or passive update check
 runs. The banner's upstream hash is never used for admission.
 Exact evidence is retained in
 [the original loader probe](../evidence/hermes-native-loader-c0d7294-20260923.json)
-and [the newer isolated loader/CLI probe](../evidence/hermes-native-loader-dce1e9b-20261011.json).
+and [the newer isolated loader/CLI probe](../evidence/hermes-native-loader-dce1e9b-20261011.json),
+and [the current native install/removal probe](../evidence/hermes-native-loader-6e7b83a-20261013.json).
 These prove native discovery, policy exclusion and interactive input queuing,
 not a model turn, gateway injection, or Hermes-native update/rollback support.
 The [read-only observation correction](../evidence/hermes-runtime-observation-20261011.md)
