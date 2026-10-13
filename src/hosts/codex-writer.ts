@@ -337,7 +337,7 @@ function ensureNativeManifest(stage: string, fallbackName: string, fallbackVersi
     }
   }
   const pointer = overlay['mcpServers'];
-  if (pointer !== undefined && (typeof pointer !== 'string' || !pointer.startsWith('./') || pointer.split('/').includes('..') || !existsSync(join(stage, pointer)))) {
+  if (pointer !== undefined && (typeof pointer !== 'string' || !pointer.startsWith('./') || pointer.includes('\\') || pointer.split('/').includes('..') || !existsSync(join(stage, pointer)))) {
     throw new Error('Codex native MCP pointer must name an existing plugin-local file');
   }
   const mcpFiles = ['mcp.json', '.mcp.json', ...(typeof pointer === 'string' ? [pointer] : [])]

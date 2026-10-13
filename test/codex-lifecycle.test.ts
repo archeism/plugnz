@@ -327,6 +327,7 @@ test('Codex refuses unprojected inline MCP and conflicting pointers before activ
       { files: { '.codex-plugin/plugin.json': JSON.stringify({ name: 'demo-plugin', mcpServers: './other.json' }),
         'mcp.json': JSON.stringify({ mcpServers: servers }), 'other.json': JSON.stringify({ mcpServers: { foreign: { command: '/usr/bin/false' } } }) }, diagnostic: 'conflicting Codex canonical and native MCP' },
       { files: { '.codex-plugin/plugin.json': JSON.stringify({ name: 'demo-plugin', mcpServers: { probe: servers.probe } }) }, diagnostic: 'native MCP pointer must name' },
+      { files: { '.codex-plugin/plugin.json': JSON.stringify({ name: 'demo-plugin', mcpServers: './..\\outside.json' }) }, diagnostic: 'native MCP pointer must name' },
     ];
     for (const candidate of cases) {
       const changed = source(candidate.files);
