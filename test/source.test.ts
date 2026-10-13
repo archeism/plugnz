@@ -1,10 +1,10 @@
 import { afterAll, describe, expect, test } from 'bun:test';
-import { chmodSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { mkdtempSync } from 'node:fs';
-import { normalizeSource, resolveSource as resolveSourcePublic } from '../src/source';
+import { normalizeSource, sourceBindingForArgument, resolveSource as resolveSourcePublic } from '../src/source';
 import { fingerprintTree } from '../src/fingerprint';
 import { commitAll, initGitRepo } from './util';
 
@@ -161,7 +161,7 @@ describe('resolveSource', () => {
     writeFileSync(join(root, 'resource.md'), 'changed without a version bump\n');
     const second = resolveSource(root);
 
-    expect(first.sourceUri).toBe(resolve(root));
+    expect(first.sourceUri).toBe(realpathSync(root));
     expect(first.plugins[0]?.contentFingerprint).toMatch(/^[a-f0-9]{64}$/);
     expect(second.plugins[0]?.contentFingerprint === first.plugins[0]?.contentFingerprint).toBe(false);
   });
@@ -185,11 +185,11 @@ describe('resolveSource', () => {
       stagedBytes: readFileSync(join(frozen.dir, 'resource.md'), 'utf8'),
       stagedAwayFromSource: frozen.dir !== root,
     }).toEqual({
-      sourceUri: resolve(root),
-      binding: { kind: 'local', locator: resolve(root) },
+      sourceUri: realpathSync(root),
+      binding: { kind: 'local', locator: realpathSync(root) },
       revision: resolved.snapshot.fingerprint,
       snapshotFingerprint: resolved.snapshot.fingerprint,
-      sourceDir: resolve(root),
+      sourceDir: realpathSync(root),
       relativeDir: '.',
       stagedBytes: 'frozen\n',
       stagedAwayFromSource: true,
@@ -482,3 +482,16 @@ function writeBytes(path: string, bytes: number[]): void {
 function executableBits(path: string): number {
   return statSync(path).mode & 0o111;
 }
+
+ test('local scope binding matches frozen source through a parent filesystem alias', () => {
+  const parent = mkdtempSync(join(tmpdir(), 'plgnz-parent-alias-'));
+  const actual = join(parent, 'actual'); const alias = join(parent, 'alias');
+  plugin(join(actual, 'plugin'));
+  spawnSync('ln', ['-s', actual, alias]);
+  try {
+    const argument = join(alias, 'plugin');
+    const frozen = resolveSource(argument);
+    expect(sourceBindingForArgument(argument)).toEqual(frozen.snapshot.binding);
+    expect(sourceBindingForArgument(argument)).toEqual(sourceBindingForArgument(join(actual, 'plugin')));
+  } finally { rmSync(parent, { recursive: true, force: true }); }
+});

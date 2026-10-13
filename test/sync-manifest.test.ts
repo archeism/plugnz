@@ -1,4 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createDeploymentScopeIdentity } from '../src/deployment-scope';
 import {
   deploymentScopeForSyncManifestEntry,
@@ -378,3 +381,17 @@ function validationCode(fn: () => unknown): string {
     return error.reason.code;
   }
 }
+
+test('manifest local scope canonicalizes parent aliases before source snapshot binding', () => {
+  const root = mkdtempSync(join(tmpdir(), 'plgnz-manifest-alias-'));
+  const actual = join(root, 'actual'); const alias = join(root, 'alias');
+  mkdirSync(join(actual, 'plugin'), { recursive: true }); symlinkSync(actual, alias);
+  try {
+    const manifest = parseSyncManifest({ schemaVersion: 1, entries: [{ operation: 'sync',
+      source: { kind: 'local', locator: join(alias, 'plugin') }, target: { kind: 'omp', instance: 'default' } }] });
+    const entry = manifest.entries[0]!;
+    if (entry.operation !== 'sync') throw new Error('expected sync');
+    expect(entry.source).toEqual({ kind: 'local', locator: realpathSync(join(actual, 'plugin')) });
+    expect(deploymentScopeForSyncManifestEntry(entry)).toEqual(createDeploymentScopeIdentity(entry.source, entry.target));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

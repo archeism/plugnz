@@ -3,6 +3,7 @@ import type { TargetIdentity } from './deployment-scope';
 import { targetProfiles } from './hosts';
 import { createLifecycleReason, type LifecycleReason } from './lifecycle-report';
 import { validateSourceBinding, type SourceBinding } from './source-reference';
+import { sourceBindingForArgument } from './source';
 import {
   canonicalTargetContextBytes,
   TargetIdentityValidationError,
@@ -197,7 +198,7 @@ function parseSourceBinding(value: unknown, label: string): SourceBinding {
     if (typeof binding['locator'] !== 'string') invalidArgument(`${label} local locator must be a string`);
     const source: SourceBinding = { kind: 'local', locator: binding['locator'] };
     validateBinding(source, label);
-    return source;
+    return sourceBindingForArgument(source.locator);
   }
   if (binding['kind'] === 'git') {
     exactFields(binding, ['kind', 'locator', 'ref'], label);

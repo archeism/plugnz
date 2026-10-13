@@ -212,7 +212,7 @@ export function sourceBindingForArgument(source: string): SourceBinding {
 
 function parseSource(source: string): ParsedSource {
   if (source.startsWith('./') || source.startsWith('../') || isAbsolute(source)) {
-    const locator = resolve(source);
+    const locator = canonicalLocalArgument(source);
     const binding: SourceBinding = { kind: 'local', locator };
     validateSourceBinding(binding);
     return { binding, sourceUri: locator };
@@ -237,10 +237,20 @@ function parseSource(source: string): ParsedSource {
     validateSourceBinding(binding);
     return { binding, sourceUri: formatSourceBinding(binding), fetchLocator: locator };
   }
-  const locator = resolve(source);
+  const locator = canonicalLocalArgument(source);
   const binding: SourceBinding = { kind: 'local', locator };
   validateSourceBinding(binding);
   return { binding, sourceUri: locator };
+}
+
+/** Resolve filesystem parent aliases before they become durable scope identity. */
+function canonicalLocalArgument(source: string): string {
+  const path = resolve(source);
+  if (!existsSync(path)) return path; // Offline retirement keeps the recorded spelling.
+  // Preserve rejection of a source that itself is a symlink. Parent aliases such
+  // as macOS /var -> /private/var are canonicalized by the frozen source too.
+  if (lstatSync(path).isSymbolicLink()) throw new Error(`Symlink resources are not supported: ${path}`);
+  return realpath(path);
 }
 
 function formatSourceBinding(binding: SourceBinding): string {
