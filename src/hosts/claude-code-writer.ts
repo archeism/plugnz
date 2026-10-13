@@ -697,6 +697,12 @@ export function createClaudeCodeLifecycleHost(input?: {
       const decision = adapter.decideRoute(request);
       if (decision.kind !== 'selected') return decision;
       if (request.operation !== 'install' && request.operation !== 'update') return decision;
+      if (request.snapshot.inventory.componentDefinitions.some(component =>
+        component.kind === 'agent' && (component.root !== 'agents' || component.dialect !== 'markdown'))) {
+        return selectLifecycleRoute(definition.id, definition.evidenceProfiles.map(profile => ({
+          ...profile, semantics: { ...profile.semantics, agents: 'unsupported' },
+        })), request);
+      }
       const policies = [...request.snapshot.inventory.invocationPolicies, ...request.snapshot.inventory.componentInvocationPolicies];
       // Only native dashed frontmatter is proven. A Codex-only sidecar is inert here.
       if (policies.some(policy => !policy.modelInvocable && !policy.declarations.some(declaration =>
@@ -987,6 +993,7 @@ function claudeProfile(
       ...(version === '2.1.296' ? [
         'docs/evidence/claude-code-2.1.296-native-20261013.json',
         'docs/evidence/claude-code-2.1.296-invocation-20261013.json',
+        'docs/evidence/claude-code-2.1.296-agents-20261013.json',
       ] : []),
     ],
   });
@@ -1010,7 +1017,7 @@ function claudeSemantics(version: string): Record<PackageSemantic, CapabilitySta
   return Object.fromEntries(PACKAGE_SEMANTICS.map((semantic) => [
     semantic,
     CLAUDE_PROJECTED_SEMANTICS.has(semantic) ||
-      (version === '2.1.296' && semantic === 'model-invocation-control') ? 'supported' : 'unsupported',
+      (version === '2.1.296' && (semantic === 'model-invocation-control' || semantic === 'agents')) ? 'supported' : 'unsupported',
   ])) as Record<PackageSemantic, CapabilityStatus>;
 }
 

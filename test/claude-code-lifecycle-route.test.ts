@@ -81,6 +81,7 @@ async function route(host: LifecycleHostAdapter, root: string, input: {
   operation?: 'update' | 'retire';
   requiredSemantics?: PackageSemanticInventory['requiredSemantics'];
   invocationPolicies?: PackageSemanticInventory['invocationPolicies'];
+  componentDefinitions?: PackageSemanticInventory['componentDefinitions'];
 }): Promise<string> {
   seedInstall(root, input.locator ?? locator, '1.0.0');
   const version = await host.probeVersion(claudeTarget);
@@ -130,7 +131,7 @@ async function route(host: LifecycleHostAdapter, root: string, input: {
     });
     return decision.kind === 'selected' ? decision.route : decision.kind;
   }
-  const snapshot = updateSnapshot(root, attemptId, input.version, input.revision ?? '2'.repeat(40), 'update', input.requiredSemantics, 'demo', input.invocationPolicies);
+  const snapshot = updateSnapshot(root, attemptId, input.version, input.revision ?? '2'.repeat(40), 'update', input.requiredSemantics, 'demo', input.invocationPolicies, input.componentDefinitions);
   const pins = createResolvedLifecyclePins(input.pin ? [{ server: 'fixture', executable: '/opt/bin/fixture' }] : []);
   const projection = await host.observeNativeProjection({
     targetObservation: observed,
@@ -187,6 +188,8 @@ describe('claude-code lifecycle route', () => {
       process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'] = binary(root, '2.1.296 (Claude Code)\n');
       expect(await route(createClaudeCodeLifecycleHost(), root, { attemptId: 'proven-296', version: '1.1.0' })).toBe('managed');
       expect(await route(createClaudeCodeLifecycleHost(), root, { attemptId: 'model-control-296', version: '1.1.0', requiredSemantics: ['model-invocation-control'] })).toBe('managed');
+      expect(await route(createClaudeCodeLifecycleHost(), root, { attemptId: 'native-agents-296', version: '1.1.0', requiredSemantics: ['agents'] })).toBe('managed');
+      expect(await route(createClaudeCodeLifecycleHost(), root, { attemptId: 'hidden-agents-296', version: '1.1.0', requiredSemantics: ['agents'], componentDefinitions: [{ kind: 'agent', root: '.claude/agents', dialect: 'markdown', identity: 'demo', path: '.claude/agents/demo.md' }] })).toBe('capability-gap');
       const nativePolicy = { skill: 'skills/proof/SKILL.md', modelInvocable: false, userInvocable: true,
         declarations: [{ dialect: 'claude-frontmatter', path: 'skills/proof/SKILL.md', field: 'disable-model-invocation', direction: 'model', allowed: false }] } as const;
       expect(await route(createClaudeCodeLifecycleHost(), root, { attemptId: 'native-control-296', version: '1.1.0', requiredSemantics: ['model-invocation-control'], invocationPolicies: [{ ...nativePolicy, declarations: [...nativePolicy.declarations] }] })).toBe('managed');
@@ -759,6 +762,7 @@ function updateSnapshot(
   requiredSemantics: PackageSemanticInventory['requiredSemantics'] = [],
   packageName = 'demo',
   invocationPolicies: PackageSemanticInventory['invocationPolicies'] = [],
+  componentDefinitions: PackageSemanticInventory['componentDefinitions'] = [],
 ) {
   const snapshotRoot = join(root, `snapshot-${attemptId}`);
   const packageRoot = join(snapshotRoot, 'packages', packageName);
@@ -769,7 +773,7 @@ function updateSnapshot(
     schemaVersion: 1,
     package: { name: packageName, version, fingerprint: packageFingerprint },
     components: { skills: [], mcp: [], hooks: [], commands: [], agents: [], resources: [], permissionsPreprocessing: [] },
-    componentDefinitions: [],
+    componentDefinitions,
     invocationPolicies,
     componentInvocationPolicies: [],
     autoUpdate: [],

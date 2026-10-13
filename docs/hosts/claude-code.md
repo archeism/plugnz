@@ -120,3 +120,10 @@ Run `node docs/evidence/claude-code-2.1.296-invocation-probe.mjs` to reproduce
 that exact installed-binary check. Admission requires a native dashed
 `disable-model-invocation` declaration for each restricted component; a
 Codex-only sidecar or unproven alias remains a visible capability gap.
+
+The exact 2.1.296 profile also admits native `agents/*.md` definitions.
+An [isolated Addy loader receipt](../evidence/claude-code-2.1.296-agents-20261013.json)
+shows all four named agents, their component token inventory, and all 25 skills
+loaded by native `plugin details`. This verifies agent discovery without a
+provider call; no claim of delegated model execution is made. Hidden
+`.claude/agents` roots remain unsupported rather than inferred from this proof.
