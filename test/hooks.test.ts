@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MAX_HOOK_OUTPUT_BYTES, runHooks, validateHookConfig, validateHookInput, type HookConfig, type HookEvent, type HookInput } from '../src/hooks';
@@ -64,7 +64,8 @@ describe('portable hook contract', () => {
     const current = { ...input('tool.before'), cwd: workspace };
     const result = await runHooks(config('tool.before', argv), current, root);
     expect(JSON.parse(result.context!)).toEqual({
-      cwd: workspace,
+      // macOS exposes /var through the /private/var symlink to child processes.
+      cwd: realpathSync(workspace),
       args: [root + '/a file', '$(touch should-not-exist)', '; echo NOT_A_SHELL'],
       tool: current.tool,
     });
