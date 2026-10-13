@@ -1,0 +1,19 @@
+{
+  "recordedAt": "2026-10-13T14:41:14.296Z",
+  "version": "2.1.296",
+  "binary": "/Users/cfeng1/.bun/install/global/node_modules/@anthropic-ai/claude-code-darwin-arm64/claude",
+  "binarySha256": "c9b5341637becbd423ddffc5b254afb645682a3868cb708bbc6cc0e7bb419937",
+  "method": "Execute unmodified native Skill gate extracted from installed binary in VM; external settings dependencies stubbed to on. Native parser mapping inspected separately.",
+  "gate": "function Ztt(e,n){let{commandName:r,userTypedThisTurn:s,isMainSession:h,permissionContext:y}=n;if(e.type===\"prompt\"&&e.loadDefinition!==void 0&&!s)return{reason:\"not_loaded\",message:`Skill ${r} could not be loaded. Proceed without it.`,errorCode:10};if(e.disableModelInvocation&&!s)return{reason:\"disable_model_invocation\",message:`Skill ${r} cannot be used with ${Ro} tool due to disable-model-invocation. ${vXe(r)} Do not replicate this skill's workflow by other means \\u2014 it is reserved for explicit user invocation.`,errorCode:4};if(h){let w=_G();if(w!==void 0&&Wne([e],w).length===0)return{reason:\"not_allowlisted\",message:`Skill ${r} is not in this session's skills allowlist`,errorCode:8}}let b=$C(e);if(b===\"off\"||b===\"user-invocable-only\"&&!s){let w=ft(),M=Fwr(e,w),z=xoe(e),V=z===\"user-invocable-only\"||z===\"off\",X=M&&!U6(w)?wEs():null,he=\"by the disableBundledSkills setting or CLAUDE_CODE_DISABLE_BUNDLED_SKILLS env var\";return{reason:\"override_disabled\",message:X!==null?`Skill ${r} is disabled for model invocation: ${X}${V?\" It is also turned off by an explicit skillOverrides entry.\":\"\"}`:`Skill ${r} is disabled for model invocation ${M?V?\"by the disableBundledSkills setting or CLAUDE_CODE_DISABLE_BUNDLED_SKILLS env var, and by an explicit skillOverrides entry\":\"by the disableBundledSkills setting or CLAUDE_CODE_DISABLE_BUNDLED_SKILLS env var\":\"in skillOverrides settings\"}`,errorCode:7,killSwitchOnly:M&&!V}}if(e.type!==\"prompt\"){let w=e.type===\"local-jsx\"?\"UI\":\"built-in CLI\";return{reason:\"not_prompt_type\",message:`${r} is a ${w} command, not a skill. ${vXe(r,!0)}`,errorCode:5}}if(e.isMcp&&e.loadedFrom!==\"mcp\")return{reason:\"mcp_prompt\",message:`${r} is an MCP prompt, not a skill. ${vXe(r)}`,errorCode:12};if(y!==void 0){let w=zo(y,{name:Ro})??zo(y,{name:xTe(e.name),aliasSkillToolNames:Ehs(e),packagingAliasSkillToolNames:dyn(e)});if(w)return{reason:\"deny_rule\",message:\"Skill execution blocked by permission rules\",errorCode:11,rule:w};let M=zM(y,Ro,\"deny\");for(let[z,V]of M.entries())if(_7r(z,r,e))return{reason:\"deny_rule\",message:\"Skill execution blocked by permission rules\",errorCode:11,rule:V}}return null}",
+  "loaderMarkers": [
+    "let Wt=rXt(M[\"disable-model-invocation\"])",
+    "disableModelInvocation:Wt,userInvocable:qt"
+  ],
+  "modelInvocation": {
+    "reason": "disable_model_invocation",
+    "message": "Skill proof cannot be used with Skill tool due to disable-model-invocation. User must invoke explicitly. Do not replicate this skill's workflow by other means — it is reserved for explicit user invocation.",
+    "errorCode": 4
+  },
+  "userInvocation": null,
+  "scope": "model-invocation-control only; user-invocation-control remains unverified"
+}

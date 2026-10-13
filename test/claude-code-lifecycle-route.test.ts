@@ -80,6 +80,7 @@ async function route(host: LifecycleHostAdapter, root: string, input: {
   pin?: boolean;
   operation?: 'update' | 'retire';
   requiredSemantics?: PackageSemanticInventory['requiredSemantics'];
+  invocationPolicies?: PackageSemanticInventory['invocationPolicies'];
 }): Promise<string> {
   seedInstall(root, input.locator ?? locator, '1.0.0');
   const version = await host.probeVersion(claudeTarget);
@@ -129,7 +130,7 @@ async function route(host: LifecycleHostAdapter, root: string, input: {
     });
     return decision.kind === 'selected' ? decision.route : decision.kind;
   }
-  const snapshot = updateSnapshot(root, attemptId, input.version, input.revision ?? '2'.repeat(40), 'update', input.requiredSemantics);
+  const snapshot = updateSnapshot(root, attemptId, input.version, input.revision ?? '2'.repeat(40), 'update', input.requiredSemantics, 'demo', input.invocationPolicies);
   const pins = createResolvedLifecyclePins(input.pin ? [{ server: 'fixture', executable: '/opt/bin/fixture' }] : []);
   const projection = await host.observeNativeProjection({
     targetObservation: observed,
@@ -185,6 +186,12 @@ describe('claude-code lifecycle route', () => {
     await withClaude(async root => {
       process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'] = binary(root, '2.1.296 (Claude Code)\n');
       expect(await route(createClaudeCodeLifecycleHost(), root, { attemptId: 'proven-296', version: '1.1.0' })).toBe('managed');
+      expect(await route(createClaudeCodeLifecycleHost(), root, { attemptId: 'model-control-296', version: '1.1.0', requiredSemantics: ['model-invocation-control'] })).toBe('managed');
+      const nativePolicy = { skill: 'skills/proof/SKILL.md', modelInvocable: false, userInvocable: true,
+        declarations: [{ dialect: 'claude-frontmatter', path: 'skills/proof/SKILL.md', field: 'disable-model-invocation', direction: 'model', allowed: false }] } as const;
+      expect(await route(createClaudeCodeLifecycleHost(), root, { attemptId: 'native-control-296', version: '1.1.0', requiredSemantics: ['model-invocation-control'], invocationPolicies: [{ ...nativePolicy, declarations: [...nativePolicy.declarations] }] })).toBe('managed');
+      expect(await route(createClaudeCodeLifecycleHost(), root, { attemptId: 'sidecar-control-296', version: '1.1.0', requiredSemantics: ['model-invocation-control'], invocationPolicies: [{ ...nativePolicy, declarations: [{ dialect: 'codex-sidecar', path: 'skills/proof/agents/openai.yaml', field: 'policy.allow_implicit_invocation', direction: 'model', allowed: false }] }] })).toBe('capability-gap');
+      expect(await route(createClaudeCodeLifecycleHost(), root, { attemptId: 'user-control-296', version: '1.1.0', requiredSemantics: ['user-invocation-control'] })).toBe('capability-gap');
       process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'] = binary(root, '2.1.297 (Claude Code)\n');
       expect(await route(createClaudeCodeLifecycleHost(), root, { attemptId: 'unproven-297', version: '1.1.0' })).toBe('capability-gap');
     });
@@ -751,6 +758,7 @@ function updateSnapshot(
   action: 'install' | 'update' = 'update',
   requiredSemantics: PackageSemanticInventory['requiredSemantics'] = [],
   packageName = 'demo',
+  invocationPolicies: PackageSemanticInventory['invocationPolicies'] = [],
 ) {
   const snapshotRoot = join(root, `snapshot-${attemptId}`);
   const packageRoot = join(snapshotRoot, 'packages', packageName);
@@ -762,7 +770,7 @@ function updateSnapshot(
     package: { name: packageName, version, fingerprint: packageFingerprint },
     components: { skills: [], mcp: [], hooks: [], commands: [], agents: [], resources: [], permissionsPreprocessing: [] },
     componentDefinitions: [],
-    invocationPolicies: [],
+    invocationPolicies,
     componentInvocationPolicies: [],
     autoUpdate: [],
     manifestPaths: [],

@@ -697,6 +697,15 @@ export function createClaudeCodeLifecycleHost(input?: {
       const decision = adapter.decideRoute(request);
       if (decision.kind !== 'selected') return decision;
       if (request.operation !== 'install' && request.operation !== 'update') return decision;
+      const policies = [...request.snapshot.inventory.invocationPolicies, ...request.snapshot.inventory.componentInvocationPolicies];
+      // Only native dashed frontmatter is proven. A Codex-only sidecar is inert here.
+      if (policies.some(policy => !policy.modelInvocable && !policy.declarations.some(declaration =>
+        declaration.dialect === 'claude-frontmatter' && declaration.field === 'disable-model-invocation' &&
+        declaration.direction === 'model' && declaration.allowed === false))) {
+        return selectLifecycleRoute(definition.id, definition.evidenceProfiles.map(profile => ({
+          ...profile, semantics: { ...profile.semantics, 'model-invocation-control': 'unsupported' },
+        })), request);
+      }
       if (!autoUpdateControlBlocked(request.nativeId)) return decision;
       return selectLifecycleRoute(definition.id, profilesWithoutAutoUpdate(definition.evidenceProfiles), request);
     },
@@ -971,11 +980,14 @@ function claudeProfile(
     operations,
     route,
     operationStatus: 'supported',
-    semantics: claudeSemantics(),
+    semantics: claudeSemantics(version),
     evidence: [
       'docs/hosts/claude-code.md',
       'docs/research/native-plugin-update-capabilities-2026-10-09.md',
-      ...(version === '2.1.296' ? ['docs/evidence/claude-code-2.1.296-native-20261013.json'] : []),
+      ...(version === '2.1.296' ? [
+        'docs/evidence/claude-code-2.1.296-native-20261013.json',
+        'docs/evidence/claude-code-2.1.296-invocation-20261013.json',
+      ] : []),
     ],
   });
 }
@@ -994,10 +1006,11 @@ const CLAUDE_PROJECTED_SEMANTICS = new Set<PackageSemantic>([
   'reversible-disable',
 ]);
 
-function claudeSemantics(): Record<PackageSemantic, CapabilityStatus> {
+function claudeSemantics(version: string): Record<PackageSemantic, CapabilityStatus> {
   return Object.fromEntries(PACKAGE_SEMANTICS.map((semantic) => [
     semantic,
-    CLAUDE_PROJECTED_SEMANTICS.has(semantic) ? 'supported' : 'unsupported',
+    CLAUDE_PROJECTED_SEMANTICS.has(semantic) ||
+      (version === '2.1.296' && semantic === 'model-invocation-control') ? 'supported' : 'unsupported',
   ])) as Record<PackageSemantic, CapabilityStatus>;
 }
 

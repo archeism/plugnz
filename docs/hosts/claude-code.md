@@ -103,3 +103,20 @@ Two exploratory native attempts were retained under `/tmp/plugnz-claude296-*`:
 `plugin details` inventories component directory names rather than descriptions
 or frontmatter aliases, so the final refresh probe changes the skill directory
 and verifies that changed native inventory.
+
+### Claude 2.1.296 user-only skills
+
+The exact 2.1.296 profile additionally supports `model-invocation-control`.
+The [native invocation receipt](../evidence/claude-code-2.1.296-invocation-20261013.json)
+binds the installed binary hash, native frontmatter-to-command mapping, and its
+unmodified Skill gate. Executing that extracted gate with settings set to on
+rejects autonomous invocation of `disable-model-invocation: true` with native
+error 4 while allowing explicit user invocation. This is a focused native
+consumer check, without a provider request; the separate native plugin loader
+probe proves the store route. `user-invocation-control` remains unsupported in
+this profile, and no broader release range is inferred.
+
+Run `node docs/evidence/claude-code-2.1.296-invocation-probe.mjs` to reproduce
+that exact installed-binary check. Admission requires a native dashed
+`disable-model-invocation` declaration for each restricted component; a
+Codex-only sidecar or unproven alias remains a visible capability gap.

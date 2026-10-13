@@ -1,0 +1,8 @@
+import {readFileSync,writeFileSync} from 'node:fs';import {createHash} from 'node:crypto';import vm from 'node:vm';
+const path='/Users/cfeng1/.bun/install/global/node_modules/@anthropic-ai/claude-code-darwin-arm64/claude';const bytes=readFileSync(path);const text=bytes.toString('utf8');const start=text.indexOf('function Ztt(e,n){');const end=text.indexOf('function bes(',start);const gate=text.slice(start,end);if(start<0||end<0)throw Error('gate not found');
+const context=vm.createContext({Ro:'Skill',vXe:()=> 'User must invoke explicitly.', $C:()=> 'on'});vm.runInContext(gate,context);
+const command={type:'prompt',name:'proof',disableModelInvocation:true};
+const model= context.Ztt(command,{commandName:'proof',userTypedThisTurn:false,isMainSession:false});const user=context.Ztt(command,{commandName:'proof',userTypedThisTurn:true,isMainSession:false});
+if(model.reason!=='disable_model_invocation'||model.errorCode!==4||user!==null)throw Error('invocation gate failed');
+const loaderMarkers=['let Wt=rXt(M["disable-model-invocation"])','disableModelInvocation:Wt,userInvocable:qt'];for(const s of loaderMarkers)if(!text.includes(s))throw Error('native parser marker missing');
+writeFileSync(new URL('./claude-code-2.1.296-invocation-20261013.json',import.meta.url),JSON.stringify({recordedAt:new Date().toISOString(),version:'2.1.296',binary:path,binarySha256:createHash('sha256').update(bytes).digest('hex'),method:'Execute unmodified native Skill gate extracted from installed binary in VM; external settings dependencies stubbed to on. Native parser mapping inspected separately.',gate,loaderMarkers,modelInvocation:model,userInvocation:user,scope:'model-invocation-control only; user-invocation-control remains unverified'},null,2)+'\n');
