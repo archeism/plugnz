@@ -314,3 +314,28 @@ describe('codex lifecycle', () => {
     });
   });
 });
+
+test('Codex refuses unprojected inline MCP and conflicting pointers before activation', async () => {
+  await withHostEnvAsync('codex', async home => {
+    const incoming = source({ 'resources/value.txt': 'accepted\n' });
+    await codexWriter.add(incoming.plugin, incoming.resolved);
+    const target = join(home, '.codex/plugins/cache/demo-market/demo-plugin/1.2.0');
+    const before = readFileSync(join(home, '.codex/config.toml'), 'utf8');
+    const servers = { probe: { command: '/usr/bin/true' } };
+    const cases = [
+      { files: { 'plugin.json': JSON.stringify({ name: 'demo-plugin', version: '1.2.0', mcpServers: servers }) }, diagnostic: 'inline manifest MCP projection is unverified' },
+      { files: { '.codex-plugin/plugin.json': JSON.stringify({ name: 'demo-plugin', mcpServers: './other.json' }),
+        'mcp.json': JSON.stringify({ mcpServers: servers }), 'other.json': JSON.stringify({ mcpServers: { foreign: { command: '/usr/bin/false' } } }) }, diagnostic: 'conflicting Codex canonical and native MCP' },
+      { files: { '.codex-plugin/plugin.json': JSON.stringify({ name: 'demo-plugin', mcpServers: { probe: servers.probe } }) }, diagnostic: 'native MCP pointer must name' },
+    ];
+    for (const candidate of cases) {
+      const changed = source(candidate.files);
+      let error: Error | undefined;
+      try { await codexWriter.add(changed.plugin, { ...changed.resolved, sourceUri: incoming.resolved.sourceUri }); }
+      catch (caught) { error = caught as Error; }
+      expect(error?.message).toContain(candidate.diagnostic);
+      expect(readFileSync(join(target, 'resources/value.txt'), 'utf8')).toBe('accepted\n');
+      expect(readFileSync(join(home, '.codex/config.toml'), 'utf8')).toBe(before);
+    }
+  });
+});

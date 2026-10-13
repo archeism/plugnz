@@ -316,6 +316,12 @@ function ensureNativeManifest(stage: string, fallbackName: string, fallbackVersi
   const native = join(stage, '.codex-plugin', 'plugin.json');
   const sourceManifest = readPluginManifest(stage);
   if (sourceManifest === undefined) throw new Error('Codex stage has no Agent Plugins manifest');
+  for (const path of ['plugin.json', '.plugin/plugin.json', '.claude-plugin/plugin.json']) {
+    const file = join(stage, path);
+    if (existsSync(file) && JSON.parse(readFileSync(file, 'utf8')).mcpServers !== undefined) {
+      throw new Error('Codex inline manifest MCP projection is unverified; use mcp.json or .mcp.json');
+    }
+  }
   const name = sourceManifest.name ?? fallbackName;
   const version = sourceManifest.version ?? fallbackVersion;
   const description = sourceManifest.description ?? `Plugin ${name}`;
@@ -330,10 +336,33 @@ function ensureNativeManifest(stage: string, fallbackName: string, fallbackVersi
       throw new Error(`unsupported Codex native skills pointer: ${String(overlay['skills'])}`);
     }
   }
+  const pointer = overlay['mcpServers'];
+  if (pointer !== undefined && (typeof pointer !== 'string' || !pointer.startsWith('./') || pointer.split('/').includes('..') || !existsSync(join(stage, pointer)))) {
+    throw new Error('Codex native MCP pointer must name an existing plugin-local file');
+  }
+  const mcpFiles = ['mcp.json', '.mcp.json', ...(typeof pointer === 'string' ? [pointer] : [])]
+    .map(path => join(stage, path)).filter(existsSync);
+  const declarations = mcpFiles.map(file => {
+    const value: unknown = JSON.parse(readFileSync(file, 'utf8'));
+    if (value === null || typeof value !== 'object' || Array.isArray(value) || !('mcpServers' in value)
+      || value.mcpServers === null || typeof value.mcpServers !== 'object' || Array.isArray(value.mcpServers)) {
+      throw new Error('Codex MCP declaration must contain a server object');
+    }
+    return mcpDeclarationIdentity(value.mcpServers);
+  });
+  if (declarations.some(value => value !== declarations[0])) throw new Error('conflicting Codex canonical and native MCP declarations');
   mkdirSync(dirname(native), { recursive: true });
   writeFileSync(native, JSON.stringify({ ...overlay, name, version, description, skills: overlay['skills'] ?? './skills/',
     ...(overlay['mcpServers'] === undefined && existsSync(join(stage, 'mcp.json')) && !existsSync(join(stage, '.mcp.json')) ? { mcpServers: './mcp.json' } : {}),
   }));
+}
+
+function mcpDeclarationIdentity(value: unknown): string {
+  if (Array.isArray(value)) return JSON.stringify(value.map(mcpDeclarationIdentity));
+  if (value !== null && typeof value === 'object') return JSON.stringify(Object.entries(value)
+    .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+    .map(([key, item]) => [key, mcpDeclarationIdentity(item)]));
+  return JSON.stringify(value) ?? 'null';
 }
 
 function assertManagedPath(root: string, target: string): void {

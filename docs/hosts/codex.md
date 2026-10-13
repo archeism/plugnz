@@ -99,3 +99,9 @@ then discovers the local server and its tool. Existing authored pointers stay
 intact. This proves wiring and native discovery, not third-party authentication.
 Agents and user-invocation suppression remain unsupported; declaring agent
 files still prevents full-package admission rather than silently dropping them.
+
+Inline manifest `mcpServers` remain unverified and are refused before activation.
+Native MCP pointers must name an existing file inside the plugin. When canonical
+and native MCP files coexist, their server objects must agree (JSON object key
+order and `$schema` do not affect comparison); conflicts refuse the candidate
+and preserve the previous installed bytes and user config.
