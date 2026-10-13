@@ -10,6 +10,8 @@ declare const performance: { now(): number };
  */
 
 declare module 'node:fs' {
+  export function watchFile(path: string, options: { interval: number }, listener: () => void): unknown;
+  export function unwatchFile(path: string, listener: () => void): void;
   export function existsSync(path: string): boolean;
   export function readFileSync(path: string, encoding: 'utf8'): string;
   export function readdirSync(path: string): string[];
