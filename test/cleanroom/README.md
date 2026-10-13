@@ -193,3 +193,28 @@ rm -rf "$HOOK_CLEANROOM_DIR/private"
 ```
 
 The original upstream key file is never changed. Images and redacted run evidence can be retained for reproduction.
+
+
+## Version-2 admission and regression smoke (no inference)
+
+`effects-smoke.py` exercises the public npm tarball via offline `npx` in the same five-harness image. Mount the tarball at `/input/plugnz.tgz`, this helper at `/input/effects-smoke.py`, and an owned writable evidence directory at `/evidence`. Reuse the UID-1000, read-only-root, capability-drop, writable `/work` and `/tmp` tmpfs flags above, with `--network none`:
+
+```sh
+python3 /input/effects-smoke.py --tarball /input/plugnz.tgz --out /evidence
+```
+
+It covers version-2 automatic target selection, required startup context, dry-run versus installed evidence, Pi settings order/byte preservation on update, mixed Codex success/OpenCode Stop-effect refusal, prior OpenCode preservation, no handler execution during installation, and manifest-symlink refusal. The native version queries may create native housekeeping/cache paths; the dry-run assertion checks active registration/configuration, not the absence of every directory.
+
+The deterministic native extension probes now author version-2 fixtures. They still exercise the real generated adapter and native tools against a bounded localhost protocol server:
+
+```sh
+python3 test/omp-hooks-native-probe.py --harness pi --pi-runtime /path/to/pi-package --evidence /new/evidence/pi
+python3 test/omp-hooks-native-probe.py --harness pi --pi-runtime /path/to/pi-package --structured --evidence /new/evidence/pi-structured
+python3 test/omp-hooks-native-probe.py --harness omp --omp-bin /path/to/omp --evidence /new/evidence/omp
+python3 test/native-hook-probe-opencode.py --repo /path/to/plugnz --runtime /path/to/opencode-package --bun /path/to/bun --out /new/evidence/opencode
+```
+
+Run these in a disposable container/home. Pi/OMP compile through Bun on `PATH`; OpenCode accepts an explicit Bun path and keeps its cache under the selected evidence directory. Unlike the paid live probes above, these use scripted model-protocol responses and do not evaluate a model's comprehension. Version-1 and version-2 generated wrapper contracts are both covered by the ordinary repository tests and plain-Node smoke.
+
+
+OpenCode performs its own `@opencode-ai/plugin` SDK dependency installation when creating a session, even when the hook plugin is a local file. For a fully offline probe, provision the exact official SDK version into an isolated directory with `npm install --ignore-scripts --no-audit --no-fund --prefix /path/to/seed @opencode-ai/plugin@1.19.0`, then pass `--dependency-seed /path/to/seed` to the OpenCode helper. It copies the real package/lock/modules into the fresh native config directory and records the lock hash. This seeds dependencies, not credentials, sessions, approvals, or hook results. The existing 64 MiB runtime-growth limit excludes the separately recorded setup footprint. A cold session whose dependency acquisition stalls is retained as a failed setup attempt, not counted as hook-delivery evidence.

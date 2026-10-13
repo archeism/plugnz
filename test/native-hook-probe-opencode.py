@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import resource
 import signal
+import shutil
 import socket
 import subprocess
 import threading
@@ -27,6 +28,7 @@ def main():
     parser.add_argument("--runtime", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--bun", default="/root/.bun/bin/bun")
+    parser.add_argument("--dependency-seed", type=Path, help="Preinstalled official SDK dependencies for an offline native session")
     args = parser.parse_args()
     root = args.out.resolve()
     root.mkdir(parents=True, exist_ok=False)
@@ -95,6 +97,15 @@ def main():
     provider_thread.start()
     config_dir = root / "config/opencode"
     config_dir.mkdir(parents=True)
+    if args.dependency_seed:
+        for name in ["package.json", "package-lock.json"]:
+            shutil.copy2(args.dependency_seed / name, config_dir / name)
+        shutil.copytree(args.dependency_seed / "node_modules", config_dir / "node_modules", symlinks=True)
+        save(root / "dependency-seed.json", {
+            "sdk": json.loads((config_dir / "node_modules/@opencode-ai/plugin/package.json").read_text())["version"],
+            "lock_sha256": hashlib.sha256((config_dir / "package-lock.json").read_bytes()).hexdigest(),
+            "purpose": "Official SDK bootstrap dependencies only; native runtime and hook consumer are unmodified",
+        })
     config = {"model": "boundary-probe/probe-model", "small_model": "boundary-probe/probe-model",
               "enabled_providers": ["boundary-probe"], "share": "disabled", "autoupdate": False,
               "plugin": [(root / "built/opencode/plugin.mjs").as_uri()],
@@ -157,7 +168,7 @@ def main():
                         "model": {"providerID": "boundary-probe", "modelID": "probe-model"},
                         "parts": [{"type": "text", "text": task + ": perform the controlled read"}]}, timeout=20)
                     save(root / (task.split("_")[0].lower() + "-answer.json"), answer)
-                    if allocated(root) > 64 * 1024 * 1024 or time.monotonic() - started > 55:
+                    if allocated(root) - before > 64 * 1024 * 1024 or time.monotonic() - started > 55:
                         raise RuntimeError("Native probe resource budget exceeded")
                 idle_deadline = min(time.monotonic() + 3, operation_deadline)
                 while time.monotonic() < idle_deadline:
@@ -207,7 +218,7 @@ def main():
             check_socket.settimeout(1)
             native_listener_closed = check_socket.connect_ex(("127.0.0.1", port)) != 0
         summary = {"hook_config_version": 2, "status": status, "elapsed_seconds": round(time.monotonic() - started, 3),
-                   "allocated_growth_bytes": allocated(root) - before, "model_request_count": len(requests),
+                   "allocated_growth_bytes": allocated(root) - before, "setup_allocated_bytes": before, "model_request_count": len(requests),
                    "fake_model_usage_only": True, "sessions": sessions, "fixture_errors": fixture_errors,
                    "child_maxrss_kib": resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss,
                    "cleanup": {"native_process_exited": process_exited, "native_process_group_absent": process_group_absent,
