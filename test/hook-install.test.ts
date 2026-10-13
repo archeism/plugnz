@@ -451,3 +451,20 @@ test('v2 checks-only OpenCode stop remains installable and installation never in
   success(['install', '--target', 'opencode']);
   expect(existsSync(marker)).toBe(false);
 });
+
+for (const id of ['pi', 'opencode']) {
+  test(id + ' bare-name update survives a mixed native install ledger', () => {
+    const native = target(id); target('codex');
+    v2('session.start', { context: true });
+    success(['install', '--target', id, '--target', 'codex']);
+    const installed = installedRoot(native);
+    expect(JSON.parse(readFileSync(join(home, 'state.json'), 'utf8')).version).toBe(2);
+    writeFileSync(join(source, 'context.mjs'), 'console.log(JSON.stringify({context:"mixed-update"}));\n');
+    success(['update', 'automatic-hooks', '--target', id]);
+    expect(readFileSync(join(installed, 'context.mjs'), 'utf8')).toContain('mixed-update');
+    const before = fingerprintTree(native);
+    const unrelated = cli(['update', 'unrelated-hooks', '--target', id]);
+    expect(unrelated.status).toBe(1);
+    expect(fingerprintTree(native)).toBe(before);
+  }, 30_000);
+}

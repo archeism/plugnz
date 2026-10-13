@@ -35,6 +35,16 @@ export function writeState(records: InstallRecord[], file: string = stateFile())
   atomicWrite(file, JSON.stringify({ version: 1, installs: records }, null, 2));
 }
 
+/** Preserve the ledger version when a verified writer records one install/update. */
+export function writeInstallLedger(records: InstallRecord[], changed: InstallRecord, binding: SourceBinding): void {
+  const loaded = readLifecycleState();
+  if (loaded.sourceVersion !== 2) {
+    writeState(records);
+    return;
+  }
+  writeLifecycleState(withLegacyWriterRecord(loaded.state, changed, binding), { globalPreflight: 'succeeded' });
+}
+
 /**
  * Record one writer install on an existing v2 ledger. The activation stays
  * legacy-unverified, so a writer-only host can join a planner ledger without

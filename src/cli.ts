@@ -12,7 +12,7 @@ import { parseSyncManifest, SyncManifestValidationError } from './sync-manifest'
 import { readLifecycleState, readState, type LifecycleStateV2 } from './state';
 import { pendingLifecycleOperations } from './pending-lifecycle';
 import { retirementTombstone } from './owned-activation';
-import { withLegacyWriterRecord, writeLifecycleState, writeState } from './state-write';
+import { withLegacyWriterRecord, writeInstallLedger, writeLifecycleState, writeState } from './state-write';
 import type { InstallRecord } from './state';
 import { runPin } from './pin';
 import { runUpdate, type UpdateFinding } from './update';
@@ -909,14 +909,6 @@ async function runPlannerAdd(source: string, binding: SourceBinding, targets: re
   });
 }
 
-function writeInstallLedger(records: InstallRecord[], changed: InstallRecord, binding: SourceBinding): void {
-  const loaded = readLifecycleState();
-  if (loaded.sourceVersion !== 2) {
-    writeState(records);
-    return;
-  }
-  writeLifecycleState(withLegacyWriterRecord(loaded.state, changed, binding), { globalPreflight: 'succeeded' });
-}
 
 async function runWriterAdd(
   source: string,
@@ -1246,7 +1238,11 @@ async function runRecordedLifecycleUpdate(flags: VerbFlags, state: LifecycleStat
   const matches = state.activations.flatMap((activation) => {
     const scope = scopes.get(activation.scopeId);
     if (scope === undefined || scope.target.instance !== 'default' || !kinds.has(scope.target.kind)) return [];
-    if (requested !== undefined && requested !== activation.packageId && requested !== activation.nativeId) return [];
+    const writer = present.selected.find(candidate => candidate.id === scope.target.kind)!;
+    // A mixed install can promote writer-only rows into the v2 ledger with
+    // packageId equal to name@marketplace. Use the same conservative selector
+    // as the writer path, then let that path perform identity/ownership checks.
+    if (!requestedPersistedIdentityMatches(writer, activation.packageId, activation.nativeId, requested)) return [];
     return [{ scope, packageId: activation.packageId }];
   });
   const plannerMatches = matches.filter((match) => plannerKinds.has(match.scope.target.kind));

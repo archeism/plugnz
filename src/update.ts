@@ -19,9 +19,9 @@
 import type { HostWriter, InstalledPlugin } from './host';
 import type { Mark } from './doctor';
 import { writers as allWriters } from './hosts/writers';
-import { resolveSource, type PluginSource } from './source';
+import { resolveSource, type PluginSource, type SourceBinding } from './source';
 import { readState, type InstallRecord } from './state';
-import { writeState } from './state-write';
+import { writeInstallLedger } from './state-write';
 import { fingerprintInstallation } from './fingerprint';
 import { CompatibilityError, compatibilityEvidenceId } from './compatibility';
 import type { LifecycleActivationState, LifecycleResourceState, LifecycleTerminalPhase } from './lifecycle-report';
@@ -108,7 +108,10 @@ function shortSha(sha: string): string {
 export async function runUpdate(name?: string, options: UpdateOptions = {}): Promise<UpdateResult> {
   const hosts = options.writers ?? allWriters;
   let state = options.state ?? readState();
-  const save = options.writeState ?? writeState;
+  const save = (records: InstallRecord[], changed: InstallRecord, binding: SourceBinding): void => {
+    if (options.writeState !== undefined) options.writeState(records);
+    else writeInstallLedger(records, changed, binding);
+  };
   const prefix = options.dryRun === true ? '[dry-run] ' : '';
   const findings: UpdateFinding[] = [];
   let mutationStarted = false;
@@ -246,7 +249,7 @@ export async function runUpdate(name?: string, options: UpdateOptions = {}): Pro
         const pending = { ...record, pending: 'install' as const };
         record = pending;
         const next = state.map((candidate) => candidate === persistedRecord ? pending : candidate);
-        save(next);
+        save(next, pending, resolved.snapshot.binding);
         state = next;
         recordMutationStarted = true;
         mutationStarted = true;
@@ -336,7 +339,7 @@ export async function runUpdate(name?: string, options: UpdateOptions = {}): Pro
     delete finalized.pending;
     const next = state.map((candidate) => candidate === record ? finalized : candidate);
     try {
-      save(next);
+      save(next, finalized, resolved.snapshot.binding);
     } catch (error) {
       findings.push(findingFor(record, {
         mark: '✗',
