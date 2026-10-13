@@ -352,3 +352,25 @@ for (const failingRoute of ['writer', 'planner'] as const) {
     }
   }
 }
+
+
+for (const position of ['first', 'middle'] as const) {
+  test('Pi update preserves extension order and exact settings bytes: ' + position, () => {
+    const native = target('pi');
+    success(['install', source, '--target', 'pi']);
+    const installed = installedRoot(native);
+    const entry = join(installed, 'extension.mjs');
+    const extensions = position === 'first' ? [entry, '/other/after.mjs'] : ['/other/before.mjs', entry, '/other/after.mjs'];
+    const settings = join(native, 'settings.json');
+    const raw = JSON.stringify({ theme: 'dark', extensions }, null, '\t') + '\n\n';
+    writeFileSync(settings, raw);
+    writeFileSync(join(source, 'context.mjs'), 'console.log(JSON.stringify({context:"updated-context"}));\n');
+    success(['update', 'automatic-hooks', '--target', 'pi']);
+    expect(readFileSync(join(installed, 'context.mjs'), 'utf8')).toContain('updated-context');
+    expect(JSON.parse(readFileSync(settings, 'utf8')).extensions).toEqual(extensions);
+    expect(readFileSync(settings, 'utf8')).toBe(raw);
+    success(['remove', 'automatic-hooks', '--target', 'pi']);
+    expect(JSON.parse(readFileSync(settings, 'utf8'))).toEqual({ theme: 'dark', extensions: extensions.filter(item => item !== entry) });
+    expect(existsSync(installed)).toBe(false);
+  }, 30_000);
+}

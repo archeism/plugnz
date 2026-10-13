@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MAX_HOOK_OUTPUT_BYTES, runHooks, validateHookConfig, validateHookInput, type HookConfig, type HookEvent, type HookInput } from '../src/hooks';
+import { MAX_HOOK_OUTPUT_BYTES, readHookConfig, runHooks, validateHookConfig, validateHookInput, type HookConfig, type HookEvent, type HookInput } from '../src/hooks';
 
 let root: string;
 beforeEach(() => { root = mkdtempSync(join(tmpdir(), 'plugnz-hooks-')); });
@@ -121,4 +121,21 @@ describe('portable hook contract', () => {
     expect(await failure(() => runHooks(hookConfig, input(), root))).toContain('handler exited 4');
     expect(await failure(() => readFileSync(marker, 'utf8'))).toContain('ENOENT');
   });
+});
+
+
+describe('portable manifest file boundary', () => {
+  test('only a missing manifest is optional', () => {
+    expect(readHookConfig(root)).toBeUndefined();
+    mkdirSync(join(root, 'plugnz.hooks.json'));
+    expect(() => readHookConfig(root)).toThrow('regular file');
+  });
+  for (const dangling of [false, true]) {
+    test('rejects a ' + (dangling ? 'dangling' : 'readable') + ' manifest symlink', () => {
+      const outside = join(root, 'external.json');
+      if (!dangling) writeFileSync(outside, JSON.stringify({ version: 1, hooks: {} }));
+      symlinkSync(outside, join(root, 'plugnz.hooks.json'));
+      expect(() => readHookConfig(root)).toThrow('symlinks are unsupported');
+    });
+  }
 });

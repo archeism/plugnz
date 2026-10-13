@@ -156,9 +156,11 @@ function nextRegistration(registration: HookRegistration, raw: string | undefine
   if (registration.kind === 'module') return enabled ? registration.content : undefined;
   const value = registrationDocument(registration, raw);
   const previous = (value[registration.field] as string[] | undefined) ?? [];
-  const entries = previous.filter(entry => entry !== registration.entry);
-  if (enabled) entries.push(registration.entry);
-  if (entries.length === 0 && !Object.hasOwn(value, registration.field) && !enabled) return raw;
+  // Updating package bytes must not move an existing extension in load order or
+  // rewrite unrelated settings. Removal still deletes every owned occurrence.
+  const present = previous.includes(registration.entry);
+  if (enabled === present) return raw;
+  const entries = enabled ? [...previous, registration.entry] : previous.filter(entry => entry !== registration.entry);
   value[registration.field] = entries;
   return JSON.stringify(value, null, 2) + '\n';
 }

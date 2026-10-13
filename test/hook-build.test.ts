@@ -112,3 +112,22 @@ test('refuses a dangling symlink at a reserved generated path', () => {
   expect(existsSync(outside)).toBe(false);
   expect(existsSync(join(stage, 'wrapper.mjs'))).toBe(false);
 });
+
+
+for (const dangling of [false, true]) {
+  test('manifest symlink cannot bypass public hooks build (' + String(dangling) + ')', () => {
+    const outside = join(root, 'external-hooks.json');
+    const manifest = join(source, 'plugnz.hooks.json');
+    const original = readFileSync(manifest, 'utf8');
+    if (!dangling) writeFileSync(outside, original);
+    rmSync(manifest); symlinkSync(outside, manifest);
+    const out = join(root, 'refused-output');
+    const result = cli(['hooks', 'build', source, '--target', 'claude-code', '--target', 'pi', '--out', out]);
+    expect(result.status === 0).toBe(false);
+    expect(result.stderr).toContain('symlinks are unsupported');
+    expect(existsSync(out)).toBe(false);
+    expect(readdirSync(root).some(name => name.startsWith('.plugnz-hooks-build-'))).toBe(false);
+    expect(existsSync(outside)).toBe(!dangling);
+    if (!dangling) expect(readFileSync(outside, 'utf8')).toBe(original);
+  });
+}

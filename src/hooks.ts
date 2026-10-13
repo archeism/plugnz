@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { lstatSync, readFileSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 
 export const HOOK_EVENTS = ['session.start', 'turn.stop', 'tool.before', 'tool.after'] as const;
@@ -99,7 +99,14 @@ export function validateHookConfig(value: unknown): HookConfig {
 
 export function readHookConfig(pluginRoot: string): HookConfig | undefined {
   const path = join(pluginRoot, HOOK_CONFIG_FILE);
-  if (!existsSync(path)) return undefined;
+  let stat: ReturnType<typeof lstatSync>;
+  try { stat = lstatSync(path); }
+  catch (error) {
+    if ((error as { code?: string }).code === 'ENOENT') return undefined;
+    throw error;
+  }
+  if (stat.isSymbolicLink()) throw new Error('Hook source symlinks are unsupported: ' + path);
+  if (!stat.isFile()) throw new Error('Hook manifest must be a regular file: ' + path);
   let value: unknown;
   try { value = JSON.parse(readFileSync(path, 'utf8')); }
   catch (error) { throw new Error('Cannot read ' + HOOK_CONFIG_FILE + ': ' + (error as Error).message); }
