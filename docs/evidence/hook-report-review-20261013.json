@@ -1,0 +1,62 @@
+{
+  "commit": "e96f81ff6993cb61082ba9cf7cc8ed2fd47574a2",
+  "source_archive_sha256": "4fae9522cd19f0013ff84ca5194fab76e0b2ec4f0f8f9089e8504e27e27cc9c0",
+  "status": "passed",
+  "runs": [
+    {
+      "name": "check",
+      "exit_code": 0,
+      "seconds": 0.42,
+      "log_sha256": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92",
+      "summary": [
+        "$ tsc --noEmit"
+      ]
+    },
+    {
+      "name": "tests",
+      "exit_code": 0,
+      "seconds": 217.647,
+      "log_sha256": "8e00af6d1676c661c7f7b8d7b739b7fdd6d6617660410156edb50e95cf396611",
+      "summary": [
+        "(skip) current Hermes loader registers ordinary discovery and queues a prompt command into CLI input",
+        "(skip) public CLI admits official editable and native forwarder launchers without source or venv writes",
+        "(skip) real Grok loader reads a local bundle from an isolated home and empty cwd",
+        "(skip) codex lifecycle > keeps the new active slot when cleanup of an older owned version fails",
+        "",
+        " 1067 pass",
+        " 6 skip",
+        " 0 fail",
+        " 7595 expect() calls",
+        "Ran 1073 tests across 101 files. [217.58s]"
+      ]
+    },
+    {
+      "name": "build",
+      "exit_code": 0,
+      "seconds": 0.115,
+      "log_sha256": "71873ad1b86155692edd60d120d0c26972f496eefc819fbce870518ac21e3aec",
+      "summary": [
+        "$ bun scripts/build.mjs",
+        "dist/plugnz.mjs 1544 KiB"
+      ]
+    }
+  ],
+  "isolated_uid": 65534,
+  "bun": "1.4.3",
+  "node": "22.23.1",
+  "workspace_cleaned": true,
+  "bundle_hashes": {
+    "plugnz.mjs": "4a742041418405da71770fda10489c0695ff93eeba7ad4661e9df643333db42d",
+    "hook-runtime.mjs": "cf673f114dd18ba382d50a5f38eebe1163c2f0e844b5106ab087a20bcba1682c"
+  },
+  "review_date": "2026-10-13",
+  "fix_commit": "f3806705e12eaec2686d90adf21ddf8c2893b4c9",
+  "reviewed_hook_release": "38c4e35d4c8def996d038cbf4c23519295d9c448",
+  "concurrent_main_preserved": "d6d97ed2abb266d6e62a70b9314b0a0fadeb7558",
+  "new_regressions": 17,
+  "baseline_failure": "LifecycleReportValidationError: summary changed flag contradicts its outcomes",
+  "baseline_red_log_sha256": "8db6be8a0b734989e1f6abec70f4f588a08122a7db84cd5a0debb4708aa9179d",
+  "focused_green_log_sha256": "16d6386de747c0fd53d79ba69293074e556681c59fa886621804bafd35b4d608",
+  "focused_result": "55 passed, zero failures",
+  "model_calls": 0
+}
