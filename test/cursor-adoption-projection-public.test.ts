@@ -97,7 +97,7 @@ test('Cursor read-only adoption proof matches public command/pin projection and 
       }
       noWriteRefusal({ ...request, source: { ...request.source, binding: { kind: 'local', locator: harness.root } } }, 'Source or target');
       noWriteRefusal({ ...request, pins: [] }, 'resolved pins');
-      noWriteRefusal({ ...request, pins: [{ server: 'server', executable: '/bin/false' }] }, 'native payload');
+      noWriteRefusal({ ...request, pins: [{ server: 'server', executable: process.execPath }] }, 'native payload');
       noWriteRefusal({ ...request, snapshot: createFrozenPackageSnapshot({ ...snapshot, collectionName: 'foreign' }) }, 'legacy alias');
       const markerPath = join(root, '.plgnz-install.json'), markerBytes = readFileSync(markerPath, 'utf8');
       const marker = JSON.parse(markerBytes) as { source: string; pluginId: string; fingerprint: string };

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { spawn, spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, linkSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, linkSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 const BUN = process.env.OPEN_PLUGIN_TEST_LEASE_BUN || process.execPath;
 const NODE = process.env.OPEN_PLUGIN_TEST_LEASE_NODE || 'node';
@@ -21,7 +21,7 @@ function launch(runtime, artifact, lease, protectedFile, mode) {
   return { child, first, exit, rows: () => stdout.trim().split('\n').map(line => JSON.parse(line)) };
 }
 async function fixture(callback) {
-  const root = mkdtempSync('/tmp/plugnz-sqlite-lease-'); chmodSync(root, 0o700);
+  const root = realpathSync(mkdtempSync('/tmp/plugnz-sqlite-lease-')); chmodSync(root, 0o700);
   const artifact = join(root, 'helper.mjs'), lease = join(root, 'lease.sqlite'), protectedFile = join(root, 'protected.txt');
   try {
     const built = spawnSync(BUN, ['build', resolve(import.meta.dirname, '../src/sqlite-file-lease.ts'), '--target=node', '--outfile', artifact], { encoding: 'utf8' });

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, watch, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, watchFile, unwatchFile, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { withLifecycleCliHarness, bytesToText } from './lifecycle-cli-harness';
@@ -324,21 +324,25 @@ for (const action of ['accepted-install', 'install', 'disable', 'retire'] as con
       const args = action === 'retire' ? ['retire-source', scopeId!, '--target', 'dcode', '--json'] : ['sync', source, '--target', 'dcode', '--json'];
       let killed = false, interruptedId: string | undefined;
       let child: { kill(signal: string): void; on(event: 'exit', callback: () => void): void; on(event: 'error', callback: (error: Error) => void): void };
-      const watcher = watch(harness.home, (_event, name) => {
-        if (name !== 'state.json' || killed) return;
+      const stateFile = join(harness.home, 'state.json');
+      // Directory watch events may coalesce all atomic replaces on macOS. Poll
+      // the state inode so the durable applying boundary remains observable.
+      const observeState = () => {
+        if (killed || !existsSync(stateFile)) return;
         const state = JSON.parse(readFileSync(join(harness.home, 'state.json'), 'utf8'));
         const attempt = state.attempts.at(-1);
         if (attempt?.journal[0]?.state !== (action === 'accepted-install' ? 'pending' : 'applying')) return;
         if (action === 'accepted-install' && attempt.journal[0].sealedOperation !== undefined) return;
         interruptedId = attempt.id; killed = true;
         child.kill('SIGSTOP'); child.kill('SIGKILL');
-      });
+      };
+      watchFile(stateFile, { interval: 1 }, observeState);
       try {
         const executable = process.env['OPEN_PLUGIN_TEST_PACKED_NODE'] || process.execPath;
         const cli = join(repoRoot, process.env['OPEN_PLUGIN_TEST_PACKED_NODE'] ? 'dist/plugnz.mjs' : 'bin/plugnz.mjs');
         child = spawn(executable, [cli, ...args], { cwd: harness.root, env: { ...process.env, ...env, HOME: harness.home, OPEN_PLUGIN_HOME: harness.home, OPEN_PLUGIN_DCODE_ROOT: join(harness.home, '.deepagents') }, stdio: 'ignore' }) as unknown as typeof child;
         await new Promise<void>((resolve, reject) => { child.on('exit', resolve); child.on('error', reject); });
-      } finally { watcher.close(); }
+      } finally { unwatchFile(stateFile, observeState); }
       expect(killed).toBe(true);
       const interrupted = JSON.parse(readFileSync(join(harness.home, 'state.json'), 'utf8'));
       const interruptedJournal = interrupted.attempts.find((attempt: { id: string }) => attempt.id === interruptedId).journal[0];
