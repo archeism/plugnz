@@ -322,7 +322,7 @@ test('Codex refuses unprojected inline MCP and conflicting pointers before activ
     const target = join(home, '.codex/plugins/cache/demo-market/demo-plugin/1.2.0');
     const before = readFileSync(join(home, '.codex/config.toml'), 'utf8');
     const servers = { probe: { command: '/usr/bin/true' } };
-    const cases = [
+    const cases: { files: Record<string, string>; diagnostic: string }[] = [
       { files: { 'plugin.json': JSON.stringify({ name: 'demo-plugin', version: '1.2.0', mcpServers: servers }) }, diagnostic: 'inline manifest MCP projection is unverified' },
       { files: { '.codex-plugin/plugin.json': JSON.stringify({ name: 'demo-plugin', mcpServers: './other.json' }),
         'mcp.json': JSON.stringify({ mcpServers: servers }), 'other.json': JSON.stringify({ mcpServers: { foreign: { command: '/usr/bin/false' } } }) }, diagnostic: 'conflicting Codex canonical and native MCP' },
