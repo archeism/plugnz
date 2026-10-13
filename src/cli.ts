@@ -4,6 +4,7 @@ import { hosts } from './hosts';
 import { cleanupWriters, writers } from './hosts/writers';
 import { resolveSource, sourceBindingForArgument, type PluginSource, type SourceBinding } from './source';
 import { runFrozenLifecycle } from './lifecycle-command';
+import { mergeAddReports } from './add-report';
 import { createLifecyclePlannerHosts, lifecyclePlannerHostKinds } from './lifecycle-hosts';
 import { isScopeId, projectScopeInventory, renderScopeInventory, sameSourceBinding } from './scope-inventory';
 import { parseSyncManifest, SyncManifestValidationError } from './sync-manifest';
@@ -1128,32 +1129,6 @@ async function runWriterAdd(
     mutationStarted,
     reason: failure,
     sourceSnapshots,
-  });
-}
-
-function mergeAddReports(reports: readonly LifecycleReport[]): LifecycleReport {
-  const snapshots = new Map<string, LifecycleSourceSnapshotContext>();
-  for (const report of reports) {
-    for (const snapshot of report.command.sourceSnapshots) snapshots.set(snapshot.id, snapshot);
-  }
-  const failure = reports.find((report) => report.summary.result !== 'converged') ?? null;
-  return parseLifecycleReport({
-    schemaVersion: 1,
-    command: { name: 'add', dryRun: reports.some((report) => report.command.dryRun), sourceSnapshots: [...snapshots.values()] },
-    plan: reports.flatMap((report) => report.plan),
-    outcomes: reports.flatMap((report) => report.outcomes),
-    summary: failure === null
-      ? {
-        result: 'converged',
-        terminalPhase: 'complete',
-        mutationStarted: reports.some((report) => report.summary.mutationStarted),
-        changed: reports.some((report) => report.summary.changed),
-        failureCategory: null,
-        reason: null,
-        recoveryId: null,
-        readbackId: null,
-      }
-      : failure.summary,
   });
 }
 

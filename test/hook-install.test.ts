@@ -8,6 +8,7 @@ import { inventoryPackageSemantics } from '../src/semantic-inventory';
 import { admitPackageSemanticsFromProfiles } from '../src/capability-evidence';
 import { portableHookProfile } from '../src/portable-hook-policy';
 import { fingerprintTree } from '../src/fingerprint';
+import { parseLifecycleReport } from '../src/lifecycle-report';
 import { repoRoot, isolatedHostEnv, writeFiles } from './util';
 import { nativeFixture } from './fixtures/historical-plugnz-75d/runtime';
 
@@ -312,4 +313,42 @@ for (const id of ['omp', 'pi', 'opencode']) {
     expect(existsSync(native)).toBe(false);
     expect(existsSync(join(home, 'state.json'))).toBe(false);
   });
+}
+
+// Independent target scopes may succeed even when another target refuses.
+// Their combined report must describe the actual partial result, not throw.
+for (const failingRoute of ['writer', 'planner'] as const) {
+  for (const dryRun of [false, true]) {
+    for (const verb of ['install', 'add']) {
+      test(`${verb} reports a ${failingRoute} refusal alongside another route (${dryRun ? 'dry' : 'applied'})`, () => {
+        const piNative = target('pi'), codexNative = target('codex');
+        if (failingRoute === 'writer') {
+          writeFileSync(join(piNative, 'settings.json'), JSON.stringify({ extensions: 'invalid-array' }));
+        } else {
+          writeFiles(source, { 'hooks/plugnz-codex.mjs': '// Authored file collides with generated wrapper.\n' });
+        }
+        const piBefore = fingerprintTree(piNative), codexBefore = fingerprintTree(codexNative);
+        const result = cli([verb, source, '--target', 'pi', '--target', 'codex', ...(dryRun ? ['--dry-run'] : [])]);
+        expect(result.status).toBe(1);
+        if (!result.stdout.trim()) throw new Error('Empty CLI report: ' + result.stderr);
+        const report = parseLifecycleReport(JSON.parse(result.stdout));
+        expect(report.summary.result).toBe('incomplete');
+        expect(report.summary.mutationStarted).toBe(!dryRun);
+        expect(report.summary.changed).toBe(!dryRun);
+        expect(report.summary.terminalPhase).toBe(dryRun ? 'preflight' : 'apply');
+        expect(report.plan).toHaveLength(failingRoute === 'writer' ? 2 : 1);
+        const failed = failingRoute === 'writer' ? 'pi' : 'codex';
+        const succeeded = failingRoute === 'writer' ? 'codex' : 'pi';
+        if (failingRoute === 'writer') expect(report.outcomes.find(row => row.scope.target.kind === failed)?.result).toBe('failed');
+        else expect(report.summary.reason?.diagnostic).toContain('authored hook artifact');
+        expect(report.outcomes.find(row => row.scope.target.kind === succeeded)?.result).toBe('succeeded');
+        expect(report.outcomes.find(row => row.scope.target.kind === succeeded)?.changed).toBe(!dryRun);
+        if (dryRun || failed === 'pi') expect(fingerprintTree(piNative)).toBe(piBefore);
+        else expect(fingerprintTree(piNative) === piBefore).toBe(false);
+        if (dryRun || failed === 'codex') expect(fingerprintTree(codexNative)).toBe(codexBefore);
+        else expect(fingerprintTree(codexNative) === codexBefore).toBe(false);
+        expect(existsSync(join(home, 'state.json'))).toBe(!dryRun);
+      }, 30_000);
+    }
+  }
 }
