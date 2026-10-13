@@ -250,24 +250,24 @@ const supportedSemantics = new Set<PackageSemantic>([
   'ordinary-skills', 'mcp', 'commands', 'model-invocation-control', 'auto-update-control', 'resources',
   'retirement', 'retention-safety', 'readback', 'rollback', 'activation-reload', 'reversible-disable',
 ]);
-const ompManagedProfile = createCapabilityEvidenceProfile({
+const ompManagedProfiles = ['18.1.4', '18.10.3'].map(detectedVersion => createCapabilityEvidenceProfile({
   host: 'omp',
-  detectedVersion: '18.1.4',
+  detectedVersion,
   sourceTypes: ['local', 'git'],
   operations: ['install', 'update', 'disable', 'retire'],
   route: 'managed',
   operationStatus: 'supported',
   semantics: Object.fromEntries(PACKAGE_SEMANTICS.map((semantic) => [semantic, supportedSemantics.has(semantic) ? 'supported' : 'unsupported'])) as Record<PackageSemantic, CapabilityStatus>,
   evidence: [
-    'docs/evidence/omp-native-extension-package-20260923.json',
+    detectedVersion === '18.10.3' ? 'docs/evidence/omp-native-extension-package-20261013.json' : 'docs/evidence/omp-native-extension-package-20260923.json',
     'docs/hosts/omp.md',
     'docs/research/native-plugin-update-capabilities-2026-10-09.md',
   ],
-});
+}));
 
 const ompLifecycleDefinition: LifecycleHostDefinition = {
   id: 'omp',
-  evidenceProfiles: [ompManagedProfile, portableHookProfile(portableHookAdapter, 'managed', ['install', 'update', 'disable', 'retire'])],
+  evidenceProfiles: [...ompManagedProfiles, portableHookProfile(portableHookAdapter, 'managed', ['install', 'update', 'disable', 'retire'])],
   probeVersion: (target) => probeOmpVersion(target),
   observeTarget: (target) => observeInventory(target),
   observeNativeMutationScope: (request) => Promise.resolve(ompUpgradeMutationScope(unprovenCandidate(request.nativeId), request.nativeId)),

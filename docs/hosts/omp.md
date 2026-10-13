@@ -125,3 +125,19 @@ default `pin` target. Rationale: `docs/pin-and-update.md`.
   any yet.
 - omp's own user-level/session MCP config location (if any) is unverified;
   see the reader-decision above before wiring one in.
+
+## OMP 18.10.3 admission (2026-10-13)
+
+The same native extension-package route was reproduced with the installed
+18.10.3 native loader in an isolated HOME and empty cwd. The opt-in test now
+accepts `OMP_SOURCE` so the source under test is explicit. Its direct-writer
+mode tests the managed writer and actual native discovery without conflating
+that evidence with public CLI planner admission. All 21 assertions passed,
+including manual-only exclusion, namespaced commands, argument expansion,
+same-version refresh, failed projection preservation and removal. Focused
+writer/adapter tests separately exercise transactional rollback and readback.
+After canonical source identity repair, the complete public CLI probe also passed
+all 21 assertions (6.19s), including add, refresh, refusal preservation and removal.
+Exact releases 18.1.4 and 18.10.3 are admitted; no intervening/future-version
+compatibility interval is inferred. See
+[`evidence/omp-native-extension-package-20261013.json`](../evidence/omp-native-extension-package-20261013.json).

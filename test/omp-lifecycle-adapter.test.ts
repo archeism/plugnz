@@ -16,6 +16,7 @@ import type { PackageSemanticInventory } from '../src/semantic-inventory';
 import { emptyInventory } from './lifecycle-fixtures';
 import { writeFiles } from './util';
 
+const testedVersion = process.env['OMP_TEST_VERSION'] ?? '18.1.4';
 const target = { kind: 'omp', instance: 'default' } as const;
 const packageName = 'demo-plugin';
 const nativeId = 'demo-plugin@personal';
@@ -225,7 +226,7 @@ async function isolated(run: (root: string) => Promise<void>): Promise<void> {
   const previousFailure = process.env['OPEN_PLUGIN_TEST_OMP_ACTIVATION_FAILURE'];
   process.env['OPEN_PLUGIN_OMP_ROOT'] = join(root, '.omp');
   const binary = join(root, 'omp');
-  writeFileSync(binary, '#!/bin/sh\nprintf "18.1.4\\n"\n');
+  writeFileSync(binary, `#!/bin/sh\nprintf "${testedVersion}\\n"\n`);
   chmodSync(binary, 0o755);
   process.env['OPEN_PLUGIN_OMP_BIN'] = binary;
   try {
@@ -243,7 +244,7 @@ async function isolated(run: (root: string) => Promise<void>): Promise<void> {
 
 describe('OMP managed extension-package lifecycle', () => {
   test('installs through the managed route and leaves a repeated install unchanged', async () => isolated(async (root) => {
-    expect(await ompLifecycle.probeVersion(target)).toEqual({ kind: 'detected', version: '18.1.4', probeId: 'omp:18.1.4' });
+    expect(await ompLifecycle.probeVersion(target)).toEqual({ kind: 'detected', version: testedVersion, probeId: `omp:${testedVersion}` });
     const prepared = await sealInstall(root, {
       operationId: 'install-demo', attemptId: 'attempt-install', version: '1.2.0', revision: 'local-install', resource: 'one\n',
       authorization: 'planned-create',

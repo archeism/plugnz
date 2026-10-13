@@ -1,0 +1,54 @@
+{
+  "date": "2026-10-13",
+  "host": {
+    "binary": "/Users/cfeng1/.bun/bin/omp",
+    "version": "18.10.3",
+    "source": "/Users/cfeng1/.bun/install/global/node_modules/@oh-my-pi/pi-coding-agent/src"
+  },
+  "question": "Does exact OMP18.10.3 preserve the existing managed native extension-package loader and transactional lifecycle?",
+  "native_loader": {
+    "command": "OMP_NATIVE_LOADER=1 OMP_NATIVE_DIRECT_WRITER=1 OMP_BIN=/Users/cfeng1/.bun/bin/omp OMP_SOURCE=/Users/cfeng1/.bun/install/global/node_modules/@oh-my-pi/pi-coding-agent/src bun test test/omp-native-loader.test.ts",
+    "result": "1 pass, 21 assertions, 1.51s",
+    "mode": "isolated direct managed writer plus installed real native discovery; no model request; temporary HOME and empty cwd; temporary probe removed",
+    "observed": [
+      "ordinary skills discovered",
+      "manual-only and sidecar-only skills excluded from automatic discovery",
+      "namespaced slash commands discovered",
+      "native argument expansion and private resource root preserved",
+      "unchanged re-add",
+      "same-version resource refresh",
+      "failed unsupported projection preserves native command discovery",
+      "retirement removes skills and commands"
+    ]
+  },
+  "transactional_adapter": {
+    "command": "OMP_TEST_VERSION=18.10.3 bun test test/omp-lifecycle-adapter.test.ts",
+    "result": "6 pass, 96 assertions, 2.27s",
+    "boundary": "synthetic executable version with actual managed adapter; supplements real native loader evidence",
+    "observed": [
+      "install and unchanged re-add",
+      "update readback",
+      "rollback restores package and lock",
+      "rollback retains concurrent sibling/settings edits",
+      "injected activation failure preserves prior package",
+      "disable preserves feature settings",
+      "retire retains plugin data"
+    ]
+  },
+  "writer_regression": {
+    "command": "bun test test/omp-lifecycle.test.ts test/omp-lifecycle-adapter.test.ts",
+    "result": "17 pass, 155 assertions, 2.44s"
+  },
+  "public_cli_limit": "Initial parent alias identity defect fixed by canonicalizing local source binding before scope hashing; full public lifecycle now verified.",
+  "admission": "exact18.10.3 managed profile only; no broader range inferred",
+  "measurements": {
+    "model_tokens": "not applicable; no model calls",
+    "cpu": "unavailable",
+    "memory": "unavailable"
+  },
+  "public_cli": {
+    "command": "OMP_NATIVE_LOADER=1 OMP_BIN=/Users/cfeng1/.bun/bin/omp OMP_SOURCE=/Users/cfeng1/.bun/install/global/node_modules/@oh-my-pi/pi-coding-agent/src bun test test/omp-native-loader.test.ts",
+    "result": "1 pass, 21 assertions, 6.19s",
+    "mode": "actual public CLI add/readd/refresh/refusal/remove paired with actual installed native loader in isolated HOME"
+  }
+}

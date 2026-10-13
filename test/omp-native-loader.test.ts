@@ -1,4 +1,4 @@
-/** Opt-in installed OMP 18.1.4 extension-package lifecycle proof. */
+/** Opt-in installed OMP extension-package lifecycle proof. */
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -7,8 +7,8 @@ import { tmpdir } from 'node:os';
 import { writeFiles } from './util';
 
 const omp = process.env['OMP_BIN'] ?? '/Users/chaz/.bun/bin/omp';
-const installedSource = '/Users/chaz/.bun/install/global/node_modules/@oh-my-pi/pi-coding-agent/src';
-const nativeTest: (name: string, fn: () => void) => void = process.env['OMP_NATIVE_LOADER'] === '1' && existsSync(omp) && existsSync(installedSource) ? test : () => {};
+const installedSource = process.env['OMP_SOURCE'] ?? '/Users/chaz/.bun/install/global/node_modules/@oh-my-pi/pi-coding-agent/src';
+const nativeTest: (name: string, fn: () => void, timeout?: number) => void = process.env['OMP_NATIVE_LOADER'] === '1' && existsSync(omp) && existsSync(installedSource) ? test : () => {};
 const repo = join(import.meta.dir, '..');
 const plgnz = join(repo, 'bin', 'plgnz.mjs');
 const slug = '6175646974-64656d6f';
@@ -20,9 +20,28 @@ function cleanEnv(home: string): Record<string, string> {
 }
 
 function run(command: string, args: string[], env: Record<string, string>, cwd: string): string {
-  const result = spawnSync(command, args, { cwd, encoding: 'utf8', env });
+  const result = invoke(command, args, env, cwd);
   if (result.status !== 0) throw new Error(`${command} ${args.join(' ')} failed: ${result.stderr || result.stdout}`);
   return result.stdout;
+}
+
+/** Direct writer mode isolates native loader evidence from the public planner. */
+function invoke(command: string, args: string[], env: Record<string, string>, cwd: string) {
+  if (process.env['OMP_NATIVE_DIRECT_WRITER'] !== '1' || args[0] !== plgnz) return spawnSync(command, args, { cwd, encoding: 'utf8', env });
+  const action = args[1]; const source = args[2];
+  const script = `
+    import { ompWriter } from ${JSON.stringify(join(repo, 'src/hosts/omp-writer.ts'))};
+    import { fingerprintTree } from ${JSON.stringify(join(repo, 'src/fingerprint.ts'))};
+    const action = ${JSON.stringify(action)}; const source = ${JSON.stringify(source)};
+    if (action === 'remove') { await ompWriter.remove(source); console.log(JSON.stringify([{status:'installed'}])); }
+    else {
+      const dir = source + '/plugins/demo';
+      const plugin = {dir,name:'demo',marketplace:'audit',version:'1.0.0',contentFingerprint:fingerprintTree(dir)};
+      const result = await ompWriter.add(plugin, {sourceUri:source,sha:'native-probe',isGit:false,plugins:[plugin]});
+      console.log(JSON.stringify([{status:result ?? 'installed'}]));
+    }
+  `;
+  return spawnSync('bun', ['-e', script], { cwd, encoding: 'utf8', env });
 }
 
 function discover(env: Record<string, string>, cwd: string): { skills: string[]; commands: string[]; expanded: string } {
@@ -71,7 +90,7 @@ nativeTest('OMP loads projected commands and skills through its native npm/link 
     expect(JSON.parse(run('bun', [plgnz, 'add', collection, '--target', 'omp', '--legacy-json'], env, cwd))[0].status).toBe('installed');
     expect(readFileSync(join(installed, '.plgnz/source/skills/manual/resources/value.txt'), 'utf8')).toBe('manual two\n');
     writeFileSync(join(plugin, '.claude/commands/run.md'), '---\ndescription: bad\nuser-invocable: false\n---\nbad\n');
-    const failed = spawnSync('bun', [plgnz, 'add', collection, '--target', 'omp', '--legacy-json'], { cwd, encoding: 'utf8', env });
+    const failed = invoke('bun', [plgnz, 'add', collection, '--target', 'omp', '--legacy-json'], env, cwd);
     expect(failed.status).toBe(1);
     found = discover(env, cwd); expect(found.commands).toContain('demo:manual'); expect(found.commands).toContain('demo:run');
 
@@ -82,4 +101,4 @@ nativeTest('OMP loads projected commands and skills through its native npm/link 
     expect(existsSync(installed)).toBe(false);
     found = discover(env, cwd); expect(found.skills.includes('ordinary')).toBe(false); expect(found.commands.includes('demo:manual')).toBe(false); expect(found.commands.includes('demo:run')).toBe(false);
   } finally { rmSync(root, { recursive: true, force: true }); }
-});
+}, 30_000);
