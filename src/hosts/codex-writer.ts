@@ -164,7 +164,7 @@ export const codexWriter: HostWriter = {
         const nextTable = toml.indexOf('\n[', idx + header.length);
         const end = nextTable === -1 ? toml.length : nextTable;
         const block = toml.slice(idx, end);
-        const withoutEnabled = block.replace(/^enabled\s*=\s*(true|false)\s*\n?/mu, '');
+        const withoutEnabled = block.replace(enabledAssignment('true|false', true), '');
         const remaining = withoutEnabled.slice(header.length).trim();
         const replacement = remaining === '' ? '' : `${withoutEnabled.trimEnd()}\nenabled = false\n`;
         writeFileSync(configPath, toml.slice(0, idx) + replacement + toml.slice(end));
@@ -173,6 +173,16 @@ export const codexWriter: HostWriter = {
     for (const candidate of owned) rmSync(candidate, { recursive: true, force: true });
   }
 };
+
+/** Regex source: trailing spaces and an optional `#` comment. Callers anchor the line. */
+const ENABLED_ASSIGNMENT_TAIL = String.raw`[ \t]*(?:#.*)?`;
+
+function enabledAssignment(value: 'false' | 'true|false', consumeNewline = false): RegExp {
+  return new RegExp(
+    `^enabled\\s*=\\s*(?:${value})${ENABLED_ASSIGNMENT_TAIL}$${consumeNewline ? '\\n?' : ''}`,
+    'mu',
+  );
+}
 
 function enable(configPath: string, id: string): void {
     let toml = existsSync(configPath) ? readFileSync(configPath, 'utf8') : '';
@@ -185,7 +195,7 @@ function enable(configPath: string, id: string): void {
       const nextTable = toml.indexOf('\n[', idx + header.length);
       const blockEnd = nextTable !== -1 ? nextTable : toml.length;
       const block = toml.slice(idx, blockEnd);
-      const enabled = /^([ \t]*enabled[ \t]*=[ \t]*)(true|false)([ \t]*(?:#.*)?)$/gmu;
+      const enabled = new RegExp(`^([ \\t]*enabled[ \\t]*=[ \\t]*)(true|false)(${ENABLED_ASSIGNMENT_TAIL})$`, 'gmu');
       const matches = [...block.matchAll(enabled)];
       if (matches.length > 1) throw new Error(`duplicate enabled keys in Codex plugin config: ${id}`);
       if (matches[0]?.[2] === 'false') {
@@ -218,7 +228,7 @@ function isEnabled(configPath: string, id: string): boolean {
   if (idx === -1) return false;
   const nextTable = toml.indexOf('\n[', idx + header.length);
   const block = toml.slice(idx, nextTable === -1 ? toml.length : nextTable);
-  return !/^enabled\s*=\s*false\s*$/mu.test(block);
+  return !enabledAssignment('false').test(block);
 }
 
 type ConfigSnapshot = { existed: false } | { existed: true; bytes: Uint8Array };
