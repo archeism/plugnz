@@ -250,16 +250,27 @@ const supportedSemantics = new Set<PackageSemantic>([
   'ordinary-skills', 'mcp', 'commands', 'model-invocation-control', 'auto-update-control', 'resources',
   'retirement', 'retention-safety', 'readback', 'rollback', 'activation-reload', 'reversible-disable',
 ]);
-const ompManagedProfiles = ['18.1.4', '18.10.3'].map(detectedVersion => createCapabilityEvidenceProfile({
+const ohMyAiInstallSemantics = new Set<PackageSemantic>([
+  'ordinary-skills', 'mcp', 'resources', 'auto-update-control', 'readback', 'rollback', 'activation-reload',
+  'retirement', 'retention-safety',
+]);
+export const ompManagedProfiles = ['18.1.4', '18.8.7', '18.10.3'].map(detectedVersion => createCapabilityEvidenceProfile({
   host: 'omp',
   detectedVersion,
   sourceTypes: ['local', 'git'],
-  operations: ['install', 'update', 'disable', 'retire'],
+  operations: detectedVersion === '18.8.7' ? ['install', 'update', 'retire'] : ['install', 'update', 'disable', 'retire'],
   route: 'managed',
   operationStatus: 'supported',
-  semantics: Object.fromEntries(PACKAGE_SEMANTICS.map((semantic) => [semantic, supportedSemantics.has(semantic) ? 'supported' : 'unsupported'])) as Record<PackageSemantic, CapabilityStatus>,
+  semantics: Object.fromEntries(PACKAGE_SEMANTICS.map((semantic) => [
+    semantic,
+    (detectedVersion === '18.8.7' ? ohMyAiInstallSemantics : supportedSemantics).has(semantic) ? 'supported' : 'unsupported',
+  ])) as Record<PackageSemantic, CapabilityStatus>,
   evidence: [
-    detectedVersion === '18.10.3' ? 'docs/evidence/omp-native-extension-package-20261013.json' : 'docs/evidence/omp-native-extension-package-20260923.json',
+    detectedVersion === '18.10.3'
+      ? 'docs/evidence/omp-native-extension-package-20261013.json'
+      : detectedVersion === '18.8.7'
+        ? 'docs/evidence/oh-my-ai-native-host-compat-20261015.json'
+        : 'docs/evidence/omp-native-extension-package-20260923.json',
     'docs/hosts/omp.md',
     'docs/research/native-plugin-update-capabilities-2026-10-09.md',
   ],

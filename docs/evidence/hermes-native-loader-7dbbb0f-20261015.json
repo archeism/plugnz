@@ -1,0 +1,115 @@
+{
+  "date": "2026-10-15",
+  "scope": "Exact official bootstrap binding, native portable loader and managed lifecycle with real stdio MCP; no model calls.",
+  "hermes_source": {
+    "repository": "https://github.com/NousResearch/hermes-agent",
+    "revision": "7dbbb0f4a6ebeec9a8714ec37fa41340fe9e4e00",
+    "tracked_status": "clean",
+    "method": "Shared local Git clone of the clean installed revision; source and installed dependencies are read-only during native probes. Official _launcher_script bytes match the admitted template after literal root substitution."
+  },
+  "reproduce": {
+    "command": "bun test test/hermes-native-7dbbb0f.test.ts",
+    "environment": {
+      "HERMES_7DB_SOURCE_ROOT": "/root/.local/state/plugnz-hermes-7dbbb0f-proof/source",
+      "HERMES_7DB_PYTHON": "/root/.hermes/installs/8a4017c4cabfe15f/environments/d04ad8f4a9934668a4cabc6c5b156588/venv/bin/python",
+      "HERMES_7DB_INSTALLED_BIN": "/root/.local/bin/hermes",
+      "HERMES_7DB_EVIDENCE": "/root/.local/state/plugnz-hermes-7dbbb0f-proof/native-result.json",
+      "TMPDIR": "/root/.local/state/plugnz-hermes-7dbbb0f-proof"
+    },
+    "test_sha256": "7be8bfb3f8763600828e3dfba06ab9f83afac662f690170f94a228c36f4fad11"
+  },
+  "isolation": {
+    "home_profile_cwd": "fresh lifecycle harness directories under TMPDIR",
+    "python_flags": [
+      "-I",
+      "-B"
+    ],
+    "native_environment": "explicit HOME/HERMES_HOME/XDG/PATH allowlist; no inherited provider secrets",
+    "installed_executable": "observed read-only, never executed",
+    "dependencies": "existing Python environment read-only; no dependency installation",
+    "disk_budget_bytes": 1073741824,
+    "source_clone_allocated_kib": 233552,
+    "scratch_allocated_kib_after_native_run": 234000,
+    "model_calls": 0,
+    "native_probe_model_tokens": 0,
+    "agent_token_usage": "not measured"
+  },
+  "supported_operations": [
+    "install",
+    "update",
+    "retire"
+  ],
+  "unverified_operation": "disable",
+  "native_evidence": {
+    "installed_mcp": {
+      "version": "1.0.0",
+      "tools": [
+        "echo"
+      ],
+      "text": "1.0.0:native-round-trip"
+    },
+    "updated_mcp": {
+      "version": "1.0.1",
+      "tools": [
+        "echo"
+      ],
+      "text": "1.0.1:native-round-trip"
+    },
+    "rollback_mcp": {
+      "version": "1.0.1",
+      "tools": [
+        "echo"
+      ],
+      "text": "1.0.1:native-round-trip"
+    },
+    "ordinary_skills": [
+      "agent-plugin-native-proof-b80346ee:ordinary"
+    ],
+    "commands": [
+      "native-proof:manual",
+      "native-proof:run"
+    ],
+    "prompt_sections": [
+      "native-proof.plgnz-commands.skills"
+    ],
+    "command_queue": "Exact $ARGUMENTS/$1/${2} expansion asserted in CLI pending-input queue; user-only command queues the private skill file and is absent from ordinary discovery.",
+    "repeat_update_changed": false,
+    "rollback": "Managed candidate served rollback-candidate:native-round-trip, then rollback-verified readback and real native MCP returned 1.0.1:native-round-trip.",
+    "retired": {
+      "skills": [],
+      "commands": [],
+      "sections": [],
+      "servers": {}
+    },
+    "retention": "Plugin-created state and unrelated model config asserted unchanged after rollback and removal.",
+    "auto_update_control": "Managed immutable package copies; no native updater registration. Explicit update alone refreshes source bytes. Native updater route remains rejected by existing proof gates."
+  },
+  "raw_evidence": {
+    "path": "/root/.local/state/plugnz-hermes-7dbbb0f-proof/native-result.json",
+    "sha256": "35c6d5b8f65a8685d26b7d004cda2fbd89d07c00507393d94341434144192e3e",
+    "log": "/root/.local/state/plugnz-hermes-7dbbb0f-proof/native-test.log"
+  },
+  "validation": {
+    "native": {
+      "passed": 1,
+      "failed": 0,
+      "assertions": 28,
+      "wall_seconds": 22.57
+    },
+    "focused_hermes_regressions": {
+      "passed": 32,
+      "failed": 0,
+      "assertions": 169,
+      "wall_seconds": 2.42,
+      "command": "bun test test/hermes-bootstrap-7dbbb0f.test.ts test/hermes-node-dependencies.test.ts test/hermes-lifecycle-route.test.ts test/hermes-lifecycle.test.ts test/hermes-instance-route.test.ts test/hermes-batch-public.test.ts"
+    },
+    "typescript_check": "bun run check passed",
+    "diff_check": "git diff --check passed"
+  },
+  "observed_failed_attempts": [
+    "Fixture initially omitted required Agent Plugins manifest schema; staging correctly rejected it.",
+    "Fixture MCP needed the schema, explicit stdio type and bare executable required by the native portable spec. Native diagnostics rejected each malformed form; final fixture uses python3 with package-root server args.",
+    "Probe initially used the pre-v2 SDK serverInfo spelling; installed MCP SDK uses server_info. Protocol initialize/list/call succeeded before this evidence extraction error.",
+    "Probe initially assumed a plain skill namespace; native loader uses agent-plugin-native-proof-* namespace. Final assertions verify ordinary/manual skill suffix and retained exact names."
+  ]
+}

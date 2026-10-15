@@ -1,0 +1,98 @@
+{
+  "date": "2026-10-15",
+  "question": "Can the exact currently installed Claude Code, Codex, and OMP releases consume the self-contained oh-my-ai 0.1.40 Agent Plugin through Plugnz's managed route?",
+  "artifact": {
+    "name": "oh-my-ai",
+    "version": "0.1.40",
+    "sourceFingerprint": "83386bce5ea99d51c5f80bc5f44fdea71d661aa2ceef74eb2fbb61b0513695aa",
+    "requiredSemantics": ["ordinary-skills", "mcp", "resources"]
+  },
+  "environment": {
+    "mode": "fresh HOME, XDG roots, OPEN_PLUGIN_HOME, and host roots; real installed native binaries; empty OMP working directory outside every ambient plugin tree",
+    "credentials": "none copied or inherited by native MCP probes",
+    "modelCalls": 0,
+    "diskBudgetBytes": 4294967296,
+    "maximumAllocatedBytes": 1771556864
+  },
+  "hosts": [
+    {
+      "host": "claude-code",
+      "version": "2.1.285",
+      "binarySha256": "33dad1ec615a2e08cc78b494f05c110e49916de2c79d78ec8799ebf46b233d29",
+      "publicAdd": "managed/succeeded/present/active-conforming",
+      "nativeProof": {
+        "command": "claude plugin details oh-my-ai@local; claude mcp list",
+        "skills": ["omakase-codemode", "trajectories"],
+        "mcpServers": ["omakase (connected)"],
+        "resources": ["skills/omakase-codemode/SKILL.md", "skills/trajectories/SKILL.md", "ops/remote.md"]
+      },
+      "adapterCorrection": "Claude's native loader reads .mcp.json and expands CLAUDE_PLUGIN_ROOT. Plugnz now projects canonical mcp.json to that native twin, translates the portable PLUGIN_ROOT placeholder, and refuses conflicting declarations before activation."
+    },
+    {
+      "host": "codex",
+      "version": "0.161.0",
+      "binarySha256": "9a820c17865fa825d04db416818679a9d63bd72e50835c396f496e5684626c9c",
+      "publicAdd": "managed/succeeded/present/active-conforming",
+      "nativeProof": {
+        "command": "codex app-server initialize; skills/list; mcpServerStatus/list",
+        "skills": ["oh-my-ai:omakase-codemode", "oh-my-ai:trajectories"],
+        "mcpServer": "omakase",
+        "mcpTools": ["cell"],
+        "resources": ["skills/omakase-codemode/SKILL.md", "skills/trajectories/SKILL.md", "ops/remote.md"]
+      },
+      "routeLimit": "Only the managed route is newly admitted. Native marketplace update remains pinned to its separate 0.162.0 evidence."
+    },
+    {
+      "host": "omp",
+      "version": "18.8.7",
+      "binarySha256": "2a1f0be0d536031830c2de5abc1a0f7f06948e7c3fdcb77542ef70cba3497481",
+      "publicAdd": "managed/succeeded/present/active-conforming",
+      "nativeProof": {
+        "command": "installed OMP loadSkills plus discoverAndLoadMCPTools with a 30 second startup bound",
+        "skills": ["omakase-codemode", "trajectories"],
+        "mcpServers": ["oh-my-ai:omakase"],
+        "mcpTools": ["mcp__oh_my_ai_omakase_cell"],
+        "resources": ["skills/omakase-codemode/SKILL.md", "skills/trajectories/SKILL.md", "ops/remote.md"],
+        "errors": []
+      }
+    }
+  ],
+  "lifecycleProof": {
+    "fixture": "A small self-contained Agent Plugin with one ordinary skill, one referenced resource, and one stdio MCP server exercised the same managed replacement and retirement pipeline after the full oh-my-ai native discovery proof.",
+    "installSnapshot": "snapshot-v1-f823d28b0ffd646b77b55eca5f1c3a0c776a88005b10cdba4c5cace457e5ca93",
+    "updatedSnapshot": "snapshot-v1-d5526b361a56355c8dbfce0ad8fe35e5bd1578bdf454f41dd45e4dabcfb11e6c",
+    "changedFiles": {
+      "skills/compat-proof/SKILL.md": "77f3483e5a72fd73ef9a54d1e01f268679934eaf44b3a7f39006a8c67497e928",
+      "resources/marker.txt": "c5633d6b35fd7c66e06be3d9485c979ad5ce5326b771bee186db407ac23654bd",
+      "server.mjs": "6c48ceea5ed753c5e5078e705684afcf368f4211bd81aac1d0edcdf3258e582d"
+    },
+    "publicUpdate": {
+      "claude-code": "managed/update/succeeded/changed/present/active-conforming",
+      "codex": "managed/update/succeeded/changed/present/active-conforming",
+      "omp": "managed/update/succeeded/changed/present/active-conforming"
+    },
+    "nativeAfterUpdate": {
+      "claude-code": "native plugin details found the v2 skill and native MCP list remained connected",
+      "codex": "native app-server skills/list found the v2 skill; bundled MCP validity is established by the full oh-my-ai probe",
+      "omp": "native skill discovery found the v2 skill and referenced resource; bundled MCP validity is established by the full oh-my-ai probe"
+    },
+    "publicRetirement": {
+      "claude-code": "managed/retire-orphan/succeeded/changed/absent/inactive",
+      "codex": "managed/retire-orphan/succeeded/changed/absent/inactive",
+      "omp": "managed/retire-orphan/succeeded/changed/absent/inactive"
+    },
+    "nativeAfterRetirement": {
+      "claude-code": "plugin details refused the retired plugin",
+      "codex": "app-server skills/list returned no compat-proof skill",
+      "omp": "native skill discovery returned no compat-proof skill"
+    },
+    "retention": "A plugin-data sentinel survived retirement in each native store."
+  },
+  "failedAttempts": [
+    "The first Claude probe found zero MCP servers and led to the mcp.json-to-.mcp.json adapter correction.",
+    "The first OMP probe ran below /root, where native project discovery correctly found an ambient project plugin; rerunning from a fresh /tmp directory isolated the user plugin.",
+    "The first Codex assertion expected an obsolete execute tool name; native discovery returned the artifact's actual cell tool.",
+    "The small lifecycle fixture's MCP process did not complete native discovery in Codex or OMP. Those attempts are retained outside Git; the admission composes the full artifact's native MCP proof with the same adapter's changed-byte skill/resource replacement proof rather than treating the fixture MCP result as affirmative evidence."
+  ],
+  "admission": "Managed install, changed-byte update, and retirement only for exact releases 2.1.285, 0.161.0, and 18.8.7. Admitted package semantics are ordinary-skills, mcp, resources, plus adapter-owned auto-update-control, readback, rollback, activation-reload, retirement, and retention-safety. Disable, commands, agents, invocation policy, neighboring-release, and interval compatibility are not inferred."
+}

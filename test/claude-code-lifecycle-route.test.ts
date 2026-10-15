@@ -159,6 +159,54 @@ async function route(host: LifecycleHostAdapter, root: string, input: {
   return decision.kind === 'selected' ? decision.route : decision.kind;
 }
 
+async function installRoute(host: LifecycleHostAdapter, root: string, input: {
+  attemptId: string;
+  version: string;
+  requiredSemantics?: PackageSemanticInventory['requiredSemantics'];
+}): Promise<string> {
+  const version = await host.probeVersion(claudeTarget);
+  const observed = await host.observeTarget(claudeTarget);
+  const snapshot = updateSnapshot(root, input.attemptId, input.version, '2'.repeat(40), 'install', input.requiredSemantics);
+  const pins = createResolvedLifecyclePins([]);
+  const nativeScope = await host.observeNativeMutationScope({
+    targetObservation: observed,
+    operation: 'install',
+    packageName: 'demo',
+    nativeId: 'demo@market',
+    sourceType: 'git',
+  });
+  const nativeProjection = await host.observeNativeProjection({
+    targetObservation: observed,
+    operation: 'install',
+    snapshot,
+    pins,
+  });
+  const decision = host.decideRoute({
+    target: claudeTarget,
+    operation: 'install',
+    operationId: snapshot.operationId,
+    attemptId: snapshot.attemptId,
+    scopeId: snapshot.scopeId,
+    packageName: snapshot.packageName,
+    nativeId: snapshot.nativeId,
+    version,
+    sourceType: snapshot.sourceType,
+    targetObservation: observed,
+    nativeScope,
+    nativeProjection,
+    snapshot,
+    pins,
+    planCoverage: createLifecyclePlanCoverage(observed, [{
+      nativeId: snapshot.nativeId,
+      operationId: snapshot.operationId,
+      operation: 'install',
+      mutationGroupId: `group-${input.attemptId}`,
+      authorization: 'planned-create',
+    }]),
+  });
+  return decision.kind === 'selected' ? decision.route : decision.kind;
+}
+
 function recorded(installed: TargetInstallationData) {
   if (installed.ownership.kind !== 'owned' || installed.source === null || installed.installedFingerprint === null) {
     throw new Error('seeded Claude install is not an owned git activation');
@@ -183,6 +231,20 @@ function recorded(installed: TargetInstallationData) {
 }
 
 describe('claude-code lifecycle route', () => {
+  test('admits only the native-probed 2.1.285 semantics', async () => {
+    await withClaude(async root => {
+      process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'] = binary(root, '2.1.285 (Claude Code)\n');
+      expect(await installRoute(createClaudeCodeLifecycleHost(), root, { attemptId: 'proven-285', version: '1.1.0', requiredSemantics: ['ordinary-skills', 'mcp', 'resources'] })).toBe('managed');
+      expect(await installRoute(createClaudeCodeLifecycleHost(), root, { attemptId: 'unproven-policy-285', version: '1.1.0', requiredSemantics: ['model-invocation-control'] })).toBe('capability-gap');
+      process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'] = binary(root, '2.1.284 (Claude Code)\n');
+      expect(await installRoute(createClaudeCodeLifecycleHost(), root, { attemptId: 'unproven-284', version: '1.1.0' })).toBe('capability-gap');
+      process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'] = binary(root, '2.1.286 (Claude Code)\n');
+      expect(await installRoute(createClaudeCodeLifecycleHost(), root, { attemptId: 'unproven-286', version: '1.1.0' })).toBe('capability-gap');
+      process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'] = binary(root, '2.1.285 (Claude Code)\n');
+      expect(await route(createClaudeCodeLifecycleHost(), root, { attemptId: 'proven-update-285', version: '1.1.0', requiredSemantics: ['ordinary-skills', 'mcp', 'resources'] })).toBe('managed');
+    });
+  });
+
   test('admits the native-probed 2.1.296 release without opening a version range', async () => {
     await withClaude(async root => {
       process.env['OPEN_PLUGIN_CLAUDE_CODE_BIN'] = binary(root, '2.1.296 (Claude Code)\n');

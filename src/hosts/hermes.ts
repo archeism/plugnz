@@ -27,6 +27,7 @@ export const hermesProvenManagedRevisions = [
   'c0d7294769a38c17ceae51d8f7995e66e1dcae27',
   'dce1e9b37581dd62e480a9064dc04a709c2940d3',
   '6e7b83a2f1c093e992a8d838ed77ea320fbd8e51',
+  '7dbbb0f4a6ebeec9a8714ec37fa41340fe9e4e00',
 ] as const;
 
 export const hermesTargetProfile: TargetProfile<'hermes'> = {

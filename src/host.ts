@@ -56,6 +56,12 @@ export interface HostReader {
   readonly gui: boolean;
   /** Is this host present on this machine? */
   detect(): boolean;
+  /**
+   * Is the host application itself installed? Default target discovery uses
+   * this stronger signal when available. `detect()` may also expose an
+   * explicitly addressable store surface for commands with `--target`.
+   */
+  detectInstalled?(): boolean;
   /** Store directories this host owns (for `targets`/reporting). */
   stores(): string[];
   /** Plugins installed in the host's native store. */

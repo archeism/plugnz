@@ -214,6 +214,7 @@ function stagePlugin(source: string, stage: string, fallbackName: string, fallba
     mkdirSync(dirname(native), { recursive: true });
     writeFileSync(native, JSON.stringify({ name: canonicalManifest.name, version: canonicalManifest.version ?? fallbackVersion, description: canonicalManifest.description, skills: './skills/' }));
   }
+  projectNativeMcp(stage);
   projectRootCommandsToNative(stage);
   projectNativeCommands(stage, native);
   const nativeManifest = parseManifest(native, 'Claude Code');
@@ -222,6 +223,42 @@ function stagePlugin(source: string, stage: string, fallbackName: string, fallba
     if (existsSync(path) && !statSync(path).isDirectory()) throw new Error(`Claude Code stage native content path is not a directory: ${path}`);
   }
   if (fallbackName.length === 0) throw new Error('Claude Code plugin name is empty');
+}
+
+/** Claude's native loader reads `.mcp.json`; Agent Plugins packages author `mcp.json`. */
+function projectNativeMcp(stage: string): void {
+  const canonical = join(stage, 'mcp.json');
+  const native = join(stage, '.mcp.json');
+  const declarations = [canonical, native].filter(existsSync).map(file => {
+    const value: unknown = JSON.parse(readFileSync(file, 'utf8'));
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(`Claude Code MCP declaration must be an object: ${file}`);
+    const servers = (value as Record<string, unknown>)['mcpServers'];
+    if (servers === null || typeof servers !== 'object' || Array.isArray(servers)) throw new Error(`Claude Code MCP declaration must contain a server object: ${file}`);
+    return { file, value, servers };
+  });
+  const projectedCanonical = declarations[0]?.file === canonical ? claudeNativeMcpValue(declarations[0].servers) : undefined;
+  const nativeServers = declarations.find(declaration => declaration.file === native)?.servers;
+  if (projectedCanonical !== undefined && nativeServers !== undefined && canonicalJson(projectedCanonical) !== canonicalJson(nativeServers)) {
+    throw new Error('conflicting Claude Code canonical and native MCP declarations');
+  }
+  if (declarations[0]?.file === canonical && !existsSync(native)) {
+    writeFileSync(native, JSON.stringify(claudeNativeMcpValue(declarations[0].value), null, 2));
+  }
+}
+
+function claudeNativeMcpValue(value: unknown): unknown {
+  if (typeof value === 'string') return value.replaceAll('${PLUGIN_ROOT}', '${CLAUDE_PLUGIN_ROOT}');
+  if (Array.isArray(value)) return value.map(claudeNativeMcpValue);
+  if (value !== null && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, claudeNativeMcpValue(item)]));
+  return value;
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return JSON.stringify(value.map(canonicalJson));
+  if (value !== null && typeof value === 'object') return JSON.stringify(Object.entries(value)
+    .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+    .map(([key, item]) => [key, canonicalJson(item)]));
+  return JSON.stringify(value) ?? 'null';
 }
 
 /** Root command sources map into Claude Code's native discovery path when
@@ -949,15 +986,15 @@ function claudeVersionObservation(observed: ReturnType<typeof observeClaudeCodeV
 // 2.1.275: docs/hosts/claude-code.md and native root-command probe.
 // 2.1.295: native-plugin-update-capabilities-2026-10-09.md sandbox probe.
 // 2.1.296: docs/evidence/claude-code-2.1.296-native-20261013.json isolated native loader/refresh probe.
-const CLAUDE_MANAGED_RELEASES = new Set(['2.1.275', '2.1.295', '2.1.296']);
+const CLAUDE_MANAGED_RELEASES = new Set(['2.1.275', '2.1.285', '2.1.295', '2.1.296']);
 
-function claudeEvidenceProfiles(
+export function claudeEvidenceProfiles(
   version: string | undefined,
   contracts: readonly ClaudeNativeRemoteUpdateContract[],
 ): readonly CapabilityEvidenceProfile[] {
   if (version === undefined) return [];
   const managed = CLAUDE_MANAGED_RELEASES.has(version)
-    ? [claudeProfile(version, 'managed', ['local', 'git'], ['install', 'update', 'disable', 'retire'])]
+    ? [claudeProfile(version, 'managed', ['local', 'git'], version === '2.1.285' ? ['install', 'update', 'retire'] : ['install', 'update', 'disable', 'retire'])]
     : [];
   const native = contracts.filter((contract) => contract.version === version && sandboxPasses(contract));
   if (native.length > 1) throw new Error(`ambiguous Claude Code native update contract for ${version}`);
@@ -995,6 +1032,7 @@ function claudeProfile(
         'docs/evidence/claude-code-2.1.296-invocation-20261013.json',
         'docs/evidence/claude-code-2.1.296-agents-20261013.json',
       ] : []),
+      ...(version === '2.1.285' ? ['docs/evidence/oh-my-ai-native-host-compat-20261015.json'] : []),
     ],
   });
 }
@@ -1014,12 +1052,25 @@ const CLAUDE_PROJECTED_SEMANTICS = new Set<PackageSemantic>([
 ]);
 
 function claudeSemantics(version: string): Record<PackageSemantic, CapabilityStatus> {
+  const supported = version === '2.1.285' ? OH_MY_AI_INSTALL_SEMANTICS : CLAUDE_PROJECTED_SEMANTICS;
   return Object.fromEntries(PACKAGE_SEMANTICS.map((semantic) => [
     semantic,
-    CLAUDE_PROJECTED_SEMANTICS.has(semantic) ||
+    supported.has(semantic) ||
       (version === '2.1.296' && (semantic === 'model-invocation-control' || semantic === 'agents')) ? 'supported' : 'unsupported',
   ])) as Record<PackageSemantic, CapabilityStatus>;
 }
+
+const OH_MY_AI_INSTALL_SEMANTICS = new Set<PackageSemantic>([
+  'ordinary-skills',
+  'mcp',
+  'resources',
+  'auto-update-control',
+  'readback',
+  'rollback',
+  'activation-reload',
+  'retirement',
+  'retention-safety',
+]);
 
 function observeClaudeInstallations(target: LifecycleReadbackData['target'], version: string | undefined): TargetInstallationData[] {
   assertLifecycleMarketplaceEnvelope(version);

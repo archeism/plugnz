@@ -58,6 +58,24 @@ async function failure(run: () => Promise<unknown>): Promise<Error> {
 }
 
 describe('claude-code lifecycle', () => {
+  test('projects portable MCP into Claude native discovery and refuses conflicts', async () => {
+    await isolated(async root => {
+      const declaration = JSON.stringify({ mcpServers: { proof: { type: 'stdio', command: 'node', args: ['${PLUGIN_ROOT}/server.mjs'] } } });
+      const conflicting = fixture({
+        'mcp.json': declaration,
+        '.mcp.json': JSON.stringify({ mcpServers: { proof: { type: 'stdio', command: 'other' } } }),
+      });
+      expect((await failure(() => claudeCodeWriter.add(conflicting.plugin, conflicting.resolved))).message).toContain('conflicting Claude Code canonical and native MCP declarations');
+
+      const incoming = fixture({ 'mcp.json': declaration });
+      await claudeCodeWriter.add(incoming.plugin, incoming.resolved);
+      const installed = join(root, 'plugins/cache/personal/addy/0.1.0');
+      const projected = JSON.parse(readFileSync(join(installed, '.mcp.json'), 'utf8')) as { mcpServers: { proof: { args: string[] } } };
+      expect(projected.mcpServers.proof.args).toEqual(['${CLAUDE_PLUGIN_ROOT}/server.mjs']);
+      expect(readFileSync(join(installed, 'mcp.json'), 'utf8')).toBe(declaration);
+    });
+  });
+
   test('installs beside a valid symlink in an unrelated native marketplace', async () => {
     await isolated(async root => {
       const incoming = fixture({});

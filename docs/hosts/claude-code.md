@@ -47,8 +47,10 @@ deletes only its marked plugin copy and drops the wrapper only once it is empty.
 
 Lifecycle admission requires both an observed executable version and evidence
 for that release. Managed loader/store profiles currently cover `2.1.275`
-(the native loader and command-root probe above) and `2.1.295` (the isolated
-native store/update probe in
+(the native loader and command-root probe above), `2.1.285` (the isolated
+oh-my-ai skills, MCP, and resource proof in
+[`oh-my-ai-native-host-compat-20261015.json`](../evidence/oh-my-ai-native-host-compat-20261015.json)),
+and `2.1.295` (the isolated native store/update probe in
 `docs/research/native-plugin-update-capabilities-2026-10-09.md`), and `2.1.296`
 ([isolated native loader/refresh receipt](../evidence/claude-code-2.1.296-native-20261013.json)).
 The 2.1.296 probe used separate `OPEN_PLUGIN_CLAUDE_CODE_ROOT` and
@@ -92,6 +94,15 @@ Claude continues to load through the registry's newly marked `installPath`.
 Tests set `OPEN_PLUGIN_CLAUDE_CODE_ROOT` to an isolated temporary root. The
 adapter never writes `~/.claude.json`; user-level MCP entries remain reader
 only. `pin` only rewrites plugin-local `.mcp.json` / `mcp.json` files.
+Canonical Agent Plugins `mcp.json` is projected to Claude's native `.mcp.json`
+during staging. If both files are authored, their server declarations must be
+equivalent or activation is refused.
+
+The 2.1.285 evidence admits install, changed-byte update, and retirement for
+the oh-my-ai package envelope it exercised: ordinary skills, MCP, resources,
+and the adapter-owned safeguards for atomic activation, rollback, readback,
+reload, and retained plugin data. Disable, commands, agents, and invocation
+policy remain outside that exact-release profile.
 
 The 2.1.296 probe is reproducible with
 `bun docs/evidence/claude-code-2.1.296-native-probe.ts` on this Mac.

@@ -18,9 +18,10 @@
  * `pin` rewrites them to absolute paths; `add` pins a fresh copy the same way.
  */
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
+import { isExecutableFile } from '../exec';
 import type { HostReader, InstalledPlugin, McpServerEntry } from '../host';
-import { cursorRoot } from '../paths';
+import { cursorRoot, homeRoot } from '../paths';
 import { collectPluginServers, collectUserServers, readJson, type PluginMcpCandidate } from '../mcp';
 import { parsePersistedTargetIdentity, type PersistedTargetIdentity } from '../target-identity';
 import { invalidTargetArgument, invalidTargetSelection, type TargetProfile } from '../target-profile';
@@ -76,7 +77,11 @@ export const cursor: HostReader = {
   gui: true,
 
   detect(): boolean {
-    return existsSync(cursorRoot());
+    return locateCursorProbeBinary().kind === 'path' || existsSync(cursorRoot());
+  },
+
+  detectInstalled(): boolean {
+    return locateCursorProbeBinary().kind === 'path';
   },
 
   stores(): string[] {
@@ -116,6 +121,54 @@ export const cursor: HostReader = {
     return entries;
   },
 };
+
+export function locateCursorProbeBinary():
+  | { readonly kind: 'refused' }
+  | { readonly kind: 'absent' }
+  | { readonly kind: 'path'; readonly path: string } {
+  const override = process.env['OPEN_PLUGIN_CURSOR_BIN'];
+  if (override !== undefined) {
+    if (override.length === 0 || !isExecutableFile(override)) return { kind: 'refused' };
+    return { kind: 'path', path: override };
+  }
+  const found = cursorProbeCandidates().find(isExecutableFile);
+  return found === undefined ? { kind: 'absent' } : { kind: 'path', path: found };
+}
+
+export function cursorProbePath(env: Record<string, string | undefined> = process.env): string {
+  const isolated = env['OPEN_PLUGIN_HOME'];
+  if (isolated !== undefined && isolated.length > 0) return join(homeRoot(), 'bin');
+  return env['PATH'] ?? '';
+}
+
+/** Executable installation surfaces; candidates are probes, not version claims. */
+export function cursorProbeCandidates(env: Record<string, string | undefined> = process.env): string[] {
+  const candidates: string[] = [];
+  const pathDirs = cursorProbePath(env).split(delimiter).filter((dir) => dir.length > 0);
+  for (const name of process.platform === 'win32' ? ['cursor.exe', 'cursor-agent.exe'] : ['cursor', 'cursor-agent']) {
+    candidates.push(...pathDirs.map((dir) => join(dir, name)));
+  }
+  const isolated = env['OPEN_PLUGIN_HOME'];
+  const isolatedRun = isolated !== undefined && isolated.length > 0;
+  if (process.platform === 'darwin') {
+    candidates.push(join(homeRoot(), 'Applications', 'Cursor.app', 'Contents', 'MacOS', 'Cursor'));
+    if (!isolatedRun) candidates.push('/Applications/Cursor.app/Contents/MacOS/Cursor');
+  } else if (process.platform === 'linux') {
+    candidates.push(join(homeRoot(), '.local', 'bin', 'cursor'), join(homeRoot(), '.local', 'bin', 'cursor-agent'));
+    if (!isolatedRun) candidates.push(
+      '/usr/local/bin/cursor', '/usr/local/bin/cursor-agent',
+      '/usr/bin/cursor', '/usr/bin/cursor-agent',
+      '/usr/share/cursor/cursor', '/usr/lib/cursor/cursor',
+      '/opt/Cursor/cursor', '/opt/cursor/cursor',
+    );
+  } else if (process.platform === 'win32') {
+    const localAppData = env['LOCALAPPDATA'];
+    const programFiles = env['ProgramFiles'];
+    if (localAppData !== undefined) candidates.push(join(localAppData, 'Programs', 'cursor', 'Cursor.exe'));
+    if (!isolatedRun && programFiles !== undefined) candidates.push(join(programFiles, 'Cursor', 'Cursor.exe'));
+  }
+  return candidates.filter((path, index, all) => all.indexOf(path) === index);
+}
 
 /** Recover a collection identity only from a valid plgnz ownership marker. */
 function ownershipMarketplace(dir: string, name: string): string | undefined {

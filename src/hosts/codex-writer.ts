@@ -510,7 +510,8 @@ type CodexCatalogBinding =
   | { readonly kind: 'unbound'; readonly marketplace: string }
   | { readonly kind: 'absent'; readonly marketplace: string };
 
-const CODEX_ROUTE_VERSION = '0.162.0';
+const CODEX_NATIVE_ROUTE_VERSION = '0.162.0';
+const CODEX_MANAGED_ROUTE_VERSIONS = ['0.161.0', '0.162.0'] as const;
 const NATIVE_UPGRADE_TIMEOUT_MS = 120_000;
 /** The native primitive has no whole-checkout rollback; adapter compensation captures its Git state separately. */
 export const codexMarketplaceCheckoutRollback = 'unverified' as const;
@@ -525,16 +526,18 @@ function nativeUpgradeTimeout(): number {
 const RELOAD_EFFECTIVE = { requirement: 'reload', status: 'effective' } as const;
 const UPDATE_SEMANTICS = ['ordinary-skills', 'resources', 'auto-update-control', 'readback', 'rollback', 'activation-reload'] as const satisfies readonly PackageSemantic[];
 const MANAGED_SEMANTICS = [...UPDATE_SEMANTICS, 'retirement', 'retention-safety', 'model-invocation-control', 'commands', 'mcp'] as const satisfies readonly PackageSemantic[];
+const OH_MY_AI_INSTALL_SEMANTICS = ['ordinary-skills', 'mcp', 'resources', 'auto-update-control', 'readback', 'rollback', 'activation-reload'] as const satisfies readonly PackageSemantic[];
 
-const codexEvidenceProfiles: readonly CapabilityEvidenceProfile[] = [
+export const codexEvidenceProfiles: readonly CapabilityEvidenceProfile[] = [
   portableHookProfile(portableHookAdapter, 'managed', ['install', 'update', 'retire']),
-  codexRouteProfile('native', ['update'], UPDATE_SEMANTICS, ['docs/research/native-plugin-update-capabilities-2026-10-09.md', 'docs/evidence/codex-native-released-20261011.md']),
-  codexRouteProfile('managed', ['install', 'update', 'retire'], MANAGED_SEMANTICS, [
+  codexRouteProfile(CODEX_NATIVE_ROUTE_VERSION, 'native', ['update'], UPDATE_SEMANTICS, ['docs/research/native-plugin-update-capabilities-2026-10-09.md', 'docs/evidence/codex-native-released-20261011.md']),
+  ...CODEX_MANAGED_ROUTE_VERSIONS.map(version => codexRouteProfile(version, 'managed', ['install', 'update', 'retire'], version === '0.161.0' ? [...OH_MY_AI_INSTALL_SEMANTICS, 'retirement', 'retention-safety'] : MANAGED_SEMANTICS, [
     'docs/hosts/codex.md',
     'docs/adr/0004-retain-plugin-state-on-removal.md',
     'docs/evidence/codex-policy-mcp-20261013.json',
     'docs/evidence/codex-native-released-20261011.md',
-  ]),
+    ...(version === '0.161.0' ? ['docs/evidence/oh-my-ai-native-host-compat-20261015.json'] : []),
+  ])),
 ];
 
 const codexLifecycleDefinition = {
@@ -578,6 +581,7 @@ const codexLifecycleDefinition = {
 export const codexLifecycle = createLifecycleHostAdapter(codexLifecycleDefinition);
 
 function codexRouteProfile(
+  detectedVersion: string,
   route: 'native' | 'managed',
   operations: readonly CapabilityOperation[],
   supportedSemantics: readonly PackageSemantic[],
@@ -592,7 +596,7 @@ function codexRouteProfile(
   for (const semantic of PACKAGE_SEMANTICS) semantics[semantic] = supported.has(semantic) ? 'supported' : 'unsupported';
   return createCapabilityEvidenceProfile({
     host: 'codex',
-    detectedVersion: CODEX_ROUTE_VERSION,
+    detectedVersion,
     sourceTypes: ['git', 'local'],
     operations,
     route,

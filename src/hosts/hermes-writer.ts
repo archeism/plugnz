@@ -34,7 +34,7 @@ import type { PluginSource, ResolvedSource } from '../source';
 import { PACKAGE_SEMANTICS, type PackageSemantic } from '../semantic-inventory';
 import { hermes, hermesInstanceIdentity, hermesPluginsDir, hermesProvenManagedRevisions, listHermesInstance } from './hermes';
 import { pinPluginMcpFiles } from '../mcp-write';
-import { hermesNativeBootstrap, hermesEditableFinderBody, hermesUvConsoleBody } from './hermes-launcher-templates';
+import { hermesNativeBootstrap, hermesNativeBootstrap7dbbb0f, hermesEditableFinderBody, hermesUvConsoleBody } from './hermes-launcher-templates';
 
 import { yamlParse, yamlStringify } from '../yaml';
 
@@ -388,7 +388,7 @@ function hermesExecutableSource(binary: string, depth = 0): string | undefined {
     const bindings = [...code.matchAll(/^sys\.path\.insert\(0, ('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")\)$/gmu)];
     if (bindings.length !== 1) return undefined;
     const root = literalPythonPath(bindings[0]![1]!);
-    if (root === undefined || code.replaceAll(bindings[0]![1]!, "'/__PLUGNZ_HERMES_ROOT__'") !== hermesNativeBootstrap) return undefined;
+    if (root === undefined || ![hermesNativeBootstrap, hermesNativeBootstrap7dbbb0f].includes(code.replaceAll(bindings[0]![1]!, "'/__PLUGNZ_HERMES_ROOT__'"))) return undefined;
     return root !== undefined && isAbsolute(root) && existsSync(join(root, 'hermes_cli', 'main.py'))
       && realpathSync(join(root, 'hermes_cli', 'main.py')).startsWith(`${realpathSync(root)}/`)
       && verifiedSourceImportClosure(realpathSync(root))
@@ -487,15 +487,18 @@ const hermesManagedProfiles = hermesProvenManagedRevisions.map(detectedVersion =
   host: 'hermes',
   detectedVersion,
   sourceTypes: ['local', 'git'],
-  operations: ['install', 'update', 'disable', 'retire'],
+  operations: detectedVersion === '7dbbb0f4a6ebeec9a8714ec37fa41340fe9e4e00'
+    ? ['install', 'update', 'retire'] : ['install', 'update', 'disable', 'retire'],
   route: 'managed',
   operationStatus: 'supported',
-  semantics: Object.fromEntries(PACKAGE_SEMANTICS.map(semantic => [semantic, HERMES_SUPPORTED.has(semantic) ? 'supported' : 'unsupported'])) as Record<PackageSemantic, 'supported' | 'unsupported'>,
+  semantics: Object.fromEntries(PACKAGE_SEMANTICS.map(semantic => [semantic, HERMES_SUPPORTED.has(semantic) && !(detectedVersion === '7dbbb0f4a6ebeec9a8714ec37fa41340fe9e4e00' && semantic === 'reversible-disable') ? 'supported' : 'unsupported'])) as Record<PackageSemantic, 'supported' | 'unsupported'>,
   evidence: [
     detectedVersion === 'c0d7294769a38c17ceae51d8f7995e66e1dcae27'
       ? 'docs/evidence/hermes-native-loader-c0d7294-20260923.json'
       : detectedVersion === '6e7b83a2f1c093e992a8d838ed77ea320fbd8e51'
         ? 'docs/evidence/hermes-native-loader-6e7b83a-20261013.json'
+        : detectedVersion === '7dbbb0f4a6ebeec9a8714ec37fa41340fe9e4e00'
+          ? 'docs/evidence/hermes-native-loader-7dbbb0f-20261015.json'
         : 'docs/evidence/hermes-native-loader-dce1e9b-20261011.json',
     'docs/hosts/hermes.md',
     'docs/research/native-plugin-update-capabilities-2026-10-09.md',

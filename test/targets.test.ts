@@ -2,7 +2,7 @@ import { test, expect, describe } from 'bun:test';
 import { withHostEnvAsync } from './util';
 import { main } from '../src/cli';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { repoRoot } from './util';
 
@@ -34,6 +34,33 @@ describe('targets', () => {
       const parsed = JSON.parse(output);
       expect(Array.isArray(parsed)).toBe(true);
       expect(parsed).toContain('claude-code');
+    });
+  });
+
+  test('does not treat a Cursor settings directory as an installed host', async () => {
+    await withHostEnvAsync('cursor', async () => {
+      const originalLog = console.log;
+      let output = '';
+      console.log = (message: string) => { output = message; };
+      try { expect(await main(['targets', '--json'])).toBe(0); }
+      finally { console.log = originalLog; }
+      expect((JSON.parse(output) as string[]).includes('cursor')).toBe(false);
+    });
+  });
+
+  test('reports a real cursor-agent executable even when its version is unknown', async () => {
+    await withHostEnvAsync('cursor', async (home) => {
+      const bin = join(home, 'bin');
+      mkdirSync(bin, { recursive: true });
+      const cursor = join(bin, 'cursor-agent');
+      writeFileSync(cursor, '#!/bin/sh\nprintf "unknown Cursor build\\n"\n');
+      chmodSync(cursor, 0o755);
+      const originalLog = console.log;
+      let output = '';
+      console.log = (message: string) => { output = message; };
+      try { expect(await main(['targets', '--json'])).toBe(0); }
+      finally { console.log = originalLog; }
+      expect(JSON.parse(output)).toContain('cursor');
     });
   });
 

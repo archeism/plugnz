@@ -1812,6 +1812,57 @@ describe('public lifecycle commands', () => {
     });
   });
 
+  test('add without --target skips a folder-only Cursor surface', async () => {
+    await withLifecycleCliHarness((harness) => {
+      harness.writeHome({ '.cursor/.keep': '' });
+      const source = harness.source('folder-only-cursor', {
+        'plugin.json': '{"name":"demo","version":"1.0.0"}\n',
+        'skills/demo/SKILL.md': '---\nname: demo\ndescription: demo\n---\n\nDemo.\n',
+      });
+      const result = harness.run(['add', source, '--json']);
+      const report = parseLifecycleReport(JSON.parse(result.stdout));
+      expect({
+        exitCode: result.exitCode,
+        reason: report.summary.reason?.diagnostic,
+        plan: report.plan,
+        installed: bytesToText(result.stores.cursor.after.files['plugins/local/demo/plugin.json'] ?? []),
+      }).toEqual({
+        exitCode: 1,
+        reason: 'No detected writer targets',
+        plan: [],
+        installed: '',
+      });
+    });
+  });
+
+  test('add without --target surfaces an unverified real Cursor executable', async () => {
+    await withLifecycleCliHarness((harness) => {
+      harness.writeHome({ '.cursor/.keep': '' });
+      const source = harness.source('unknown-cursor', {
+        'plugin.json': '{"name":"demo","version":"1.0.0"}\n',
+        'skills/demo/SKILL.md': '---\nname: demo\ndescription: demo\n---\n\nDemo.\n',
+      });
+      const cursor = harness.fakeNative('cursor-unknown', Array.from({ length: 8 }, () => ({
+        args: ['--version'], stdout: 'unknown Cursor build\n',
+      })));
+      const result = harness.run(['add', source, '--json'], { env: { OPEN_PLUGIN_CURSOR_BIN: cursor.path } });
+      const report = parseLifecycleReport(JSON.parse(result.stdout));
+      expect({
+        exitCode: result.exitCode,
+        targets: report.outcomes.map((outcome) => outcome.scope.target.kind),
+        code: report.outcomes[0]?.reason?.code,
+        diagnostic: report.outcomes[0]?.reason?.diagnostic,
+        installed: bytesToText(result.stores.cursor.after.files['plugins/local/demo/plugin.json'] ?? []),
+      }).toEqual({
+        exitCode: 1,
+        targets: ['cursor'],
+        code: 'capability.unverified',
+        diagnostic: "target 'cursor' has no verified native install profile for version 'unknown/unparseable' and local Sources",
+        installed: '',
+      });
+    });
+  });
+
   test('update refreshes the exact source package and does not rebind a same-name plugin', async () => {
     await withLifecycleCliHarness((harness) => {
       const original = '{"name":"demo","version":"1.0.0","description":"from A"}\n';

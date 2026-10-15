@@ -608,17 +608,22 @@ function select<T extends HostReader>(available: readonly T[], targets: readonly
   const duplicate = targets.find((target, index) => targets.indexOf(target) !== index);
   if (duplicate !== undefined) return { selected: [], error: `duplicate target '${duplicate}'` };
   for (const target of targets) if (!known.has(target)) return { selected: [], error: `unknown target '${target}' (known: ${[...known.keys()].join(', ')})` };
-  const selected = targets.length === 0 ? [...available] : targets.map((target) => known.get(target)!);
+  if (targets.length === 0) return { selected: available.filter(detectInstalled) };
+  const selected = targets.map((target) => known.get(target)!);
   const absent = selected.find((host) => !host.detect());
-  if (absent !== undefined && targets.length > 0) return { selected: [], error: `requested target '${absent.id}' is not present on this machine` };
+  if (absent !== undefined) return { selected: [], error: `requested target '${absent.id}' is not present on this machine` };
   return { selected: selected.filter((host) => host.detect()) };
+}
+
+function detectInstalled(host: HostReader): boolean {
+  return host.detectInstalled?.() ?? host.detect();
 }
 
 function selectProfiles(targets: readonly string[]): { selected: ConsumerProfile[]; error?: string } {
   const duplicate = targets.find((target, index) => targets.indexOf(target) !== index);
   if (duplicate !== undefined) return { selected: [], error: `duplicate target '${duplicate}'` };
   const selected = targets.length === 0
-    ? writers.filter((writer) => writer.detect()).map((writer) => findConsumerProfile(writer.id)!).filter((profile): profile is ConsumerProfile => profile !== undefined)
+    ? writers.filter(detectInstalled).map((writer) => findConsumerProfile(writer.id)!).filter((profile): profile is ConsumerProfile => profile !== undefined)
     : targets.map(findConsumerProfile);
   const unknownIndex = selected.findIndex((profile) => profile === undefined);
   if (unknownIndex !== -1) return { selected: [], error: `unknown target '${targets[unknownIndex]}' (known: ${consumerProfiles.map((profile) => profile.id).join(', ')})` };
@@ -756,7 +761,7 @@ function splitAddTargets(requested: readonly string[], dryRun: boolean): AddTarg
   }
   let detected: HostWriter[];
   try {
-    detected = writers.filter((writer) => writer.detect());
+    detected = writers.filter(detectInstalled);
   } catch (error) {
     return { kind: 'refused', report: reportFor('add', dryRun, [], [], {
       terminalPhase: 'preflight',
@@ -1550,7 +1555,7 @@ export async function main(argv: string[]): Promise<number> {
     const flags = parseFlags(args.slice(1));
     const disallowed = rejectDisallowed(flags, new Set(['all']));
     if (disallowed || flags.positionals.length > 0) fail(`plugnz targets: ${disallowed ?? 'unexpected argument'}`, 2);
-    const present = hosts.filter(h => h.detect());
+    const present = hosts.filter(detectInstalled);
     if (json) {
       console.log(JSON.stringify(flags.all ? consumerProfiles : present.map(h => h.id), null, 2));
     } else {
@@ -1916,7 +1921,7 @@ export async function main(argv: string[]): Promise<number> {
     const candidates = flags.targets.length > 0
       ? writers.filter((writer) => flags.targets.includes(writer.id))
       : flags.all ? [...writers] : writers.filter((writer) => writer.gui);
-    const detected = candidates.filter((writer) => writer.detect());
+    const detected = candidates.filter((writer) => flags.targets.length > 0 ? writer.detect() : detectInstalled(writer));
     if (detected.length === 0) {
       console.error('plugnz pin: No detected writer targets');
       return 1;

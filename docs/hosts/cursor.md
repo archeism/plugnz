@@ -71,7 +71,14 @@ directories without a matching marker are refused unless `--adopt-existing`
 is explicit and their native identity matches. Removal deletes only a
 marker-owned directory. User `~/.cursor/mcp.json` is never changed.
 
-When no `cursor` binary is configured, that copy uses the directory profile.
+Default target discovery requires an executable Cursor installation; a
+standalone `~/.cursor` directory does not make Cursor an implicit target.
+Detection considers `cursor` and `cursor-agent` on the isolated/real PATH,
+the macOS application bundle, and standard Linux/Windows installation paths.
+An executable with an unknown version remains selected and then fails closed
+at capability admission; it is never silently treated as absent.
+Explicit `--target cursor` may still address that directory surface. When no
+`cursor` binary is configured, that copy uses the directory profile.
 mcp, commands, resources, and model-invocation are unverified and refused on
 that profile, and a missing binary is not reported as Cursor 2.4.0. An
 explicit `OPEN_PLUGIN_CURSOR_BIN` that is empty or points at a missing file is

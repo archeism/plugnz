@@ -29,3 +29,6 @@ export const hermesUvConsoleBody = "# -*- coding: utf-8 -*-\nimport sys\nfrom he
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
+/** Official isolated bootstrap at Hermes 7dbbb0f4; literal source-root substitution only. */
+export const hermesNativeBootstrap7dbbb0f = "import os, re, sys\nos.environ.pop('PYTHONHOME', None)\nos.environ.pop('PYTHONPATH', None)\nsys.path.insert(0, '/__PLUGNZ_HERMES_ROOT__')\nif sys.argv[1:2] == ['--print-runtime-command']: sys.dont_write_bytecode = True\nfrom hermes_constants import get_default_hermes_root\nos.environ['HERMES_HOME'] = os.environ.get('HERMES_HOME') or str(get_default_hermes_root())\nif sys.argv[1:2] == ['--print-runtime-command']:\n    from pathlib import Path\n    from hermes_cli._launchers import print_runtime_command\n    print_runtime_command(Path('/__PLUGNZ_HERMES_ROOT__'), sys.argv[2:])\n    sys.exit(0)\nimport hermes_bootstrap\nif sys.argv[1:2] == ['--run-module']:\n    import runpy\n    if len(sys.argv) < 3: sys.exit('hermes: --run-module needs a module')\n    module = sys.argv.pop(2)\n    del sys.argv[1]\n    runpy.run_module(module, run_name='__main__', alter_sys=True)\n    sys.exit(0)\nfrom hermes_cli.main import main\nsys.argv[0] = re.sub(r'(-script\\.pyw|\\.exe)?$', '', sys.argv[0])\nsys.exit(main())\n";

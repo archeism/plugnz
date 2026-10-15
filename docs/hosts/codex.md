@@ -17,6 +17,16 @@ the public CLI bootstrap, changed-byte update, canonical ownership, and offline
 retirement against the documented native store with an isolated version boundary;
 it is not proof of a real native marketplace-upgrade invocation.
 
+The exact `0.161.0` release is also admitted for the Managed route after the
+isolated oh-my-ai proof in
+[`evidence/oh-my-ai-native-host-compat-20261015.json`](../evidence/oh-my-ai-native-host-compat-20261015.json):
+native app-server `skills/list` found both skills and `mcpServerStatus/list`
+connected the bundled Omakase `cell` tool. This does not extend the native
+marketplace-update profile beyond `0.162.0`. The `0.161.0` admission is
+limited to managed install, changed-byte update, and retirement for ordinary
+skills, MCP, resources, and the adapter-owned safeguards for atomic
+activation, rollback, readback, reload, and retained plugin data.
+
 Measured 2026-09-16 on this machine (`~/.codex`). Reader: `src/hosts/codex.ts`.
 
 ## Store

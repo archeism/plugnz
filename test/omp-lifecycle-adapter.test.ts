@@ -349,7 +349,7 @@ describe('OMP managed extension-package lifecycle', () => {
     expect(resolve(dirname(link), readlinkSync(link))).toBe(resolve(installed));
   }));
 
-  test('disable keeps features and settings, and a second disable is unchanged', async () => isolated(async (root) => {
+  test.skipIf(testedVersion === '18.8.7')('disable keeps features and settings, and a second disable is unchanged', async () => isolated(async (root) => {
     expect(await commitPrepared(await sealInstall(root, {
       operationId: 'install-disable', attemptId: 'attempt-install-disable', version: '1.2.0', revision: 'local-disable', resource: 'one\n',
       authorization: 'planned-create',

@@ -141,3 +141,16 @@ all 21 assertions (6.19s), including add, refresh, refusal preservation and remo
 Exact releases 18.1.4 and 18.10.3 are admitted; no intervening/future-version
 compatibility interval is inferred. See
 [`evidence/omp-native-extension-package-20261013.json`](../evidence/omp-native-extension-package-20261013.json).
+
+## OMP 18.8.7 admission (2026-10-15)
+
+The exact 18.8.7 release loaded the installed oh-my-ai package from a fresh
+isolated HOME and empty working directory. Native discovery found both skills,
+retained their referenced resources, connected `oh-my-ai:omakase`, and exposed
+`mcp__oh_my_ai_omakase_cell`. The public Plugnz add completed through the
+Managed route with conforming readback. See
+[`evidence/oh-my-ai-native-host-compat-20261015.json`](../evidence/oh-my-ai-native-host-compat-20261015.json).
+The exact profile is limited to managed install, changed-byte update, and
+retirement for ordinary skills, MCP, resources, and the adapter-owned
+safeguards for atomic activation, rollback, readback, reload, and retained
+plugin data. No neighboring OMP release is inferred from this proof.

@@ -3,7 +3,7 @@ import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rm
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fingerprintTree } from '../src/fingerprint';
-import { codexLifecycle, codexMarketplaceCheckoutRollback } from '../src/hosts/codex-writer';
+import { codexEvidenceProfiles, codexLifecycle, codexMarketplaceCheckoutRollback } from '../src/hosts/codex-writer';
 import type { FrozenPackageSnapshot, LifecycleRouteDecision, SelectedRouteDecision } from '../src/lifecycle-host';
 import {
   createFrozenPackageSnapshot,
@@ -24,6 +24,27 @@ const otherId = 'other-plugin@demo-market';
 const foreignId = 'foreign-plugin@other-market';
 
 describe('codex native marketplace upgrade route', () => {
+  test('admits 0.161.0 only for the proven managed route', async () => {
+    await withHostEnvAsync('codex', async (home) => {
+      const binary = join(home, 'bin', 'codex');
+      writeFiles(home, { 'bin/codex': '#!/bin/sh\nprintf "%s\\n" "codex-cli 0.161.0"\n' });
+      chmodSync(binary, 0o755);
+      process.env['OPEN_PLUGIN_CODEX_BIN'] = binary;
+      try {
+        const snapshot = frozenSnapshot(home);
+        writeCatalog(home, frozenSha, [demoId]); installPlugin(home, 'demo-plugin', demoId, true);
+        expect(selectedRoute(await selectedUpdate(snapshot, createResolvedLifecyclePins([]))).route).toBe('managed');
+        const profile = codexEvidenceProfiles.find((candidate) => candidate.detectedVersion === '0.161.0' && candidate.route === 'managed' && candidate.packageFormat === undefined);
+        expect(profile?.operations).toEqual(['install', 'retire', 'update']);
+        expect(Object.entries(profile?.semantics ?? {}).filter(([, status]) => status === 'supported').map(([semantic]) => semantic).sort()).toEqual([
+          'activation-reload', 'auto-update-control', 'mcp', 'ordinary-skills', 'readback', 'resources', 'retention-safety', 'retirement', 'rollback',
+        ]);
+      } finally {
+        delete process.env['OPEN_PLUGIN_CODEX_BIN'];
+      }
+    });
+  });
+
   test('sparse checkout configuration selects Managed before native writes', async () => {
     await withCodexBinary(async home => {
       const snapshot = frozenSnapshot(home);

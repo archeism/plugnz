@@ -1,6 +1,6 @@
 /** Cursor's native local-plugin lifecycle writer. */
-import { accessSync, constants, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { delimiter, join, resolve } from 'node:path';
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createCapabilityEvidenceProfile } from '../capability-evidence';
 import { discoverCommands } from '../conversion';
@@ -25,7 +25,7 @@ import { cursorRoot, homeRoot } from '../paths';
 import { CryptoHasher, spawnSync } from '../runtime';
 import type { SourceType } from '../semantic-inventory';
 import type { PluginSource, ResolvedSource } from '../source';
-import { cursor, cursorInstanceRoot, localDir, mcpCandidates } from './cursor';
+import { cursor, cursorInstanceRoot, cursorProbePath, localDir, locateCursorProbeBinary, mcpCandidates } from './cursor';
 import { proveCursorLegacyAdoption } from './cursor-adoption';
 import type { ProveLegacyAdoption } from '../legacy-admission';
 
@@ -621,39 +621,6 @@ function probeCursorVersion(): TargetVersionObservation {
   const version = cursorVersion(decodeStdout(result.stdout));
   if (result.exitCode !== 0 || version === undefined) return { kind: 'unparseable' };
   return { kind: 'detected', version, probeId: `cursor-${version}` };
-}
-
-function locateCursorProbeBinary():
-  | { readonly kind: 'refused' }
-  | { readonly kind: 'absent' }
-  | { readonly kind: 'path'; readonly path: string } {
-  const override = process.env['OPEN_PLUGIN_CURSOR_BIN'];
-  if (override !== undefined) {
-    if (override.length === 0 || !existsSync(override)) return { kind: 'refused' };
-    return { kind: 'path', path: override };
-  }
-  const found = whichOnPath(cursorProbePath(), 'cursor');
-  return found === undefined ? { kind: 'absent' } : { kind: 'path', path: found };
-}
-
-function cursorProbePath(): string {
-  const isolated = process.env['OPEN_PLUGIN_HOME'];
-  if (isolated !== undefined && isolated.length > 0) return join(homeRoot(), 'bin');
-  return process.env['PATH'] ?? '';
-}
-
-function whichOnPath(pathEnv: string, name: string): string | undefined {
-  for (const dir of pathEnv.split(delimiter)) {
-    if (dir.length === 0) continue;
-    const candidate = join(dir, name);
-    try {
-      accessSync(candidate, constants.X_OK);
-      if (statSync(candidate).isFile()) return candidate;
-    } catch {
-      continue;
-    }
-  }
-  return undefined;
 }
 
 function cursorVersion(stdout: string): string | undefined {
