@@ -5,7 +5,11 @@
     "name": "oh-my-ai",
     "version": "0.1.40",
     "sourceFingerprint": "83386bce5ea99d51c5f80bc5f44fdea71d661aa2ceef74eb2fbb61b0513695aa",
-    "requiredSemantics": ["ordinary-skills", "mcp", "resources"]
+    "requiredSemantics": [
+      "ordinary-skills",
+      "mcp",
+      "resources"
+    ]
   },
   "environment": {
     "mode": "fresh HOME, XDG roots, OPEN_PLUGIN_HOME, and host roots; real installed native binaries; empty OMP working directory outside every ambient plugin tree",
@@ -22,9 +26,18 @@
       "publicAdd": "managed/succeeded/present/active-conforming",
       "nativeProof": {
         "command": "claude plugin details oh-my-ai@local; claude mcp list",
-        "skills": ["omakase-codemode", "trajectories"],
-        "mcpServers": ["omakase (connected)"],
-        "resources": ["skills/omakase-codemode/SKILL.md", "skills/trajectories/SKILL.md", "ops/remote.md"]
+        "skills": [
+          "omakase-codemode",
+          "trajectories"
+        ],
+        "mcpServers": [
+          "omakase (connected)"
+        ],
+        "resources": [
+          "skills/omakase-codemode/SKILL.md",
+          "skills/trajectories/SKILL.md",
+          "ops/remote.md"
+        ]
       },
       "adapterCorrection": "Claude's native loader reads .mcp.json and expands CLAUDE_PLUGIN_ROOT. Plugnz now projects canonical mcp.json to that native twin, translates the portable PLUGIN_ROOT placeholder, and refuses conflicting declarations before activation."
     },
@@ -35,10 +48,19 @@
       "publicAdd": "managed/succeeded/present/active-conforming",
       "nativeProof": {
         "command": "codex app-server initialize; skills/list; mcpServerStatus/list",
-        "skills": ["oh-my-ai:omakase-codemode", "oh-my-ai:trajectories"],
+        "skills": [
+          "oh-my-ai:omakase-codemode",
+          "oh-my-ai:trajectories"
+        ],
         "mcpServer": "omakase",
-        "mcpTools": ["cell"],
-        "resources": ["skills/omakase-codemode/SKILL.md", "skills/trajectories/SKILL.md", "ops/remote.md"]
+        "mcpTools": [
+          "cell"
+        ],
+        "resources": [
+          "skills/omakase-codemode/SKILL.md",
+          "skills/trajectories/SKILL.md",
+          "ops/remote.md"
+        ]
       },
       "routeLimit": "Only the managed route is newly admitted. Native marketplace update remains pinned to its separate 0.162.0 evidence."
     },
@@ -49,10 +71,21 @@
       "publicAdd": "managed/succeeded/present/active-conforming",
       "nativeProof": {
         "command": "installed OMP loadSkills plus discoverAndLoadMCPTools with a 30 second startup bound",
-        "skills": ["omakase-codemode", "trajectories"],
-        "mcpServers": ["oh-my-ai:omakase"],
-        "mcpTools": ["mcp__oh_my_ai_omakase_cell"],
-        "resources": ["skills/omakase-codemode/SKILL.md", "skills/trajectories/SKILL.md", "ops/remote.md"],
+        "skills": [
+          "omakase-codemode",
+          "trajectories"
+        ],
+        "mcpServers": [
+          "oh-my-ai:omakase"
+        ],
+        "mcpTools": [
+          "mcp__oh_my_ai_omakase_cell"
+        ],
+        "resources": [
+          "skills/omakase-codemode/SKILL.md",
+          "skills/trajectories/SKILL.md",
+          "ops/remote.md"
+        ],
         "errors": []
       }
     }
@@ -92,7 +125,15 @@
     "The first Claude probe found zero MCP servers and led to the mcp.json-to-.mcp.json adapter correction.",
     "The first OMP probe ran below /root, where native project discovery correctly found an ambient project plugin; rerunning from a fresh /tmp directory isolated the user plugin.",
     "The first Codex assertion expected an obsolete execute tool name; native discovery returned the artifact's actual cell tool.",
-    "The small lifecycle fixture's MCP process did not complete native discovery in Codex or OMP. Those attempts are retained outside Git; the admission composes the full artifact's native MCP proof with the same adapter's changed-byte skill/resource replacement proof rather than treating the fixture MCP result as affirmative evidence."
+    "The small lifecycle fixture did not complete native MCP discovery in Codex or OMP and remains non-evidence. The subsequent full-artifact update proof records genuine changed-byte managed updates followed by working native MCP discovery and cell calls on both hosts."
   ],
-  "admission": "Managed install, changed-byte update, and retirement only for exact releases 2.1.285, 0.161.0, and 18.8.7. Admitted package semantics are ordinary-skills, mcp, resources, plus adapter-owned auto-update-control, readback, rollback, activation-reload, retirement, and retention-safety. Disable, commands, agents, invocation policy, neighboring-release, and interval compatibility are not inferred."
+  "admission": "Managed install, changed-byte update, and retirement only for exact releases 2.1.285, 0.161.0, and 18.8.7. Admitted package semantics are ordinary-skills, mcp, resources, plus adapter-owned auto-update-control, readback, rollback, activation-reload, retirement, and retention-safety. Disable, commands, agents, invocation policy, neighboring-release, and interval compatibility are not inferred.",
+  "fullArtifactUpdateProof": {
+    "evidence": "docs/evidence/oh-my-ai-full-update-mcp-20261015.json",
+    "hosts": [
+      "codex 0.161.0",
+      "omp 18.8.7"
+    ],
+    "result": "changed-byte public update followed by fresh native discovery and successful cell catalog execution; runtime bytes match frozen artifact"
+  }
 }

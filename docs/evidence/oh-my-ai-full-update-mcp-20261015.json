@@ -1,0 +1,99 @@
+{
+  "date": "2026-10-15",
+  "question": "Does the full frozen oh-my-ai 0.1.40 artifact retain a working MCP cell after a genuine changed-byte managed update on Codex 0.161.0 and OMP 18.8.7?",
+  "result": "pass",
+  "artifact": {
+    "baselinePath": "/root/.local/state/oh-my-ai-plugin-20261015/oh-my-ai-v3",
+    "initialFingerprint": "83386bce5ea99d51c5f80bc5f44fdea71d661aa2ceef74eb2fbb61b0513695aa",
+    "updatedFingerprint": "59d6aec5040f68e67b9b87299983dbe28a1b8839442002f0f73f444f347d5731",
+    "change": "copied plugin.json description only; version stayed 0.1.40 and runtime-manifest/bin bytes stayed frozen",
+    "version": "0.1.40",
+    "runtimeManifestSha256": "38254f0706ec1f565beaaacbbe36e20e389c3259f84317bd5faa745139dc5daf",
+    "entrySha256": "146f36ab257b49c30fa77207ec16377a5609222a434491a99dce379342740a35"
+  },
+  "producer": {
+    "repository": "/root/Documents/Codex/2026-10-15/plugnz-oh-my-ai",
+    "commit": "9387465edb12015267423e8b40501d100beaea2e",
+    "distSha256": "a478f6d1d9bac0e46b7e5745cd9ea9433360bbee68f42fe34474a0abe310373a",
+    "version": "0.0.24"
+  },
+  "publicUpdates": {
+    "codex": {
+      "snapshot": "59d6aec5040f68e67b9b87299983dbe28a1b8839442002f0f73f444f347d5731",
+      "action": "update",
+      "route": "managed",
+      "result": "succeeded",
+      "changed": true,
+      "resourceState": "present",
+      "activationState": "active-conforming"
+    },
+    "omp": {
+      "snapshot": "59d6aec5040f68e67b9b87299983dbe28a1b8839442002f0f73f444f347d5731",
+      "action": "update",
+      "route": "managed",
+      "result": "succeeded",
+      "changed": true,
+      "resourceState": "present",
+      "activationState": "active-conforming"
+    }
+  },
+  "nativeAfterUpdate": {
+    "codex": {
+      "pluginId": "oh-my-ai@local",
+      "skills": [
+        "oh-my-ai:omakase-codemode",
+        "oh-my-ai:trajectories"
+      ],
+      "tools": [
+        "cell"
+      ],
+      "directCellIsError": false,
+      "directCellKind": "catalog",
+      "server": {
+        "name": "omakase-tool-host",
+        "version": "0.1.40"
+      }
+    },
+    "omp": {
+      "skills": [
+        "omakase-codemode",
+        "trajectories"
+      ],
+      "connectedServers": [
+        "oh-my-ai:omakase"
+      ],
+      "tools": [
+        "mcp__oh_my_ai_omakase_cell"
+      ],
+      "nativeCellIsError": false,
+      "nativeCellKind": "catalog",
+      "errors": []
+    }
+  },
+  "environment": {
+    "isolatedHome": "/root/.local/state/plugnz-oh-my-ai-full-update-mcp-proof.GUfo3p/home",
+    "isolatedCwd": "/root/.local/state/plugnz-oh-my-ai-full-update-mcp-proof.GUfo3p/empty",
+    "liveHomeWrites": false,
+    "credentialsCopied": false,
+    "modelCalls": 0,
+    "attributablePeakKiB": 2560476,
+    "attributableCapKiB": 2621440,
+    "wholeFilesystemUsedKiBBefore": 627764144,
+    "wholeFilesystemUsedKiBFinal": 629603708,
+    "retainedAllocatedKiB": 1851092
+  },
+  "failedAttempts": {
+    "count": 2,
+    "reason": "budget monitors terminated Codex snapshot materialization; first used whole-filesystem growth during concurrent tests, second enforced the superseded 1.5 GiB attributable cap",
+    "archive": "receipts/interrupted-source-stages.tar.zst",
+    "archiveSha256": "8b6d92eb5521e9f29ca583d7ea79c3523c69cd24a98bc5dcdb8ff10aec5ba1ac",
+    "archiveVerified": true,
+    "nativeProbeCount": 1,
+    "nativeProbeReason": "first OMP probe passed PI_CONFIG_DIR as an absolute path; corrected to the native home-relative .omp spelling"
+  },
+  "privateEvidence": {
+    "directory": "/root/.local/state/plugnz-oh-my-ai-full-update-mcp-proof.GUfo3p/receipts",
+    "manifestSha256": "051fc13d3aba7a2fa8c88e789ecf359a2d0149dc8fd74b3ad136dcbcdf3d09c3",
+    "verified": "all manifest files verified; installed entry and runtime manifest match frozen source"
+  }
+}
