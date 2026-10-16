@@ -29,7 +29,7 @@ import type {
   TargetInstallationData,
   TargetVersionObservation,
 } from '../lifecycle-host';
-import { PACKAGE_SEMANTICS, type PackageSemantic, type PackageSemanticInventory } from '../semantic-inventory';
+import { PACKAGE_SEMANTICS, PERMISSION_FIELDS, type PackageSemantic, type PackageSemanticInventory } from '../semantic-inventory';
 import { validateSourceBinding } from '../source-reference';
 import { createDeploymentScopeIdentity } from '../deployment-scope';
 import { CryptoHasher } from '../runtime';
@@ -737,7 +737,7 @@ export function createClaudeCodeLifecycleHost(input?: {
       if (request.operation !== 'install' && request.operation !== 'update') return decision;
       if (request.snapshot.inventory.hookDeclarations.some(declaration => declaration.form === 'portable-hooks') && !claudeReflectionPermissionsSupported(request.snapshot.inventory, request.snapshot.packageRoot)) {
         return selectLifecycleRoute(definition.id, definition.evidenceProfiles.map(profile => ({
-          ...profile, semantics: { ...profile.semantics, 'permissions-preprocessing': 'unsupported' },
+          ...profile, semantics: { ...profile.semantics, 'ordinary-skills': 'unsupported', agents: 'unsupported', 'permissions-preprocessing': 'unsupported' },
         })), request);
       }
       if (request.snapshot.inventory.componentDefinitions.some(component =>
@@ -790,12 +790,26 @@ export function claudeRouteEvidence(
 /** The qualification proves only inherited-model Read/Write agent restrictions,
  * not arbitrary permissions, shell preprocessing or permissions on skills. */
 export function claudeReflectionPermissionsSupported(inventory: PackageSemanticInventory, root: string): boolean {
-  return inventory.components.permissionsPreprocessing.every(path => {
-    if (!inventory.componentDefinitions.some(component => component.kind === 'agent' && component.root === 'agents' && component.path === path)) return false;
+  const agents = inventory.componentDefinitions.filter(component => component.kind === 'agent');
+  const agentPaths = new Set(agents.map(component => component.path));
+  if (inventory.components.permissionsPreprocessing.some(path => !agentPaths.has(path))) return false;
+  // Skill permission fields were historically outside the component-path inventory.
+  // Inspect them explicitly rather than inheriting that gap into this qualification.
+  if (!inventory.components.skills.every(path => {
     try {
       const raw = readFileSync(join(root, path), 'utf8');
       const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/u.exec(raw);
-      if (!match || /!`[\s\S]*?`/u.test(match[2] ?? '')) return false;
+      if (!match || /!`[\s\S]*?`/u.test(raw)) return false;
+      const header = yamlParse(match[1] ?? '') as Record<string, unknown>;
+      return !PERMISSION_FIELDS.some(field => Object.hasOwn(header, field));
+    } catch { return false; }
+  })) return false;
+  return agents.every(component => {
+    if (component.root !== 'agents' || component.dialect !== 'markdown') return false;
+    try {
+      const raw = readFileSync(join(root, component.path), 'utf8');
+      const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/u.exec(raw);
+      if (!match || /!`[\s\S]*?`/u.test(raw)) return false;
       const header = yamlParse(match[1] ?? '') as Record<string, unknown>;
       if (Object.keys(header).some(key => !['name', 'description', 'model', 'tools'].includes(key)) || header['model'] !== 'inherit') return false;
       const tools = typeof header['tools'] === 'string' ? header['tools'].split(',').map(tool => tool.trim()).sort() : [];

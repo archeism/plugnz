@@ -812,7 +812,7 @@ function errorDiagnostic(error: unknown): string {
 const OPENING_FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/u;
 const MODEL_INVOCATION_ALIASES = ['disable-model-invocation', 'disable_model_invocation'] as const;
 const USER_INVOCATION_ALIASES = ['user-invocable', 'user_invocable'] as const;
-const PERMISSION_FIELDS = [
+export const PERMISSION_FIELDS = [
   'allowed-tools',
   'allowed_tools',
   'disallowed-tools',
