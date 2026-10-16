@@ -4,6 +4,16 @@ One definition runs command handlers across Claude Code, Codex, OMP, Pi, OpenCod
 
 `plugnz install` detects `plugnz.hooks.json`, compiles the package for the selected harnesses, and registers the generated files with their native plugin or extension loaders. The authored package remains the recorded source for future updates. Native version, capability, and trust checks still apply; the installer reports a capability it cannot activate.
 
+## Qualified Claude reflection packages
+
+On Claude Code 2.1.285, the portable-hook install profile also admits ordinary
+skills combined with native Markdown agents under `agents/` whose model is
+`inherit` and whose tools are exactly `Read, Write`. Every agent must qualify;
+omitting `tools` does not inherit an unrestricted grant through this profile.
+Skill permission fields, shell preprocessing and other agent grants remain
+unsupported on this narrow route. Other host/version profiles are unchanged.
+Evidence: `docs/evidence/claude-code-2.1.285-reflection-20261016.json`.
+
 ## Author one hook package
 
 Create `plugin.json` with a plugin identity:

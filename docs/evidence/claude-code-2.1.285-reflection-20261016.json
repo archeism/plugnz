@@ -29,7 +29,8 @@
     "extracted-native-proof-1/receipt.json": "c937a3b4cc2b9702cbdfa2c82b4a9264c1b17fcd2212d3558c07fe85852d3147",
     "extraction-install.json": "c1a7c898b34da5d83258ffafd1b5ad7c00b7437ff9db786e0c4c149fea89810f",
     "extraction-install-fixed.json": "ca58070db59245d54ddda55602aa8f1970e8e2e21811c46e9b92ebb60dadbc75",
-    "extracted-installed-proof-1/receipt.json": "4e50fc2305105e3c9d2ccb149eb12d3e660dd67475743e543e5fcd0bc52bdc5d"
+    "extracted-installed-proof-1/receipt.json": "4e50fc2305105e3c9d2ccb149eb12d3e660dd67475743e543e5fcd0bc52bdc5d",
+    "extracted-review-followup/review.json": "6926ad26e54f77c825435279e4fb7f73539573f9fb142155cbba58228d61a0ff"
   },
   "installedNativeProof": {
     "status": "passed",
@@ -58,6 +59,39 @@
       "pass": 32,
       "fail": 0,
       "bun": "1.4.3"
+    },
+    "finalFullSuite": {
+      "pass": 1167,
+      "skip": 7,
+      "fail": 0,
+      "bun": "1.4.3",
+      "wallSeconds": 169.42,
+      "environment": "private temporary mount and test-only DAC capability drop"
     }
+  },
+  "reviewFinding": "Initial qualification skipped agents that omitted tools. Fixed in 65bb5d7 by checking every agent and all skill permission fields, failing the relevant required semantics closed.",
+  "regressions": {
+    "publicCliCases": [
+      "qualified Read/Write agent succeeds",
+      "Bash grant refused",
+      "omitted tools refused",
+      "omitted inherited model refused",
+      "frontmatter preprocessing refused",
+      "additional unrestricted agent refused",
+      "skill permission grant refused"
+    ],
+    "focused": {
+      "passed": 32,
+      "failed": 0,
+      "bun": "1.4.3"
+    }
+  },
+  "independentReview": {
+    "candidate": "65bb5d7",
+    "harness": "claude-code",
+    "model": "gemini-4-argon",
+    "blockers": 0,
+    "warnings": 0,
+    "wallSeconds": 66.575
   }
 }
