@@ -1,3 +1,4 @@
+import { yamlParse } from '../yaml';
 import { hookAdapter as portableHookAdapter } from './claude-code-hooks';
 import { portableHookProfile } from '../portable-hook-policy';
 import { compilePortableHooksInStage, preflightPortableHooks } from '../hook-install';
@@ -28,7 +29,7 @@ import type {
   TargetInstallationData,
   TargetVersionObservation,
 } from '../lifecycle-host';
-import { PACKAGE_SEMANTICS, type PackageSemantic } from '../semantic-inventory';
+import { PACKAGE_SEMANTICS, type PackageSemantic, type PackageSemanticInventory } from '../semantic-inventory';
 import { validateSourceBinding } from '../source-reference';
 import { createDeploymentScopeIdentity } from '../deployment-scope';
 import { CryptoHasher } from '../runtime';
@@ -734,6 +735,11 @@ export function createClaudeCodeLifecycleHost(input?: {
       const decision = adapter.decideRoute(request);
       if (decision.kind !== 'selected') return decision;
       if (request.operation !== 'install' && request.operation !== 'update') return decision;
+      if (request.snapshot.inventory.hookDeclarations.some(declaration => declaration.form === 'portable-hooks') && !claudeReflectionPermissionsSupported(request.snapshot.inventory, request.snapshot.packageRoot)) {
+        return selectLifecycleRoute(definition.id, definition.evidenceProfiles.map(profile => ({
+          ...profile, semantics: { ...profile.semantics, 'permissions-preprocessing': 'unsupported' },
+        })), request);
+      }
       if (request.snapshot.inventory.componentDefinitions.some(component =>
         component.kind === 'agent' && (component.root !== 'agents' || component.dialect !== 'markdown'))) {
         return selectLifecycleRoute(definition.id, definition.evidenceProfiles.map(profile => ({
@@ -781,12 +787,40 @@ export function claudeRouteEvidence(
   return { route: 'native', proofId: `claude-native-update-${contract.version}-git` };
 }
 
+/** The qualification proves only inherited-model Read/Write agent restrictions,
+ * not arbitrary permissions, shell preprocessing or permissions on skills. */
+export function claudeReflectionPermissionsSupported(inventory: PackageSemanticInventory, root: string): boolean {
+  return inventory.components.permissionsPreprocessing.every(path => {
+    if (!inventory.componentDefinitions.some(component => component.kind === 'agent' && component.root === 'agents' && component.path === path)) return false;
+    try {
+      const raw = readFileSync(join(root, path), 'utf8');
+      const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/u.exec(raw);
+      if (!match || /!`[\s\S]*?`/u.test(match[2] ?? '')) return false;
+      const header = yamlParse(match[1] ?? '') as Record<string, unknown>;
+      if (Object.keys(header).some(key => !['name', 'description', 'model', 'tools'].includes(key)) || header['model'] !== 'inherit') return false;
+      const tools = typeof header['tools'] === 'string' ? header['tools'].split(',').map(tool => tool.trim()).sort() : [];
+      return tools.length === 2 && tools[0] === 'Read' && tools[1] === 'Write';
+    } catch { return false; }
+  });
+}
+
+/** Exact native 2.1.285 evidence for Stop + skill + inherited-model reflection agents.
+ * Other hook hosts and unqualified native agent dialects retain their existing gates. */
+export function claudeReflectionHookProfile(): CapabilityEvidenceProfile {
+  const hooks = portableHookProfile(portableHookAdapter, 'managed', ['install', 'update', 'disable', 'retire']);
+  return createCapabilityEvidenceProfile({
+    ...hooks,
+    semantics: { ...hooks.semantics, 'ordinary-skills': 'supported', agents: 'supported', 'permissions-preprocessing': 'supported' },
+    evidence: [...hooks.evidence, 'docs/evidence/claude-code-2.1.285-reflection-20261016.json'],
+  });
+}
+
 function claudeCodeLifecycleDefinition(contracts: readonly ClaudeNativeRemoteUpdateContract[]): LifecycleHostDefinition {
   const version = claudeVersionObservation(observeClaudeCodeVersion());
   const detectedVersion = version.kind === 'detected' ? version.version : undefined;
   return {
     id: 'claude-code',
-    evidenceProfiles: [...claudeEvidenceProfiles(detectedVersion, contracts), portableHookProfile(portableHookAdapter, 'managed', ['install', 'update', 'disable', 'retire'])],
+    evidenceProfiles: [...claudeEvidenceProfiles(detectedVersion, contracts), claudeReflectionHookProfile()],
     probeVersion: async () => version,
     observeTarget: async (target) => ({ target, installations: observeClaudeInstallations(target, detectedVersion) }),
     observeNativeMutationScope: async (request) => ({

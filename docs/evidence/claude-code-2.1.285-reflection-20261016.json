@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "recordedAt": "2026-10-16",
+  "nativeHost": "claude-code",
+  "nativeVersion": "2.1.285",
+  "model": "gemini-4-argon",
+  "compiler": "plugnz@0.0.25",
+  "pluginRepo": "archeism/trajectories-reflection",
+  "pluginSource": "d615ad9fd1d59b6b64471df47104d2674c20aa28",
+  "scope": "Portable SessionStart/Stop command hooks combined with a native skill and an inherited-model agent restricted to Read and Write. Arbitrary native hooks, shell preprocessing, skill permissions and other agent grants remain unsupported.",
+  "nativeProof": {
+    "status": "passed",
+    "learnSession": "0bb60e10-717f-4e53-a519-f28bdefef3e7",
+    "recallSession": "13e66fbf-e7ff-4a3b-bdcc-3963327ecb5b",
+    "childCalls": [
+      "Read",
+      "Write",
+      "SubagentHandback"
+    ],
+    "freshRecallWithoutTools": true
+  },
+  "installer": {
+    "result": "converged",
+    "route": "managed",
+    "isolatedProfile": true
+  },
+  "privateEvidenceRoot": "/root/.local/state/trajectories-reflection-20261016",
+  "hashes": {
+    "extracted-native-proof-1/receipt.json": "c937a3b4cc2b9702cbdfa2c82b4a9264c1b17fcd2212d3558c07fe85852d3147",
+    "extraction-install.json": "c1a7c898b34da5d83258ffafd1b5ad7c00b7437ff9db786e0c4c149fea89810f",
+    "extraction-install-fixed.json": "ca58070db59245d54ddda55602aa8f1970e8e2e21811c46e9b92ebb60dadbc75"
+  }
+}
