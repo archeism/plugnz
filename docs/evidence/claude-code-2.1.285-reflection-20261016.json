@@ -28,6 +28,36 @@
   "hashes": {
     "extracted-native-proof-1/receipt.json": "c937a3b4cc2b9702cbdfa2c82b4a9264c1b17fcd2212d3558c07fe85852d3147",
     "extraction-install.json": "c1a7c898b34da5d83258ffafd1b5ad7c00b7437ff9db786e0c4c149fea89810f",
-    "extraction-install-fixed.json": "ca58070db59245d54ddda55602aa8f1970e8e2e21811c46e9b92ebb60dadbc75"
+    "extraction-install-fixed.json": "ca58070db59245d54ddda55602aa8f1970e8e2e21811c46e9b92ebb60dadbc75",
+    "extracted-installed-proof-1/receipt.json": "4e50fc2305105e3c9d2ccb149eb12d3e660dd67475743e543e5fcd0bc52bdc5d"
+  },
+  "installedNativeProof": {
+    "status": "passed",
+    "pluginRoute": "installed-profile",
+    "learnSession": "348f5c3f-3f9b-4ada-8a42-2dc838280974",
+    "recallSession": "d6dd249f-01a1-4157-adbc-7eb70741d8cb",
+    "learnSeconds": 182.88837808882818,
+    "recallSeconds": 5.428157469956204,
+    "childCalls": [
+      "Read",
+      "Write",
+      "SubagentHandback"
+    ],
+    "freshRecallWithoutTools": true
+  },
+  "checks": {
+    "fullSuite": {
+      "pass": 1160,
+      "skip": 7,
+      "fail": 0,
+      "bun": "1.4.2",
+      "environment": "private mount namespace maps on-disk task tmp to /tmp; DAC override/read-search capabilities dropped only for test children"
+    },
+    "typecheck": "passed",
+    "ciRuntimeFocused": {
+      "pass": 32,
+      "fail": 0,
+      "bun": "1.4.3"
+    }
   }
 }
