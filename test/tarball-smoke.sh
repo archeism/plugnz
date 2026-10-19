@@ -62,9 +62,9 @@ export OPEN_PLUGIN_HOME="$T/home"
 
 echo "== lifecycle via installed bin =="
 env PATH="$STRICT" "$BIN" add "$T/home/source" --target cursor --json | grep -q '"result": "succeeded"'
-env PATH="$STRICT" "$BIN" list --json | grep -q '"id": "demo"'
-env PATH="$STRICT" "$BIN" doctor --json | grep -q '✓'
-env PATH="$STRICT" "$BIN" remove 'demo@smoke' --json | grep -q '"result": "succeeded"'
+env PATH="$STRICT" "$BIN" list --target cursor --json | grep -q '"id": "demo"'
+env PATH="$STRICT" "$BIN" doctor --target cursor --json | grep -q '✓'
+env PATH="$STRICT" "$BIN" remove 'demo@smoke' --target cursor --json | grep -q '"result": "succeeded"'
 
 echo "== legacy bin alias =="
 env PATH="$STRICT" "$T/prefix/node_modules/.bin/plgnz" --version --json | grep -q '"name":"plugnz"'

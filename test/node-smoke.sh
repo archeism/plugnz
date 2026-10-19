@@ -51,20 +51,21 @@ mkdir -p "$SMOKE_HOME/source/plugins/demo/skills/example"
 printf '{ "name": "demo", "version": "1.0.0", "description": "smoke fixture" }\n' > "$SMOKE_HOME/source/plugins/demo/plugin.json"
 printf -- '---\nname: example\ndescription: Smoke fixture skill\n---\nBody.\n' > "$SMOKE_HOME/source/plugins/demo/skills/example/SKILL.md"
 printf '{ "name": "smoke", "plugins": [{ "name": "demo", "source": "./plugins/demo" }] }\n' > "$SMOKE_HOME/source/marketplace.json"
-# Cursor detection is directory-based; an empty store dir makes the target
-# present with no external binaries — exactly the plain-Node constraint.
+# Explicit Cursor selection accepts its directory surface without a binary.
+# Keep every lifecycle/read command scoped to that fixture: automatic discovery
+# intentionally requires an installed host binary.
 mkdir -p "$SMOKE_HOME/.cursor"
 export OPEN_PLUGIN_HOME="$SMOKE_HOME"
 env PATH="$STRICT_PATH" node "$BUNDLE" add "$SMOKE_HOME/source" --target cursor --json | grep -q '"result": "succeeded"'
-env PATH="$STRICT_PATH" node "$BUNDLE" list --json | grep -q '"id": "demo"'
-env PATH="$STRICT_PATH" node "$BUNDLE" doctor --json | grep -q '✓'
+env PATH="$STRICT_PATH" node "$BUNDLE" list --target cursor --json | grep -q '"id": "demo"'
+env PATH="$STRICT_PATH" node "$BUNDLE" doctor --target cursor --json | grep -q '✓'
 echo "== runtime parity doctor on populated isolated stores =="
 # AGENTS.md isolation: automated parity runs against fixture stores, never
 # the real home. The lifecycle leg above populated $SMOKE_HOME, so both
 # doctors see the same installed content with real findings to compare.
 # (Real-install diagnostics are a separately authorized manual step.)
-BUN_JSON="$(env PATH="$PATH" OPEN_PLUGIN_HOME="$SMOKE_HOME" bun bin/plugnz.mjs doctor --json 2>/dev/null || true)"
-NODE_JSON="$(env PATH="$PATH" OPEN_PLUGIN_HOME="$SMOKE_HOME" node "$BUNDLE" doctor --json 2>/dev/null || true)"
+BUN_JSON="$(env PATH="$PATH" OPEN_PLUGIN_HOME="$SMOKE_HOME" bun bin/plugnz.mjs doctor --target cursor --json 2>/dev/null || true)"
+NODE_JSON="$(env PATH="$PATH" OPEN_PLUGIN_HOME="$SMOKE_HOME" node "$BUNDLE" doctor --target cursor --json 2>/dev/null || true)"
 [ -n "$NODE_JSON" ] || { echo "doctor produced no output on real stores"; exit 1; }
 # Whole-document comparison with finding arrays order-normalized: a field
 # change (host, mark, pluginId) must fail the gate, not just message text.
@@ -84,7 +85,7 @@ else
   echo "runtime parity failed: bun and node doctor documents differ"; exit 1
 fi
 rm -rf "$DOC_DIR"
-env PATH="$STRICT_PATH" node "$BUNDLE" remove 'demo@smoke' --json | grep -q '"result": "succeeded"'
+env PATH="$STRICT_PATH" node "$BUNDLE" remove 'demo@smoke' --target cursor --json | grep -q '"result": "succeeded"'
 echo "ok: add/list/doctor/remove lifecycle green under plain node"
 
 
