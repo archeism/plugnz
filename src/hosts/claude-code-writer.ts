@@ -829,12 +829,55 @@ export function claudeReflectionHookProfile(): CapabilityEvidenceProfile {
   });
 }
 
+/** Narrow candidate compatibility profile for Claude Code 2.1.285 native advisor hook lifecycle:
+ * UserPromptSubmit, PostToolUse, PostToolUseFailure, Stop. */
+export function claudeAdvisorCandidateHookProfile(): CapabilityEvidenceProfile {
+  return createCapabilityEvidenceProfile({
+    host: 'claude-code',
+    detectedVersion: '2.1.285',
+    packageFormat: 'claude-native-hooks',
+    sourceTypes: ['local', 'git'],
+    operations: ['install', 'update', 'retire'],
+    route: 'managed',
+    operationStatus: 'supported',
+    semantics: Object.fromEntries(PACKAGE_SEMANTICS.map((semantic) => [
+      semantic,
+      ['hooks', 'auto-update-control', 'readback', 'rollback', 'activation-reload', 'retirement', 'retention-safety'].includes(semantic)
+        ? 'supported' : 'unsupported',
+    ])) as Record<PackageSemantic, CapabilityStatus>,
+    hookPolicy: {
+      manifestPrecedence: ['.claude-plugin/plugin.json', 'plugin.json'],
+      supportedForms: ['manifest-file'],
+      supportedEvents: ['UserPromptSubmit', 'PostToolUse', 'PostToolUseFailure', 'Stop'],
+      supportedHandlerTypes: ['command'],
+      matcherlessEvents: ['UserPromptSubmit', 'Stop', 'PostToolUse', 'PostToolUseFailure'],
+      supportedMatcherKinds: ['all'],
+      unsupportedHandlerFacets: [
+        'async-enabled',
+        'async-non-boolean',
+        'argv-invalid',
+        'timeout-invalid',
+        'status-message-invalid',
+      ],
+    },
+    evidence: [
+      'docs/hosts/claude-code.md',
+      'docs/research/native-plugin-update-capabilities-2026-10-09.md',
+      'docs/evidence/claude-code-2.1.285-advisor-candidate-20261019.json',
+    ],
+  });
+}
+
 function claudeCodeLifecycleDefinition(contracts: readonly ClaudeNativeRemoteUpdateContract[]): LifecycleHostDefinition {
   const version = claudeVersionObservation(observeClaudeCodeVersion());
   const detectedVersion = version.kind === 'detected' ? version.version : undefined;
   return {
     id: 'claude-code',
-    evidenceProfiles: [...claudeEvidenceProfiles(detectedVersion, contracts), claudeReflectionHookProfile()],
+    evidenceProfiles: [
+      ...claudeEvidenceProfiles(detectedVersion, contracts),
+      claudeReflectionHookProfile(),
+      ...(detectedVersion === '2.1.285' ? [claudeAdvisorCandidateHookProfile()] : []),
+    ],
     probeVersion: async () => version,
     observeTarget: async (target) => ({ target, installations: observeClaudeInstallations(target, detectedVersion) }),
     observeNativeMutationScope: async (request) => ({

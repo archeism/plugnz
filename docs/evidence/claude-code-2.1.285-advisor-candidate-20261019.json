@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "recordedAt": "2026-10-19",
+  "nativeHost": "claude-code",
+  "nativeVersion": "2.1.285",
+  "candidate": "trajectories-advisor",
+  "route": "managed",
+  "scope": "Candidate compatibility admission for Claude Code 2.1.285 native hook lifecycle (UserPromptSubmit, PostToolUse, PostToolUseFailure, Stop).",
+  "admission": {
+    "status": "admitted",
+    "verificationStatus": "compatibility=admitted registration=verified executionApproval=not-checked delivery=not-observed"
+  },
+  "sourceCommit": "3049b8fb6e54c39a421b61eb4ec4e51dc815c47c",
+  "synthesis": {
+    "base": "cohort-3/01; control installer capability profile and lifecycle tests",
+    "grafts": [
+      "cohort-3/02 CLAUDE_CONFIG_DIR intent; reimplemented to preserve OPEN_PLUGIN_HOME isolation",
+      "coordinator assertions for changed-byte update, registry cardinality and reflection/settings preservation"
+    ],
+    "rejected": [
+      "cohort-3/02 compares packageFormat to HookDeclarationForm; fails tsc",
+      "cohort-3/02 native-profile precedence over OPEN_PLUGIN_HOME; breaks test isolation"
+    ],
+    "candidatePatchSHA256": "92d93611a0b181e929e3bcb944195424b3b056c3577a16637f824dda2eb610fc"
+  },
+  "priorNativeEvidence": {
+    "source": "archeism/trajectories-reflection lab/claude-advisor-long-horizon cohort-3/01",
+    "sha256": "5ba406a9a69094d1db37e19615b4cb025c6d7e13f67af5fb4e70d16de3fd7b0e",
+    "demonstrated": [
+      "moved artifact installed without source checkout",
+      "installed native advice delivery",
+      "update/reinstall/removal",
+      "native Bash continues after removal and advisor outage"
+    ],
+    "scope": "Original candidate only; synthesis must pass separate combined verification. Managed reports do not claim execution approval or delivery."
+  },
+  "validation": {
+    "focused": "53 pass, 0 fail; paths + advisor/reflection/native lifecycle tests",
+    "typecheck": "bun run check passed",
+    "fullSuite": "1172 pass, 7 existing skips, 0 fail; 8060 assertions; 179.71 seconds",
+    "rootExecution": "Permission regression requires dropping dac_override/dac_read_search; no test waived.",
+    "commands": [
+      "bun run check",
+      "setpriv --bounding-set=-dac_override,-dac_read_search -- bun test",
+      "bun run build"
+    ],
+    "independentReview": "Codex subagent advisor_gate_forensics reviewed current synthesis; no source blockers; combined native verification remains separate."
+  }
+}

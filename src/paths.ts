@@ -20,7 +20,11 @@ export function homeRoot(): string {
 
 /** `~/.claude` — claude-code config root (`installed_plugins.json` lives under `plugins/`). */
 export function claudeCodeRoot(): string {
-  return process.env['OPEN_PLUGIN_CLAUDE_CODE_ROOT'] ?? join(homeRoot(), '.claude');
+  const explicitRoot = process.env['OPEN_PLUGIN_CLAUDE_CODE_ROOT'];
+  if (explicitRoot !== undefined) return explicitRoot;
+  // The test/home stand-in must not inherit an ambient native profile.
+  if (process.env['OPEN_PLUGIN_HOME']) return join(homeRoot(), '.claude');
+  return process.env['CLAUDE_CONFIG_DIR'] || join(homeRoot(), '.claude');
 }
 
 /** `~/.codex` — codex home: `config.toml` + `plugins/cache/`. */
