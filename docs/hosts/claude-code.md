@@ -138,3 +138,25 @@ shows all four named agents, their component token inventory, and all 25 skills
 loaded by native `plugin details`. This verifies agent discovery without a
 provider call; no claim of delegated model execution is made. Hidden
 `.claude/agents` roots remain unsupported rather than inferred from this proof.
+
+## Native advisor hooks (2.1.285)
+
+The managed route additionally admits command hooks declared by a native
+`.claude-plugin/plugin.json` file pointer for `UserPromptSubmit`, `PostToolUse`,
+`PostToolUseFailure`, and `Stop`. Only Claude Code **2.1.285** is qualified;
+async handlers, other events and additional unproven package semantics remain
+refused. This is a native extension to the portable package identity, not a
+claim these hook names are Agent Plugins standard events. See the
+[advisor evidence and synthesis receipt](../evidence/claude-code-2.1.285-advisor-candidate-20261019.json).
+
+`CLAUDE_CONFIG_DIR` selects the native profile when no installer override is
+set. `OPEN_PLUGIN_CLAUDE_CODE_ROOT` takes precedence. `OPEN_PLUGIN_HOME`
+continues to isolate all tests under its home stand-in and ignores ambient
+`CLAUDE_CONFIG_DIR`; to select a custom native profile with an isolated installer
+state, explicitly set both `OPEN_PLUGIN_CLAUDE_CODE_ROOT` and
+`CLAUDE_CONFIG_DIR` to the same path.
+
+Lifecycle tests exercise same-version changed-byte updates, one registry entry,
+reflection coexistence and preservation of unrelated settings. Native hook
+execution requires the separate installed-Claude proof; an installer
+`delivery=not-observed` report never claims an agent has executed its hooks.

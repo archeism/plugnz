@@ -43,7 +43,7 @@ export interface CapabilityEvidenceProfile {
   host: string;
   detectedVersion: string;
   /** Supplemental compiled-hook admission; unrelated package semantics stay on their existing profile. */
-  packageFormat?: 'portable-hooks';
+  packageFormat?: 'portable-hooks' | 'claude-native-hooks';
   sourceTypes: readonly SourceType[];
   operations: readonly CapabilityOperation[];
   route: CapabilityRoute;
@@ -200,11 +200,17 @@ export function admitPackageSemanticsFromProfiles(
     && candidate.route === request.route);
   const portable = (request.operation === 'install' || request.operation === 'update')
     && request.inventory.hookDeclarations.some(declaration => declaration.form === 'portable-hooks');
-  const specialized = candidates.filter(candidate => candidate.packageFormat === 'portable-hooks');
+  const claudeNative = (request.operation === 'install' || request.operation === 'update')
+    && !portable
+    && request.inventory.hookDeclarations.some(declaration => declaration.form !== 'portable-hooks');
+  const portableSpecialized = candidates.filter(candidate => candidate.packageFormat === 'portable-hooks');
+  const claudeNativeSpecialized = candidates.filter(candidate => candidate.packageFormat === 'claude-native-hooks');
   const ordinary = candidates.filter(candidate => candidate.packageFormat === undefined);
-  const matching = portable && specialized.length > 0 ? specialized
+  const matching = portable && portableSpecialized.length > 0 ? portableSpecialized
+    : claudeNative && claudeNativeSpecialized.length > 0 ? claudeNativeSpecialized
     : request.operation === 'install' || request.operation === 'update' ? ordinary
-    : ordinary.length > 0 ? ordinary : specialized;
+    : ordinary.length > 0 ? ordinary
+    : portableSpecialized.length > 0 ? portableSpecialized : claudeNativeSpecialized;
   if (matching.length > 1) {
     throw new Error(`ambiguous capability evidence for ${request.host} ${version} ${request.sourceType} ${request.route} ${request.operation}`);
   }
