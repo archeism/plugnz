@@ -288,7 +288,7 @@ describe('add', () => {
       try {
         expect(await main(['add', sourceDir, '--target', 'cursor'])).toBe(1);
       } finally { console.log = originalLog; }
-      expect(output.join('\n')).toContain("target 'cursor' has no verified native install profile for version 'directory' and local Sources");
+      expect(output.join('\n')).toContain("target 'cursor' directory managed install is unverified for mcp");
       expect(cursor.listInstalled().map((plugin) => plugin.id)).toEqual(before);
       expect(readState().some((record) => record.host === 'cursor' && record.id === 'new-plugin')).toBe(false);
     });

@@ -54,6 +54,8 @@ export interface ComponentDefinition {
   dialect: ComponentDialect;
   identity: string;
   path: string;
+  /** Authored agent metadata retained for evidence-bounded prompt-resource adaptation. */
+  metadataKeys?: string[];
 }
 
 export interface InvocationPolicyDeclaration {
@@ -751,7 +753,7 @@ function parseComponentDefinition(
     declarations,
   };
   return {
-    definition: { kind, dialect, identity, path },
+    definition: { kind, dialect, identity, path, ...(kind === 'agent' ? { metadataKeys: Object.keys(record).sort() } : {}) },
     policy,
     hasPermissionsPreprocessing: hasAny(record, PERMISSION_FIELDS) || /!`[\s\S]*?`/u.test(body),
   };

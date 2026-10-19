@@ -1,0 +1,459 @@
+{
+  "date": "2026-10-19T15:57:36.989Z",
+  "cli_version": "codex-cli 0.162.0",
+  "native_skill_count": 34,
+  "native_load_errors": [],
+  "automatic_command_catalog": [],
+  "explicit_ship_injected": true,
+  "persona_adaptation_injected": true,
+  "personas": [
+    {
+      "path": "agents/code-reviewer.md",
+      "sha256": "2d02acb9db1c37521d676587d2e0afb713c8983de957a78efdfa82d27e5fc3da"
+    },
+    {
+      "path": "agents/security-auditor.md",
+      "sha256": "66a3f68f1c691b600ddb44e88afb138e239d0572df37be84e1f9a427c887dd0a"
+    },
+    {
+      "path": "agents/test-engineer.md",
+      "sha256": "c4acde91d6307d88515387344a129a2d0679134e587596c3517d73faffcd5aa6"
+    },
+    {
+      "path": "agents/web-performance-auditor.md",
+      "sha256": "0928b1cf8103262a364bce0c1fc689a918852e2275441f1b2e687adfa1e607e9"
+    }
+  ],
+  "elapsed_ms": 701,
+  "model_calls": 0,
+  "token_usage": 0,
+  "resource_evidence": {
+    "runner_cpu_microseconds": {
+      "user": 70381,
+      "system": 25803
+    },
+    "runner_max_rss_kib": 2370832,
+    "child_cpu_and_peak_memory": "not measured",
+    "disk_kib": 4972
+  },
+  "evidence_local": "/tmp/codex-addy-native-L8ABI1",
+  "scope": "Actual native discovery and outbound prompt capture; resource resolution and byte preservation checked locally. No model inference or dedicated native role registration claimed.",
+  "source": {
+    "package_digest": "56b168d3e77ff0d1bcfa11056555d3c1b7fb75855736cd75534098f71e3099e8",
+    "collection_digest": "7bdde866d1ad99f192df61201eb06d7eeb3ce7b53b350dc1f17aa4844d792d56",
+    "bundle_builder": "Personal buildNeutralBundle; namespace amendment included",
+    "issue_personal_revision": "bc44f9bcb48a6693ba927820d81138c70f8a72dd",
+    "local_personal_revision": "f9deea513a121f9efdfe3f661ae66cc0c164066a"
+  },
+  "verification_command": "bun test/codex-addy-native-probe.mjs /absolute/path/to/codex /absolute/path/to/neutral-bundle /absolute/path/to/evidence-directory",
+  "prior_evidence": "docs/evidence/codex-personal-20260922.json additionally records a model executing actual sibling persona reads on Codex 0.153.4; neither result proves native dedicated agent-role registration.",
+  "retained_attempts": [
+    "/tmp/codex-addy-native-dpkHWJ (failed assertion used a prefix matching shipping-and-launch; fixed to exact catalog entry)",
+    "/tmp/codex-addy-native-BcQcsC (successful first corrected run)",
+    "/tmp/codex-addy-native-L8ABI1 (successful complete catalog and measurement run)",
+    "/tmp/codex-addy-native-o7Y36P (0.162.0 after explicit override amendment)",
+    "/tmp/codex-addy-native-AywgTM (0.161.0 after explicit override amendment)",
+    "/root/.local/share/plugnz-issue90/native/codex-addy-native-bJ2J3v",
+    "/root/.local/share/plugnz-issue90/native/codex-addy-native-iH9PEi"
+  ],
+  "native_runs": [
+    {
+      "date": "2026-10-19T15:58:19.667Z",
+      "cli_version": "codex-cli 0.162.0",
+      "native_skill_count": 34,
+      "native_load_errors": [],
+      "automatic_command_catalog": [],
+      "explicit_ship_injected": true,
+      "persona_adaptation_injected": true,
+      "personas": [
+        {
+          "path": "agents/code-reviewer.md",
+          "sha256": "2d02acb9db1c37521d676587d2e0afb713c8983de957a78efdfa82d27e5fc3da"
+        },
+        {
+          "path": "agents/security-auditor.md",
+          "sha256": "66a3f68f1c691b600ddb44e88afb138e239d0572df37be84e1f9a427c887dd0a"
+        },
+        {
+          "path": "agents/test-engineer.md",
+          "sha256": "c4acde91d6307d88515387344a129a2d0679134e587596c3517d73faffcd5aa6"
+        },
+        {
+          "path": "agents/web-performance-auditor.md",
+          "sha256": "0928b1cf8103262a364bce0c1fc689a918852e2275441f1b2e687adfa1e607e9"
+        }
+      ],
+      "elapsed_ms": 773,
+      "model_calls": 0,
+      "token_usage": 0,
+      "resource_evidence": {
+        "runner_cpu_microseconds": {
+          "user": 76562,
+          "system": 25184
+        },
+        "runner_max_rss_kib": 61488,
+        "child_cpu_and_peak_memory": "not measured",
+        "disk_kib": 4952
+      },
+      "evidence_local": "/tmp/codex-addy-native-o7Y36P",
+      "scope": "Actual native discovery and outbound prompt capture; resource resolution and byte preservation checked locally. No model inference or dedicated native role registration claimed."
+    },
+    {
+      "date": "2026-10-19T15:58:20.638Z",
+      "cli_version": "codex-cli 0.161.0",
+      "native_skill_count": 34,
+      "native_load_errors": [],
+      "automatic_command_catalog": [],
+      "explicit_ship_injected": true,
+      "persona_adaptation_injected": true,
+      "personas": [
+        {
+          "path": "agents/code-reviewer.md",
+          "sha256": "2d02acb9db1c37521d676587d2e0afb713c8983de957a78efdfa82d27e5fc3da"
+        },
+        {
+          "path": "agents/security-auditor.md",
+          "sha256": "66a3f68f1c691b600ddb44e88afb138e239d0572df37be84e1f9a427c887dd0a"
+        },
+        {
+          "path": "agents/test-engineer.md",
+          "sha256": "c4acde91d6307d88515387344a129a2d0679134e587596c3517d73faffcd5aa6"
+        },
+        {
+          "path": "agents/web-performance-auditor.md",
+          "sha256": "0928b1cf8103262a364bce0c1fc689a918852e2275441f1b2e687adfa1e607e9"
+        }
+      ],
+      "elapsed_ms": 894,
+      "model_calls": 0,
+      "token_usage": 0,
+      "resource_evidence": {
+        "runner_cpu_microseconds": {
+          "user": 90636,
+          "system": 10893
+        },
+        "runner_max_rss_kib": 2370832,
+        "child_cpu_and_peak_memory": "not measured",
+        "disk_kib": 4892
+      },
+      "evidence_local": "/tmp/codex-addy-native-AywgTM",
+      "scope": "Actual native discovery and outbound prompt capture; resource resolution and byte preservation checked locally. No model inference or dedicated native role registration claimed."
+    }
+  ],
+  "released_reproduction_0162": {
+    "schemaVersion": 1,
+    "command": {
+      "name": "sync",
+      "dryRun": true,
+      "sourceSnapshots": [
+        {
+          "id": "snapshot-v1-c58b0c4e1971918757e1fc609b1905810957bd668b43fb02c68e618fb237b462",
+          "reference": {
+            "binding": {
+              "kind": "local",
+              "locator": "/root/.local/share/plugnz-issue90/bundle"
+            },
+            "revision": "363647af5c9d84b3a03f10d2391cda946f40b4a4ae39c9946b35c1187843b4b7",
+            "fingerprint": "363647af5c9d84b3a03f10d2391cda946f40b4a4ae39c9946b35c1187843b4b7"
+          }
+        }
+      ]
+    },
+    "plan": [
+      {
+        "operationId": "operation-v1-4d33e2bc3880d6d5d88cdd4d162400032b70bef4256d2080800ac115fc7a7a6a",
+        "coverage": "desired-pair",
+        "scope": {
+          "id": "scope-v1-eed18917e22cc8848fb16f8954e2c4d0c1f834a7e0e7c0bed5bdb757cb9523f3",
+          "source": {
+            "kind": "local",
+            "locator": "/root/.local/share/plugnz-issue90/bundle"
+          },
+          "target": {
+            "kind": "codex",
+            "instance": "default"
+          }
+        },
+        "sourceSnapshotId": "snapshot-v1-c58b0c4e1971918757e1fc609b1905810957bd668b43fb02c68e618fb237b462",
+        "package": "addy",
+        "nativeId": "addy@personal",
+        "action": "not-attempted",
+        "route": "none"
+      }
+    ],
+    "outcomes": [
+      {
+        "operationId": "operation-v1-4d33e2bc3880d6d5d88cdd4d162400032b70bef4256d2080800ac115fc7a7a6a",
+        "coverage": "desired-pair",
+        "scope": {
+          "id": "scope-v1-eed18917e22cc8848fb16f8954e2c4d0c1f834a7e0e7c0bed5bdb757cb9523f3",
+          "source": {
+            "kind": "local",
+            "locator": "/root/.local/share/plugnz-issue90/bundle"
+          },
+          "target": {
+            "kind": "codex",
+            "instance": "default"
+          }
+        },
+        "sourceSnapshotId": "snapshot-v1-c58b0c4e1971918757e1fc609b1905810957bd668b43fb02c68e618fb237b462",
+        "package": "addy",
+        "nativeId": "addy@personal",
+        "action": "not-attempted",
+        "route": "none",
+        "result": "failed",
+        "resourceState": "absent",
+        "activationState": "inactive",
+        "changed": false,
+        "reason": {
+          "category": "capability",
+          "code": "capability.unverified",
+          "diagnostic": "target 'codex' has no verified native install profile for version '0.162.0' and local Sources",
+          "capabilityId": "profile",
+          "evidenceId": null
+        }
+      }
+    ],
+    "summary": {
+      "result": "incomplete",
+      "terminalPhase": "preflight",
+      "mutationStarted": false,
+      "changed": false,
+      "failureCategory": "capability",
+      "reason": null,
+      "recoveryId": null,
+      "readbackId": null
+    }
+  },
+  "public_boundary_replay": {
+    "0.161.0": {
+      "released_0_0_26": {
+        "summary": {
+          "result": "incomplete",
+          "terminalPhase": "preflight",
+          "mutationStarted": false,
+          "changed": false,
+          "failureCategory": "capability",
+          "reason": null,
+          "recoveryId": null,
+          "readbackId": null
+        },
+        "reason": {
+          "category": "capability",
+          "code": "capability.unverified",
+          "diagnostic": "target 'codex' has no verified native install profile for version '0.161.0' and local Sources",
+          "capabilityId": "profile",
+          "evidenceId": null
+        }
+      },
+      "candidate": {
+        "summary": {
+          "result": "converged",
+          "terminalPhase": "complete",
+          "mutationStarted": true,
+          "changed": true,
+          "failureCategory": null,
+          "reason": null,
+          "recoveryId": null,
+          "readbackId": null
+        },
+        "action": "install",
+        "result": "succeeded"
+      }
+    },
+    "0.162.0": {
+      "released_0_0_26": {
+        "summary": {
+          "result": "incomplete",
+          "terminalPhase": "preflight",
+          "mutationStarted": false,
+          "changed": false,
+          "failureCategory": "capability",
+          "reason": null,
+          "recoveryId": null,
+          "readbackId": null
+        },
+        "reason": {
+          "category": "capability",
+          "code": "capability.unverified",
+          "diagnostic": "target 'codex' has no verified native install profile for version '0.162.0' and local Sources",
+          "capabilityId": "profile",
+          "evidenceId": null
+        }
+      },
+      "candidate": {
+        "summary": {
+          "result": "converged",
+          "terminalPhase": "complete",
+          "mutationStarted": true,
+          "changed": true,
+          "failureCategory": null,
+          "reason": null,
+          "recoveryId": null,
+          "readbackId": null
+        },
+        "action": "install",
+        "result": "succeeded"
+      }
+    }
+  },
+  "native_public_sync_runs": [
+    {
+      "script_sha256": "e5e4844ed11d049f1afed0d2ee9f8938ec65d0de65d53cc71cb275a9c33e704a",
+      "cli_source_sha256": "16005c63fea3fe16253d474cf278b35a004d05275e6abdfd73ca3d1f2e2b3a09",
+      "public_sync": {
+        "exit_code": 0,
+        "result": "converged",
+        "report": "/root/.local/share/plugnz-issue90/native/codex-addy-native-bJ2J3v/public-sync.stdout.json",
+        "source_snapshots": [
+          {
+            "id": "snapshot-v1-c58b0c4e1971918757e1fc609b1905810957bd668b43fb02c68e618fb237b462",
+            "reference": {
+              "binding": {
+                "kind": "local",
+                "locator": "/root/.local/share/plugnz-issue90/bundle"
+              },
+              "revision": "363647af5c9d84b3a03f10d2391cda946f40b4a4ae39c9946b35c1187843b4b7",
+              "fingerprint": "363647af5c9d84b3a03f10d2391cda946f40b4a4ae39c9946b35c1187843b4b7"
+            }
+          }
+        ]
+      },
+      "date": "2026-10-19T16:00:56.059Z",
+      "cli_version": "codex-cli 0.162.0",
+      "native_skill_count": 34,
+      "native_load_errors": [],
+      "automatic_command_catalog": [],
+      "explicit_ship_injected": true,
+      "persona_adaptation_injected": true,
+      "personas": [
+        {
+          "path": "agents/code-reviewer.md",
+          "sha256": "2d02acb9db1c37521d676587d2e0afb713c8983de957a78efdfa82d27e5fc3da"
+        },
+        {
+          "path": "agents/security-auditor.md",
+          "sha256": "66a3f68f1c691b600ddb44e88afb138e239d0572df37be84e1f9a427c887dd0a"
+        },
+        {
+          "path": "agents/test-engineer.md",
+          "sha256": "c4acde91d6307d88515387344a129a2d0679134e587596c3517d73faffcd5aa6"
+        },
+        {
+          "path": "agents/web-performance-auditor.md",
+          "sha256": "0928b1cf8103262a364bce0c1fc689a918852e2275441f1b2e687adfa1e607e9"
+        }
+      ],
+      "elapsed_ms": 1227,
+      "model_calls": 0,
+      "token_usage": 0,
+      "resource_evidence": {
+        "runner_cpu_microseconds": {
+          "user": 24038,
+          "system": 7884
+        },
+        "runner_max_rss_kib": 2370832,
+        "child_cpu_and_peak_memory": "not measured",
+        "disk_kib": 8564
+      },
+      "evidence_local": "/root/.local/share/plugnz-issue90/native/codex-addy-native-bJ2J3v",
+      "scope": "Actual native discovery and outbound prompt capture; resource resolution and byte preservation checked locally. No model inference or dedicated native role registration claimed."
+    },
+    {
+      "script_sha256": "e5e4844ed11d049f1afed0d2ee9f8938ec65d0de65d53cc71cb275a9c33e704a",
+      "cli_source_sha256": "16005c63fea3fe16253d474cf278b35a004d05275e6abdfd73ca3d1f2e2b3a09",
+      "public_sync": {
+        "exit_code": 0,
+        "result": "converged",
+        "report": "/root/.local/share/plugnz-issue90/native/codex-addy-native-iH9PEi/public-sync.stdout.json",
+        "source_snapshots": [
+          {
+            "id": "snapshot-v1-c58b0c4e1971918757e1fc609b1905810957bd668b43fb02c68e618fb237b462",
+            "reference": {
+              "binding": {
+                "kind": "local",
+                "locator": "/root/.local/share/plugnz-issue90/bundle"
+              },
+              "revision": "363647af5c9d84b3a03f10d2391cda946f40b4a4ae39c9946b35c1187843b4b7",
+              "fingerprint": "363647af5c9d84b3a03f10d2391cda946f40b4a4ae39c9946b35c1187843b4b7"
+            }
+          }
+        ]
+      },
+      "date": "2026-10-19T16:01:01.937Z",
+      "cli_version": "codex-cli 0.161.0",
+      "native_skill_count": 34,
+      "native_load_errors": [],
+      "automatic_command_catalog": [],
+      "explicit_ship_injected": true,
+      "persona_adaptation_injected": true,
+      "personas": [
+        {
+          "path": "agents/code-reviewer.md",
+          "sha256": "2d02acb9db1c37521d676587d2e0afb713c8983de957a78efdfa82d27e5fc3da"
+        },
+        {
+          "path": "agents/security-auditor.md",
+          "sha256": "66a3f68f1c691b600ddb44e88afb138e239d0572df37be84e1f9a427c887dd0a"
+        },
+        {
+          "path": "agents/test-engineer.md",
+          "sha256": "c4acde91d6307d88515387344a129a2d0679134e587596c3517d73faffcd5aa6"
+        },
+        {
+          "path": "agents/web-performance-auditor.md",
+          "sha256": "0928b1cf8103262a364bce0c1fc689a918852e2275441f1b2e687adfa1e607e9"
+        }
+      ],
+      "elapsed_ms": 1206,
+      "model_calls": 0,
+      "token_usage": 0,
+      "resource_evidence": {
+        "runner_cpu_microseconds": {
+          "user": 19580,
+          "system": 13714
+        },
+        "runner_max_rss_kib": 2370832,
+        "child_cpu_and_peak_memory": "not measured",
+        "disk_kib": 8484
+      },
+      "evidence_local": "/root/.local/share/plugnz-issue90/native/codex-addy-native-iH9PEi",
+      "scope": "Actual native discovery and outbound prompt capture; resource resolution and byte preservation checked locally. No model inference or dedicated native role registration claimed."
+    }
+  ],
+  "validation": {
+    "full_suite": {
+      "command": "setpriv --bounding-set=-dac_override,-dac_read_search bun test",
+      "passed": 1184,
+      "skipped": 7,
+      "failed": 0,
+      "assertions": 8142,
+      "files": 112,
+      "elapsed_seconds": 190.58,
+      "log": "/root/.local/share/plugnz-issue90/tests-final.log"
+    },
+    "typecheck": {
+      "command": "bun run check",
+      "result": "passed"
+    },
+    "independent_review": {
+      "model": "gpt-6-astra",
+      "result": "approved; native retained reports, hashes, prompt captures and persona resources independently verified"
+    },
+    "retained_failed_checks": [
+      {
+        "log": "/root/.local/share/plugnz-issue90/tests.log",
+        "reason": "Initial root run bypassed permission-denial fixtures; subsequent runs drop DAC capabilities."
+      },
+      {
+        "log": "/root/.local/share/plugnz-issue90/tests-unprivileged.log",
+        "reason": "Two stale test expectations: newly proven Codex commands and newly specific Cursor MCP refusal; both corrected before passing final run."
+      }
+    ],
+    "method": {
+      "skill_revision": "unchanged",
+      "reason": "No skill change justified; native probe and public regression checks capture the demonstrated protection.",
+      "trajectory_review": "Trajectories exact local search for plugnz-issue90 returned no indexed current-session records; task tool results and retained test/probe logs reviewed directly."
+    }
+  }
+}

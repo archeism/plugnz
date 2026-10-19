@@ -50,6 +50,8 @@ export interface CapabilityEvidenceProfile {
   operationStatus: CapabilityStatus;
   semantics: Readonly<Record<PackageSemantic, CapabilityStatus>>;
   hookPolicy: HookCapabilityEvidence | null;
+  /** Prompt personas are read as resources, not registered native agent types. */
+  agentPolicy?: 'prompt-resources';
   /** Repository-relative evidence references only; no locators or credentials. */
   evidence: readonly string[];
 }
@@ -252,7 +254,9 @@ export function admitPackageSemanticsFromProfiles(
 
   const gaps = requirements.flatMap((semantic) => {
     const sourceOperation = request.operation === 'install' || request.operation === 'update';
-    const hookProblem = semantic === 'hooks' && sourceOperation
+    const hookProblem = semantic === 'agents' && sourceOperation && profile.agentPolicy === 'prompt-resources'
+      ? unsupportedPromptPersona(request.inventory)
+      : semantic === 'hooks' && sourceOperation
       ? unsupportedHookDeclaration(request.inventory, profile.hookPolicy)
       : semantic === 'auto-update-control' && sourceOperation && profile.packageFormat === 'portable-hooks' && request.inventory.autoUpdate.length > 0
         ? unsupportedHookProblem('portable hook installation does not project authored native auto-update directives')
@@ -343,6 +347,7 @@ export function createCapabilityEvidenceProfile(
     operationStatus: input.operationStatus,
     semantics: PACKAGE_SEMANTICS.map((semantic) => [semantic, input.semantics[semantic]]),
     hookPolicy,
+    ...(input.agentPolicy === undefined ? {} : { agentPolicy: input.agentPolicy }),
     evidence,
   };
   const hash = new CryptoHasher('sha256');
@@ -360,8 +365,25 @@ export function createCapabilityEvidenceProfile(
     operationStatus: input.operationStatus,
     semantics: Object.freeze({ ...input.semantics }),
     hookPolicy,
+    ...(input.agentPolicy === undefined ? {} : { agentPolicy: input.agentPolicy }),
     evidence: Object.freeze(evidence),
   });
+}
+
+/** Narrow, fail-closed adaptation: no native role metadata may be discarded. */
+function unsupportedPromptPersona(inventory: PackageSemanticInventory): HookProblem | null {
+  for (const path of inventory.components.agents) {
+    const agent = inventory.componentDefinitions.find(item => item.kind === 'agent' && item.path === path);
+    if (agent?.root !== 'agents' || agent.dialect !== 'markdown' || agent.metadataKeys === undefined) {
+      return unsupportedHookProblem(`prompt-resource agent adaptation cannot prove '${path}' as a canonical Markdown persona`);
+    }
+    const field = agent.metadataKeys.find(key => key !== 'name' && key !== 'description');
+    if (field !== undefined) return unsupportedHookProblem(`prompt-resource agent adaptation cannot preserve '${path}' metadata '${field}'; native agent registration is unsupported`);
+  }
+  if (inventory.components.agents.length > 0 && inventory.components.commands.length === 0) {
+    return unsupportedHookProblem('prompt-resource agent adaptation requires a projected command with persona loading instructions');
+  }
+  return null;
 }
 
 type HookProblem = {

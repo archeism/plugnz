@@ -255,8 +255,11 @@ export function selectLifecycleRoute<Operation extends CapabilityOperation>(
     }
 
     const versionDiagnostic = request.version.kind === 'detected' ? undefined : request.version.diagnostic;
+    // Public callers report the first gap: prefer an evidenced requirement failure
+    // over a missing alternative route profile, while retaining both for inspection.
     const gaps = dedupeGaps([...nativeGaps, ...managedAdmission.gaps].map(gap => versionDiagnostic === undefined
-      ? gap : { ...gap, diagnostic: `${gap.diagnostic}. ${versionDiagnostic}` }));
+      ? gap : { ...gap, diagnostic: `${gap.diagnostic}. ${versionDiagnostic}` }))
+      .sort((left, right) => Number(left.capabilityId === 'profile') - Number(right.capabilityId === 'profile'));
     if (gaps.length === 0) invariant('a refused route decision must retain at least one capability gap');
     return deepFreeze({
       kind: 'capability-gap',

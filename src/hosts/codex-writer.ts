@@ -525,14 +525,15 @@ function nativeUpgradeTimeout(): number {
 }
 const RELOAD_EFFECTIVE = { requirement: 'reload', status: 'effective' } as const;
 const UPDATE_SEMANTICS = ['ordinary-skills', 'resources', 'auto-update-control', 'readback', 'rollback', 'activation-reload'] as const satisfies readonly PackageSemantic[];
-const MANAGED_SEMANTICS = [...UPDATE_SEMANTICS, 'retirement', 'retention-safety', 'model-invocation-control', 'commands', 'mcp'] as const satisfies readonly PackageSemantic[];
+const MANAGED_SEMANTICS = [...UPDATE_SEMANTICS, 'retirement', 'retention-safety', 'model-invocation-control', 'commands', 'mcp', 'agents'] as const satisfies readonly PackageSemantic[];
 const OH_MY_AI_INSTALL_SEMANTICS = ['ordinary-skills', 'mcp', 'resources', 'auto-update-control', 'readback', 'rollback', 'activation-reload'] as const satisfies readonly PackageSemantic[];
 
 export const codexEvidenceProfiles: readonly CapabilityEvidenceProfile[] = [
   portableHookProfile(portableHookAdapter, 'managed', ['install', 'update', 'retire']),
   codexRouteProfile(CODEX_NATIVE_ROUTE_VERSION, 'native', ['update'], UPDATE_SEMANTICS, ['docs/research/native-plugin-update-capabilities-2026-10-09.md', 'docs/evidence/codex-native-released-20261011.md']),
-  ...CODEX_MANAGED_ROUTE_VERSIONS.map(version => codexRouteProfile(version, 'managed', ['install', 'update', 'retire'], version === '0.161.0' ? [...OH_MY_AI_INSTALL_SEMANTICS, 'retirement', 'retention-safety'] : MANAGED_SEMANTICS, [
+  ...CODEX_MANAGED_ROUTE_VERSIONS.map(version => codexRouteProfile(version, 'managed', ['install', 'update', 'retire'], version === '0.161.0' ? [...OH_MY_AI_INSTALL_SEMANTICS, 'retirement', 'retention-safety', 'commands', 'model-invocation-control', 'agents'] : MANAGED_SEMANTICS, [
     'docs/hosts/codex.md',
+    ...(['0.161.0', '0.162.0'].includes(version) ? ['docs/evidence/codex-addy-20261019.json'] : []),
     'docs/adr/0004-retain-plugin-state-on-removal.md',
     'docs/evidence/codex-policy-mcp-20261013.json',
     'docs/evidence/codex-native-released-20261011.md',
@@ -592,6 +593,7 @@ function codexRouteProfile(
     throw new Error('codex marketplace checkout rollback must stay unverified');
   }
   const supported = new Set<PackageSemantic>(supportedSemantics);
+  if (!['0.161.0', '0.162.0'].includes(detectedVersion)) supported.delete('agents');
   const semantics = {} as Record<PackageSemantic, CapabilityStatus>;
   for (const semantic of PACKAGE_SEMANTICS) semantics[semantic] = supported.has(semantic) ? 'supported' : 'unsupported';
   return createCapabilityEvidenceProfile({
@@ -602,6 +604,7 @@ function codexRouteProfile(
     route,
     operationStatus: 'supported',
     semantics,
+    ...(supported.has('agents') ? { agentPolicy: 'prompt-resources' as const } : {}),
     evidence,
   });
 }

@@ -9,7 +9,7 @@ import {
 } from '../src/lifecycle-runtime';
 import type { SelectedRouteDecision } from '../src/lifecycle-host';
 import { FakeLifecycleHost } from './fake-lifecycle-adapter';
-import { fixtureProfile, fixtureSnapshot, fixtureTarget } from './lifecycle-fixtures';
+import { emptyInventory, fixtureProfile, fixtureSnapshot, fixtureTarget } from './lifecycle-fixtures';
 
 const roots: string[] = [];
 afterAll(() => roots.forEach((root) => rmSync(root, { recursive: true, force: true })));
@@ -21,6 +21,49 @@ function tempRoot(label: string): string {
 }
 
 describe('lifecycle Native route proof', () => {
+  test('surfaces a verified route semantic gap before an absent alternative profile', async () => {
+    const root = tempRoot('semantic-gap-diagnostic');
+    const fake = new FakeLifecycleHost(join(root, 'host'), [
+      fixtureProfile({ route: 'managed', operations: ['install'], semantics: { agents: 'unsupported' } }),
+    ]);
+    const snapshot = fixtureSnapshot(root, {
+      operationId: 'op-semantic-gap', attemptId: 'attempt-semantic-gap', action: 'install',
+      inventory: { ...emptyInventory, requiredSemantics: ['agents'] },
+    });
+    const pins = createResolvedLifecyclePins([]);
+    const observed = await fake.adapter.observeTarget(fixtureTarget);
+    const nativeScope = await fake.adapter.observeNativeMutationScope({
+      targetObservation: observed, operation: 'install', packageName: snapshot.packageName,
+      nativeId: snapshot.nativeId, sourceType: snapshot.sourceType,
+    });
+    const nativeProjection = await fake.adapter.observeNativeProjection({
+      targetObservation: observed, operation: 'install', snapshot, pins,
+    });
+    const planCoverage = createLifecyclePlanCoverage(observed, [{
+      nativeId: snapshot.nativeId, operationId: snapshot.operationId, operation: 'install',
+      mutationGroupId: 'group-semantic-gap', authorization: 'planned-create',
+    }]);
+    const request = {
+      target: fixtureTarget, operationId: snapshot.operationId, attemptId: snapshot.attemptId,
+      scopeId: snapshot.scopeId, packageName: snapshot.packageName, nativeId: snapshot.nativeId,
+      sourceType: snapshot.sourceType, targetObservation: observed, nativeScope, nativeProjection,
+      planCoverage, operation: 'install' as const, snapshot, pins,
+    };
+    const decision = fake.adapter.decideRoute({ ...request, version: await fake.adapter.probeVersion(fixtureTarget) });
+    expect(decision.kind).toBe('capability-gap');
+    if (decision.kind !== 'capability-gap') throw new Error('expected refused package');
+    expect(decision.gaps[0]!.capabilityId).toBe('agents');
+    expect(decision.gaps[0]!.code).toBe('capability.unsupported');
+    expect(decision.gaps[0]!.diagnostic).toContain('unsupported for agents');
+    expect(decision.gaps.some(gap => gap.capabilityId === 'profile')).toBe(true);
+
+    fake.version = '2.0.0';
+    const unknownVersion = fake.adapter.decideRoute({ ...request, version: await fake.adapter.probeVersion(fixtureTarget) });
+    expect(unknownVersion.kind).toBe('capability-gap');
+    if (unknownVersion.kind !== 'capability-gap') throw new Error('expected unknown version refusal');
+    expect(unknownVersion.gaps.every(gap => gap.capabilityId === 'profile')).toBe(true);
+  });
+
   test('rejects a mutable Git ref before it can become a frozen lifecycle input', () => {
     const root = tempRoot('mutable-git-ref');
     let error: unknown;

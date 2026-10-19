@@ -36,8 +36,9 @@ describe('codex native marketplace upgrade route', () => {
         expect(selectedRoute(await selectedUpdate(snapshot, createResolvedLifecyclePins([]))).route).toBe('managed');
         const profile = codexEvidenceProfiles.find((candidate) => candidate.detectedVersion === '0.161.0' && candidate.route === 'managed' && candidate.packageFormat === undefined);
         expect(profile?.operations).toEqual(['install', 'retire', 'update']);
+        expect(profile?.agentPolicy).toBe('prompt-resources');
         expect(Object.entries(profile?.semantics ?? {}).filter(([, status]) => status === 'supported').map(([semantic]) => semantic).sort()).toEqual([
-          'activation-reload', 'auto-update-control', 'mcp', 'ordinary-skills', 'readback', 'resources', 'retention-safety', 'retirement', 'rollback',
+          'activation-reload', 'agents', 'auto-update-control', 'commands', 'mcp', 'model-invocation-control', 'ordinary-skills', 'readback', 'resources', 'retention-safety', 'retirement', 'rollback',
         ]);
       } finally {
         delete process.env['OPEN_PLUGIN_CODEX_BIN'];

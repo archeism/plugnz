@@ -356,8 +356,8 @@ describe('source package semantic inventory', () => {
     expect(inventory.componentDefinitions).toEqual([
       { kind: 'command', root: 'commands', dialect: 'toml', identity: 'build', path: 'commands/build.toml' },
       { kind: 'command', root: '.claude/commands', dialect: 'markdown', identity: 'build', path: '.claude/commands/build.md' },
-      { kind: 'agent', root: 'agents', dialect: 'markdown', identity: 'reviewer', path: 'agents/reviewer.md' },
-      { kind: 'agent', root: '.claude/agents', dialect: 'markdown', identity: 'reviewer', path: '.claude/agents/reviewer.md' },
+      { kind: 'agent', root: 'agents', dialect: 'markdown', identity: 'reviewer', path: 'agents/reviewer.md', metadataKeys: ['description', 'name'] },
+      { kind: 'agent', root: '.claude/agents', dialect: 'markdown', identity: 'reviewer', path: '.claude/agents/reviewer.md', metadataKeys: ['description', 'name', 'tools'] },
     ]);
     expect(inventory.components.permissionsPreprocessing).toEqual([
       '.claude/agents/reviewer.md',
