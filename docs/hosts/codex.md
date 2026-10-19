@@ -6,6 +6,14 @@ Codex activates `local` ahead of every version; otherwise its store compares sem
 
 Each plgnz-created version root contains `.plgnz-install.json` with its source identity, native plugin id, and content fingerprint. An exact re-add compares staged bytes before leaving that root untouched; changed bytes from the same source refresh the same version. A foreign root is adopted only when its bytes match the staged representation excluding that marker. Different foreign roots, winning foreign versions, different owned source identities, and symlinked managed slots are refused. Activation keeps the old root as a filesystem-rename backup until config enable succeeds. Removal deletes only marked versions for the requested native id; it removes an otherwise-empty plugin table or disables a table with user fields.
 
+Unmanaged native bundles may use a root symlink such as Chrome's `latest`.
+Inventory fingerprints the link destination string, not the target contents,
+and never borrows an ownership marker through that link. This observation lets
+unrelated packages synchronize without touching the bundle; it is not content
+verification or permission to adopt the symlink. Source and managed-slot symlinks
+remain refused. `test/codex-unmanaged-symlink-public.test.ts` covers preservation
+through preview, install, update and retirement, plus adoption/source refusal.
+
 Lifecycle-created markers additionally retain the canonical deployment `scopeId`,
 `sourceType`, immutable `sourceRevision`, and observed `route`. Local lifecycle
 source identity is stable by canonical scope, not by the mutable content hash.

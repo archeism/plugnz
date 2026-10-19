@@ -9,7 +9,7 @@ import { compilePortableHooksInStage, preflightPortableHooks } from '../hook-ins
  * code (AGENTS.md: doctor is read-only by construction;
  * test/doctor-imports.test.ts pins it).
  */
-import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { parse as parseToml } from 'smol-toml';
@@ -1491,7 +1491,11 @@ function parseRollbackVersions(value: unknown): string[] {
 }
 
 function installationRecord(plugin: InstalledPlugin): TargetInstallationData {
-  const owned = plugin.path === undefined ? null : readOwnership(plugin.path);
+  const linked = plugin.path !== undefined && lstatSync(plugin.path).isSymbolicLink();
+  // Native bundles may expose `latest` as a link. Observe only that entry,
+  // never its target's bytes or ownership marker. Managed paths still reject
+  // links before preparation/mutation; this is not adoption or content proof.
+  const owned = plugin.path === undefined || linked ? null : readOwnership(plugin.path);
   const ownership = owned?.pluginId === plugin.id
     ? { kind: 'owned' as const, proof: 'created' as const, scopeId: owned.scopeId ?? `codex:${plugin.id}`, proofId: `marker:${plugin.id}` }
     : { kind: 'unmanaged' as const };
@@ -1509,7 +1513,9 @@ function installationRecord(plugin: InstalledPlugin): TargetInstallationData {
       contentRoots: [],
     };
   }
-  const installedFingerprint = fingerprintTree(plugin.path);
+  const installedFingerprint = linked
+    ? new CryptoHasher('sha256').update(`codex-unmanaged-symlink\0${readlinkSync(plugin.path)}`).digest('hex')
+    : fingerprintTree(plugin.path);
   return {
     nativeId: plugin.id,
     packageName: plugin.name,
