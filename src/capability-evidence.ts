@@ -42,8 +42,8 @@ export interface CapabilityEvidenceProfile {
   evidenceId: string;
   host: string;
   detectedVersion: string;
-  /** Supplemental compiled-hook admission; unrelated package semantics stay on their existing profile. */
-  packageFormat?: 'portable-hooks' | 'claude-native-hooks';
+  /** Supplemental hook admission; native dialects remain qualified by host/version/route. */
+  packageFormat?: 'portable-hooks' | 'native-hooks';
   sourceTypes: readonly SourceType[];
   operations: readonly CapabilityOperation[];
   route: CapabilityRoute;
@@ -202,17 +202,17 @@ export function admitPackageSemanticsFromProfiles(
     && candidate.route === request.route);
   const portable = (request.operation === 'install' || request.operation === 'update')
     && request.inventory.hookDeclarations.some(declaration => declaration.form === 'portable-hooks');
-  const claudeNative = (request.operation === 'install' || request.operation === 'update')
+  const native = (request.operation === 'install' || request.operation === 'update')
     && !portable
     && request.inventory.hookDeclarations.some(declaration => declaration.form !== 'portable-hooks');
   const portableSpecialized = candidates.filter(candidate => candidate.packageFormat === 'portable-hooks');
-  const claudeNativeSpecialized = candidates.filter(candidate => candidate.packageFormat === 'claude-native-hooks');
+  const nativeSpecialized = candidates.filter(candidate => candidate.packageFormat === 'native-hooks');
   const ordinary = candidates.filter(candidate => candidate.packageFormat === undefined);
   const matching = portable && portableSpecialized.length > 0 ? portableSpecialized
-    : claudeNative && claudeNativeSpecialized.length > 0 ? claudeNativeSpecialized
+    : native && nativeSpecialized.length > 0 ? nativeSpecialized
     : request.operation === 'install' || request.operation === 'update' ? ordinary
     : ordinary.length > 0 ? ordinary
-    : portableSpecialized.length > 0 ? portableSpecialized : claudeNativeSpecialized;
+    : portableSpecialized.length > 0 ? portableSpecialized : nativeSpecialized;
   if (matching.length > 1) {
     throw new Error(`ambiguous capability evidence for ${request.host} ${version} ${request.sourceType} ${request.route} ${request.operation}`);
   }

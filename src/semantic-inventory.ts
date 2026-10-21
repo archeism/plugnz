@@ -414,6 +414,7 @@ function readSemanticManifests(root: string): SemanticManifest[] {
     '.plugin/plugin.json',
     '.claude-plugin/plugin.json',
     '.codex-plugin/plugin.json',
+    '.zcode-plugin/plugin.json',
   ].filter((path) => existsSync(join(root, path))).map((path) => ({
     ...parseJsonObject(join(root, path), `plugin manifest ${path}`),
     path,

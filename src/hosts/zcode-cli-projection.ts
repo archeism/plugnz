@@ -64,6 +64,45 @@ export function projectZcodePayload(source: string, resourceLinks: string, nativ
   const name = manifest.name;
   if (!/^[a-z0-9][a-z0-9._-]*$/iu.test(name)) throw new Error(`ZCode unsafe plugin name: ${name}`);
   for (const key of ['hooks', 'mcpServers', 'agents', 'agent', 'executables']) if (Object.hasOwn(manifest, key)) throw new Error(`ZCode root plugin semantic is unsupported: ${key}`);
+  // The projected manifest is regenerated. Never silently drop host declarations
+  // while admitting a standard-file hook package (spec §8 client extensions).
+  if (payload.has('.zcode-plugin/plugin.json')) {
+    const native: unknown = JSON.parse(text(payload, '.zcode-plugin/plugin.json'));
+    if (!object(native) || native.name !== name) throw new Error('ZCode native manifest identity differs from plugin.json');
+    const metadata = new Set(['name', 'version', 'description', 'author', 'license', 'homepage', 'repository', 'keywords']);
+    const conventional: Record<string, string> = { skills: 'skills', commands: 'commands', hooks: 'hooks/hooks.json' };
+    for (const [key, value] of Object.entries(native)) {
+      if (metadata.has(key)) continue;
+      const path = conventional[key];
+      if (path !== undefined && (value === path || value === `./${path}`) && payload.has(path)) continue;
+      throw new Error(`ZCode projection cannot preserve native manifest field: ${key}`);
+    }
+  }
+
+  if (payload.has('hooks/hooks.json')) {
+    const document: unknown = JSON.parse(text(payload, 'hooks/hooks.json'));
+    if (!object(document) || !object(document.hooks)) throw new Error('ZCode hook document must contain hooks');
+    for (const groups of Object.values(document.hooks)) {
+      if (!Array.isArray(groups)) throw new Error('ZCode hook groups must be an array');
+      for (const group of groups) {
+        if (!object(group) || !Array.isArray(group.hooks)) throw new Error('ZCode hook group must contain hooks');
+        for (const handler of group.hooks) {
+          if (!object(handler) || handler.type !== 'command' || typeof handler.command !== 'string' || !handler.command.trim()) {
+            throw new Error('ZCode projection requires command hooks');
+          }
+          // Qualified synchronous command envelope only. ZCode rejects or ignores
+          // other option shapes; generic native-hook inventory is not its schema.
+          for (const key of Object.keys(handler)) {
+            if (!['type', 'command', 'timeout', 'async'].includes(key)) throw new Error(`ZCode hook option is unqualified: ${key}`);
+          }
+          if (handler.async !== undefined && handler.async !== false) throw new Error('ZCode asynchronous hook is unqualified');
+          if (handler.timeout !== undefined && (typeof handler.timeout !== 'number' || !Number.isFinite(handler.timeout) || handler.timeout <= 0)) {
+            throw new Error('ZCode command timeout must be positive seconds');
+          }
+        }
+      }
+    }
+  }
   if (payload.has('commands')) {
     if (payload.get('commands')?.kind !== 'directory') throw new Error('ZCode commands path is not a directory');
     const commandTree = [...payload].filter(([path]) => path.startsWith('commands/'));

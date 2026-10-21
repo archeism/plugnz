@@ -1,0 +1,212 @@
+{
+  "version": 1,
+  "recordedAt": "2026-10-21",
+  "verdict": "PASS: native ZCode installer lifecycle and deterministic delivery, not model quality",
+  "baseline": {
+    "version": "0.0.28",
+    "verdict": "native hooks rejected before mutation",
+    "fixtureRequests": {
+      "executor": 0,
+      "advisor": 0
+    },
+    "reason": {
+      "category": "capability",
+      "code": "capability.unsupported",
+      "diagnostic": "target 'zcode-cli' 0.16.9 native install is unsupported for hooks",
+      "capabilityId": "hooks",
+      "evidenceId": "sha256:cebd30ac7d3460d1daf064af6a7aefdf4e71b92abb482b73edd3498d075b7aa4"
+    },
+    "executableSha256": "07fb9842e89433668833510689c989a2d7cf9f2b2bcb6d475775203acfa7d151"
+  },
+  "candidate": {
+    "executableSha256": "84d5d200cf72d4360526b949ec5e62c422c83fb50b71abe601fd5ad5356f05fe",
+    "baseSourceCommit": "a014e840acc4a19ed5d8b7b1bf60656bd92c86c0",
+    "nativeVersion": "0.16.9",
+    "nativeBundleSha256": "f78a9144825414853caf3aac2f6913f72def33a808aae7885d50230c289c60ee",
+    "packageFiles": {
+      "README.md": "e150d2078880ba987a4f5e4e0378b96a9408dfe81283ef32bf4385cc609e1e9e",
+      "zcode-evidence.json": "7b0f5655aa22f770a9c856ca4c915acc2ead8eeff99d182aedd49087403bc224",
+      "plugin.json": "9957afdfd300b3cbeeeb85c86dc79ab3ff3be833627bbef19556105358b226dd",
+      "LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      ".zcode-plugin/plugin.json": "1ddebe2070d48e993af3350deaaba443ce30ef210241bf30aec168111e889aec",
+      "hooks/hooks.json": "b69d8f7d25b12f1d8f715437dcbdc1191e1dbfa82c44e09fa3b84bb223b3b12a",
+      "io.github.archeism.trajectories-advisor/private-paths.mjs": "d3101249475410fb26ec9520d3c9a84a0002d81b5519cd43c41005237f34b304",
+      "io.github.archeism.trajectories-advisor/zcode-hooks.json": "b69d8f7d25b12f1d8f715437dcbdc1191e1dbfa82c44e09fa3b84bb223b3b12a",
+      "io.github.archeism.trajectories-advisor/investigate.mjs": "410d9242fc3e9d090bec161a2ac560c6c2182953d8255c3dd43ab956190fa9b1",
+      "io.github.archeism.trajectories-advisor/git-readonly.mjs": "73c5ec698abcfe716af066ac7816532ff615fb3977b042996d7896f71c6609d2",
+      "io.github.archeism.trajectories-advisor/hooks.json": "ae2ddc761135424de74d37bb3cb40980abbd9fc4e246f5f3683d5ededc59ed92",
+      "io.github.archeism.trajectories-advisor/review-errors.mjs": "322d23b1e347569cd3b3d62a364e1c3b74d5610ec445ff2c4ee9ec2585f46b97",
+      "io.github.archeism.trajectories-advisor/advisor.mjs": "6fdef79034c7627fc1b2a52e4597205ac0bbb2a8f6a355d9eb4e5b6047603b87",
+      "io.github.archeism.trajectories-advisor/readonly.mjs": "751fef402d3c9a5729bb8225cb324f8ae264c8f79e216b0279a98ca39a65a2b9",
+      "io.github.archeism.trajectories-advisor/zcode.mjs": "f97698daadc5e28f6bb20272a61773c6ae6634c4ea2ae0476b2a20c57ef49f97",
+      ".plugin/plugin.json": "9957afdfd300b3cbeeeb85c86dc79ab3ff3be833627bbef19556105358b226dd"
+    },
+    "scope": "default hooks/hooks.json, command handlers, qualified four events and exact validated options",
+    "nativeSourceCommit": "aac4755666d09fdcd70272fcf063c077a639015f"
+  },
+  "assertions": {
+    "passed": true,
+    "checks": {
+      "native_tools_advertised": true,
+      "native_success_and_failure_hooks": true,
+      "advisor_readonly_tools_only": true,
+      "advisor_native_workspace_reads": true,
+      "advisor_tool_result_received": true,
+      "executor_received_tool_correction": true,
+      "executor_received_stop_correction": true,
+      "stop_continued_once": true,
+      "same_session_new_turn": true,
+      "plugin_list_success": true,
+      "disk_budget": true,
+      "loopback_only_namespace": true,
+      "malformed_update_rejected": true,
+      "failed_update_preserves_active_artifact": true,
+      "initial_readd_same_bytes": true,
+      "update_changes_native_bytes": true,
+      "native_plugin_removed": true,
+      "external_state_preserved": true,
+      "no_advisor_calls_after_remove": true,
+      "native_exec_after_remove": true
+    },
+    "scope": "Native plumbing and deterministic continuation; fixture tokens synthetic, no model quality conclusion"
+  },
+  "lifecycle": {
+    "update": {
+      "before": "f97698daadc5e28f6bb20272a61773c6ae6634c4ea2ae0476b2a20c57ef49f97",
+      "after": "6aa35d6642dc8f29a24efcd66c13326111925c9ada631290473d3a453477976e",
+      "onlyChange": "harmless comment appended to copied qualification package runtime; authored product unchanged"
+    },
+    "recovery": {
+      "documentedOriginalUpdateRetry": true,
+      "artifactPreserved": true,
+      "priorRemovalRefused": true
+    },
+    "removal": {
+      "advisorRequestsBefore": 8,
+      "advisorRequestsAfter": 8,
+      "externalStateBefore": {
+        "zcode-581983bbb78c78db5f732615aa795159eca783e93c6f9c3f68054cc5e34ff64e.json": "39b74ae56ba290885f747e83dc0ecced8eef4d70107268a9f77efbbb2336b5d1"
+      },
+      "externalStateAfter": {
+        "zcode-581983bbb78c78db5f732615aa795159eca783e93c6f9c3f68054cc5e34ff64e.json": "39b74ae56ba290885f747e83dc0ecced8eef4d70107268a9f77efbbb2336b5d1"
+      },
+      "externalStatePreserved": true,
+      "noAdvisorRequestsAfterRemoval": true
+    }
+  },
+  "resources": {
+    "sumPhaseWallSeconds": 136.18124629801605,
+    "sumChildCpuSeconds": 167.757928,
+    "peakChildMaxRssKiB": 393028,
+    "maxRssSemantics": "getrusage CHILDREN cumulative maximum; not summed live process-tree RAM",
+    "budgetBytes": 134217728,
+    "sampledPeakConservativeCombinedBytes": 84291584,
+    "retainedConservativeCombinedBytes": 83550208,
+    "retainedUniqueCombinedBytes": 53645312,
+    "separateParentRegressionScratchBytes": 74698752,
+    "regressionScratchNote": "Parent moved completed full-suite temp artifacts intact outside native qualification budget before this run; neither deleted nor hidden from overall task accounting."
+  },
+  "requests": {
+    "executor": 6,
+    "advisor": 8,
+    "advisorReadCalls": 4,
+    "fixtureTokenSemantics": "synthetic deterministic fixture usage, not real LLM token metering",
+    "nativeUsage": {
+      "prompt": {
+        "source": "provider",
+        "modelRequestCount": 4,
+        "inputTokens": 80,
+        "outputTokens": 40,
+        "totalTokens": 120,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "reasoningTokens": 0,
+        "webFetchRequests": 0,
+        "webSearchRequests": 0
+      },
+      "resume": {
+        "source": "provider",
+        "modelRequestCount": 1,
+        "inputTokens": 20,
+        "outputTokens": 10,
+        "totalTokens": 30,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "reasoningTokens": 0,
+        "webFetchRequests": 0,
+        "webSearchRequests": 0
+      },
+      "after-remove": {
+        "source": "provider",
+        "modelRequestCount": 1,
+        "inputTokens": 20,
+        "outputTokens": 10,
+        "totalTokens": 30,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "reasoningTokens": 0,
+        "webFetchRequests": 0,
+        "webSearchRequests": 0
+      }
+    }
+  },
+  "network": {
+    "proof": "fresh network namespace; only loopback enabled",
+    "interfaces": [
+      "lo"
+    ],
+    "upstreamModelCalls": 0
+  },
+  "validation": {
+    "focused": "90 tests passed",
+    "fullSuite": "1198 passed, 7 existing skips, 0 failed; 8167 assertions",
+    "typecheck": "bun run check passed",
+    "resources": {
+      "exitCode": 0,
+      "wallSeconds": 183.96206532104407,
+      "childUserCpuSeconds": 160.963691,
+      "childSystemCpuSeconds": 53.077233,
+      "maxChildRssKiB": 749484,
+      "limitations": "Cumulative maximum child RSS, not aggregate process tree peak. Permission tests run without root DAC bypass. TMPDIR on persistent disk."
+    },
+    "independentReview": "Independent source and raw-request reviews approved; actual underlying review-model identity unverified."
+  },
+  "retainedAttempts": [
+    {
+      "path": "attempt-20261021-083427",
+      "status": "expected published0.0.28 baseline refusal"
+    },
+    {
+      "path": "attempt-20261021-083555",
+      "status": "fixture mismatch: OPEN_PLUGIN_HOME and direct native HOME differed; correct installed profile was enabled; no product bug"
+    },
+    {
+      "path": "attempt-20261021-083725",
+      "status": "fixture identity assumption: update requested @local but standalone package identity omitted it; correct ownership refusal before mutation"
+    },
+    {
+      "path": "attempt-20261021-084005",
+      "status": "complete qualification via linked continuation; original malformed-update pending recovery caused documented cross-verb removal refusal; same frozen installer update retry settled it before removal; terminal-initial.json preserved"
+    }
+  ],
+  "limits": [
+    "Native bundle relocated by hardlink with identical bytes to avoid unrelated source-relative bundled-asset seed copies.",
+    "No real user profile or managed credentials changed.",
+    "Failed-update artifact preservation proven with shell:false; documented original-update retry was required before removal, with raw failed and recovered receipts retained.",
+    "Lifecycle update modifies only a copied package with a harmless comment; authored advisor source is untouched."
+  ],
+  "skillDecision": "Unchanged; product capability extension and corrected fixture assumptions, not a measured skill improvement.",
+  "evidence": {
+    "directory": "/root/.local/state/plugnz-zcode-advisor-20261021",
+    "candidateAttempt": "/root/.local/state/plugnz-zcode-advisor-20261021/attempt-20261021-084005",
+    "baselineAttempt": "/root/.local/state/plugnz-zcode-advisor-20261021/attempt-20261021-083427",
+    "sha256": {
+      "qualification-report.json": "21897f616c0e6b6e2423ed260387208e86bfa71a255aa5a38b718e739cbeb917",
+      "evidence-hashes.json": "f6c4aedc1ee52d426f1ba24d4bc2b988cc8c4622541b662d998c7d33b957e715",
+      "full-tests.log": "36a3aec51e7072106e9390823cc7e98cda5cde36290a8421a6fa5f1a59ffe2b0",
+      "qualify.py": "959c3bb08b3ff8b27775e13045e91700639442eb162851388d852feb8ecd0475",
+      "recover.py": "af6c2c6038cb757bbf8ede4407e50ab80b00c4ca1446880d5dce69bd342a99ae",
+      "check.py": "1acdb5cad2fe29611dff55f0e1ca8ec75d996250ffdd7369067f9feaeb8602a8"
+    }
+  }
+}

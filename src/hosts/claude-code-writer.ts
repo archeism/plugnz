@@ -835,7 +835,7 @@ export function claudeAdvisorCandidateHookProfile(): CapabilityEvidenceProfile {
   return createCapabilityEvidenceProfile({
     host: 'claude-code',
     detectedVersion: '2.1.285',
-    packageFormat: 'claude-native-hooks',
+    packageFormat: 'native-hooks',
     sourceTypes: ['local', 'git'],
     operations: ['install', 'update', 'retire'],
     route: 'managed',

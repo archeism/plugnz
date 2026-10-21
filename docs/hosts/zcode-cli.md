@@ -60,7 +60,8 @@ The adapter supports static Markdown commands and user-only skills projected as
 one namespaced command (`<plugin>:<command>`) with `$ARGUMENTS`/`$N` preserved
 and contained Markdown resources rewritten to an owned absolute path. It
 refuses shell expansion, unsupported command metadata, unimplemented root
-semantics such as hooks/MCP, command collisions, and unowned adoption. Native
+semantics such as inline hooks/MCP, command collisions, and unowned adoption.
+The separately qualified standard-file native hook route is described below. Native
 content uses `canonical+plgnz.<fingerprint>`; cache path normalization is read
 from the native store rather than reconstructed.
 
@@ -70,3 +71,40 @@ unchanged re-add, changed-content update, drift detection/recovery, and remove.
 All adapter probes used temporary homes and made no model turn. The source
 declares Node `24.14.0`, so this is interface evidence rather than a
 supported-runtime certification.
+
+
+## Native advisor hooks
+
+ZCode CLI 0.16.9 at source `aac4755666d09fdcd70272fcf063c077a639015f`
+has a separate `native-hooks` capability profile. This is shared profile selection
+with host-specific evidence, not a claim that native hook schemas are portable.
+Agent Plugins 1.0 keeps these host extensions outside its portable core (spec §8).
+
+The qualified package uses `hooks/hooks.json`, synchronous `command` handlers,
+and catch-all matchers for `UserPromptSubmit`, `PostToolUse`, `PostToolUseFailure`
+and `Stop`. Handler options are `command`, optional positive `timeout` in seconds,
+and optional `async: false`. Other options, events, handler types and versions
+remain unsupported/unverified. Hooks may ship with resource files; this narrow
+profile does not admit arbitrary mixtures with agents, MCP or skills.
+
+The native manifest is inventoried before selection. Projection refuses declarations
+it cannot preserve instead of overwriting them silently. Conventional hooks,
+commands and skills paths may survive projection, but must separately pass their
+applicable semantic profile. Native trust/permission policy remains ZCode-owned.
+Installing hooks does not execute them, and ordinary install reports do not claim
+runtime delivery.
+
+```sh
+OPEN_PLUGIN_ZCODE_CLI_BIN="$(command -v zcode)" \
+  plugnz add /absolute/path/to/advisor-zcode --target zcode-cli --json
+```
+
+`OPEN_PLUGIN_HOME` is an entire home-directory stand-in, not just a ledger directory.
+When testing in isolation, direct ZCode checks must use that same HOME. Normal
+installations need no home override. Start a new ZCode session after updating hooks.
+See [native installation and delivery evidence](../evidence/zcode-native-advisor-hooks-20261021.json).
+
+If an update fails during staging, keep the previous installation, correct the
+source, and retry `plugnz update <name> --target zcode-cli --json` before removing
+it. Cross-verb recovery is deliberately refused until that pending update settles;
+the native qualification exercises this recovery and verifies retained data.
