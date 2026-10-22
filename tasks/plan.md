@@ -1,13 +1,13 @@
 # Portable agents: native parity across supported harnesses
 
-Status: proposed delivery plan; tracking and bounded research only in this session.
+Status: implementation and isolated native qualification; canonical status below.
 Canonical task status: [GitHub milestone](https://github.com/archeism/plugnz/milestone/2).
 Canonical decision map: [Map native portable-agent parity across supported harnesses](https://github.com/archeism/plugnz/issues/91). The [local task index](todo.md) contains links, not duplicate status.
 The previous [distributor plan](archive/distributor/plan.md) and [issue index](archive/distributor/todo.md) are preserved; their milestone is closed with zero open issues.
 
 ## Outcome and fixed contract
 
-Extend portable agent definitions and deterministic model selection to the eight remaining registered targets. Preserve the qualified Claude Code, Codex and ZCode CLI baseline at `bda34a0390667ed3ca32635f29d0bd35256eb5a9` (released as 0.0.31).
+Extend portable agent definitions and deterministic model selection to the seven remaining native targets. Pi is an explicit owner-approved exception: loudly warn and ignore portable agents without failing, not a native parity claim ([decision](https://github.com/archeism/plugnz/issues/101#issuecomment-6346092250)). Preserve the qualified Claude Code, Codex and ZCode CLI baseline at `bda34a0390667ed3ca32635f29d0bd35256eb5a9` (released as 0.0.31).
 
 Use the [existing authoring contract](../docs/portable-agents.md): one name, description and prose body; optional alias and explicit destination mapping. Explicit mapping wins over user alias, then package alias; absent mapping omits the native model field. `fast` and `smart` are naming conventions, not automatic provider guesses. Native tools remain the harness's responsibility. Do not add tool/permission preferences, a daemon, ACP execution or another agent runtime.
 
@@ -46,6 +46,8 @@ The tracker contains the actual native blocking edges. Three route decisions and
 1. [Choose native agent registration for OMP and Cursor](https://github.com/archeism/plugnz/issues/92)
 2. [Choose native agent registration for Kimi, Hermes, Grok Build and DCode](https://github.com/archeism/plugnz/issues/93)
 3. [Decide native agent routes for Pi and OpenCode without a custom runtime](https://github.com/archeism/plugnz/issues/94)
+4. [Remaining Cursor native route](https://github.com/archeism/plugnz/issues/105), split from #92.
+5. [Pi existing-extension decision](https://github.com/archeism/plugnz/issues/106), resolved by owner deferral.
 
 Each uses first-party source and current adapter evidence. Research does not execute paid models or mutate live installations. A decision resolution names the route, supported surface, remaining runtime proof and next bounded probe. Unresolved evidence stays open. Claim while working; release unfinished claims when ending a session.
 
@@ -53,7 +55,7 @@ Each uses first-party source and current adapter evidence. Research does not exe
 
 [Decide how explicit model mappings respect native fallback policy](https://github.com/archeism/plugnz/issues/104)
 
-Native fallback is different from plugnz mapping incorrectly. OMP/Cursor research found native substitutions that conflict with the current docs' strict unavailable-model statement. Record Charles's choice rather than enforcing an invented cross-harness policy. These two deliveries also depend on this decision; research continues independently.
+Charles chose [preserve native model policy](https://github.com/archeism/plugnz/issues/104#issuecomment-6345606404): pass the exact resolved value and disclose native credential/account/admin substitutions. He also [approved native Markdown parsing](https://github.com/archeism/plugnz/issues/104#issuecomment-6346091818): preserve generated prose, disclose native normalization, and verify meaningful instructions in actual child requests. Neither decision changes mapping precedence or omission.
 
 ### First delivery checkpoint
 
@@ -73,16 +75,16 @@ Proceed in small independent batches after decisions. Repeat combined verificati
 
 ### Extension scope checkpoint
 
-1. [Portable agents: deliver native Pi integration](https://github.com/archeism/plugnz/issues/101)
+1. [Portable agents: warn and skip Pi without failing](https://github.com/archeism/plugnz/issues/101)
 2. [Portable agents: deliver native OpenCode integration](https://github.com/archeism/plugnz/issues/102)
 
-Current routes are hook-only. Their research must establish a native registration path and any required scope decision before modifying admission. Do not turn standalone skill copies or a custom delegation runtime into a claimed native solution.
+OpenCode uses its native plugin configuration hook and existing owned package lifecycle; native child execution remains a qualification requirement. Pi retains existing hook support and ignores portable agents with an explicit non-failing warning. Neither change admits standalone skill/command distribution or a custom delegation runtime.
 
 ### Final checkpoint
 
 [Accept portable-agent parity and publish the support matrix](https://github.com/archeism/plugnz/issues/103)
 
-All eight deliveries block acceptance. A missing native primitive is a recorded blocker or a proposal for upstream work, never successful parity. Publish via existing exact-SHA CI gates; fleet rollout is separate.
+All eight delivery issues block acceptance: seven native integrations and Pi's owner-approved warning/skip behavior. A missing native primitive in another target remains a blocker or a proposal for upstream work, never successful parity. Publish via existing exact-SHA CI gates; fleet rollout is separate.
 
 ## Per-delivery verification
 

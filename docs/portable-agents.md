@@ -40,7 +40,11 @@ Read the change and explain your reasoning. Report concrete defects with evidenc
 
 Name, description and nonblank instructions are required. The name matches the
 filename and uses lowercase letters, digits and hyphens, starting with a letter.
-`modelAlias` and `models` are optional. Instructions, including prose, are preserved.
+`modelAlias` and `models` are optional. Plugnz preserves the authored instruction
+body in generated definitions. Native loaders may normalize whitespace, line
+endings or Markdown comments; qualification records those transformations and
+checks the meaningful instructions in actual child requests. This follows the
+[owner's native-parsing decision](https://github.com/archeism/plugnz/issues/104#issuecomment-6346091818).
 Portable agent metadata deliberately excludes tools, permissions, effort and
 runtime settings. The generated definition leaves native tools at their normal defaults.
 
@@ -72,10 +76,14 @@ For each agent and destination, resolution is:
 
 An undefined alias or missing destination mapping means omission. Nothing guesses
 an equivalent model, copies a different destination's choice, or emits `inherit`.
-An explicitly mapped but unavailable model remains a native harness error; there
-is no silent fallback. ZCode mappings must use its native `provider/model` or
-`custom:` encoding. Bare `haiku`, `sonnet`, `opus`, `main` and `inherit` are rejected
-because ZCode treats them as inheritance rather than a specific model choice.
+Plugnz passes the exact resolved value; it never substitutes another model.
+The native harness still owns model availability, credentials, account/admin
+policy and fallback. A mapped model may therefore fail or be substituted by the
+harness; target qualification must disclose that behavior, not promise strict
+selection. This follows the [owner's native-policy decision](https://github.com/archeism/plugnz/issues/104#issuecomment-6345606404).
+ZCode mappings must use its native `provider/model` or `custom:` encoding.
+Bare `haiku`, `sonnet`, `opus`, `main` and `inherit` are rejected because ZCode
+treats them as inheritance rather than a specific model choice.
 
 ZCode 0.16.9 uses a limited frontmatter parser. Its adapter preserves quotes and
 backslashes with native-compatible quoting and rejects text that cannot survive
