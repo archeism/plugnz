@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "base": "871352c5836a82d6f43988b43a7274a43c9f9f4e",
+  "rawRoot": "/root/.local/state/plugnz-portable-agents-20261022",
+  "sourceSha256": {
+    "src/portable-agents.ts": "b61c99029f9f71e9a0aed68e86a4da68890c58f8f73519e54708f0e692bc5e21",
+    "src/source.ts": "9c05b08c156dd6c6aeadb8749c164dcf88eff316a265c07974326787e15881ac",
+    "src/paths.ts": "a646e1919160d8095fecfea80376eaae7d5f9477d881a3217f3a8b7c7764483e",
+    "src/semantic-inventory.ts": "50af34f21cac9b9b1d3ab782b48a7f2c15147cc4ea7918378eed3a2beb8f9829",
+    "src/capability-evidence.ts": "7dec1928f156d1115a2f55f155b848f59d4b2bf4a03718458df9879b075533d8",
+    "src/hosts/claude-code-writer.ts": "d223d65cc9f705bae618e250d22f2312969ce95d252bf217af9aef5b58f6ae9d",
+    "src/hosts/zcode-cli-projection.ts": "2f6cc2bca081ac7597335eab52f0012a3b2a48f2b138aac35a983a9dc00a61e6",
+    "src/hosts/zcode-cli-writer.ts": "12cfd8b034bf3bfe872d7ccd205e8b575dfdc31f5baa44c8158d92b7ce5d4b97"
+  },
+  "evidenceSha256": {
+    "tests-final.log": "42622e3066a0b406f9431df01cff804be087bbdc56201e6f5fa10b67146ba44a",
+    "claude/installed-20261022-150249/report.json": "c9815192748eda96707e17738422b4fbcc9ac99311a107d41a5d61fb3be3508c",
+    "claude/installed-20261022-150249/assertions.json": "b48b13e9ab9c3a8e15c131b6e259785446c3d2999f877a4ff467893aabd8f9da",
+    "claude/installed-20261022-150249/hashes.json": "b2acd396d71cf615d46d46ea9ea331e8469a847b132338f67f0091201c17bcf8",
+    "zcode/attempt-145707/terminal.json": "36bcc48b8da4ef2e74a2f6bb7c3a0eb7437f274a4b1f9b3b8ceb2a17b044c8c7",
+    "zcode/attempt-145707/native-parser-proof.json": "a6dfda7b977db97f193b4263ae51645a1421cec1ee34a5164a03314ca4f42b18",
+    "zcode/reasoning-suffix-native-proof.jsonl": "1f7a68f81d240f7cdbab88ec0c4ef1cd633c7663a5b60ed61974c5148ceda171",
+    "zcode/scalar-roundtrip-proof.json": "e635351e9ee83e387de4186b9045e29b0b5266e5fd77f6b498f31a80de137405"
+  },
+  "verification": {
+    "testsPassed": 1269,
+    "testsSkipped": 7,
+    "testsFailed": 0,
+    "typecheck": "passed",
+    "build": "passed",
+    "independentReview": "GPT-6 Astra; fixes accepted after native parser verification"
+  },
+  "limits": [
+    "Claude execution uses local deterministic provider; no model-quality claim",
+    "ZCode native install/discovery/parser verified; live child execution not tested",
+    "No paid upstream model calls"
+  ]
+}

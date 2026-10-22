@@ -42,16 +42,16 @@ export interface CapabilityEvidenceProfile {
   evidenceId: string;
   host: string;
   detectedVersion: string;
-  /** Supplemental hook admission; native dialects remain qualified by host/version/route. */
-  packageFormat?: 'portable-hooks' | 'native-hooks';
+  /** Opt-in package admission; native dialects remain qualified by host/version/route. */
+  packageFormat?: 'portable-hooks' | 'native-hooks' | 'portable-agents';
   sourceTypes: readonly SourceType[];
   operations: readonly CapabilityOperation[];
   route: CapabilityRoute;
   operationStatus: CapabilityStatus;
   semantics: Readonly<Record<PackageSemantic, CapabilityStatus>>;
   hookPolicy: HookCapabilityEvidence | null;
-  /** Prompt personas are read as resources, not registered native agent types. */
-  agentPolicy?: 'prompt-resources';
+  /** Distinguish prompt resources from compiled native agent registration. */
+  agentPolicy?: 'prompt-resources' | 'portable-native';
   /** Repository-relative evidence references only; no locators or credentials. */
   evidence: readonly string[];
 }
@@ -208,7 +208,10 @@ export function admitPackageSemanticsFromProfiles(
   const portableSpecialized = candidates.filter(candidate => candidate.packageFormat === 'portable-hooks');
   const nativeSpecialized = candidates.filter(candidate => candidate.packageFormat === 'native-hooks');
   const ordinary = candidates.filter(candidate => candidate.packageFormat === undefined);
-  const matching = portable && portableSpecialized.length > 0 ? portableSpecialized
+  const portableAgents = (request.operation === 'install' || request.operation === 'update') && request.inventory.portableAgents === true;
+  const agentSpecialized = candidates.filter(candidate => candidate.packageFormat === 'portable-agents');
+  const matching = portableAgents && agentSpecialized.length > 0 ? agentSpecialized
+    : portable && portableSpecialized.length > 0 ? portableSpecialized
     : native && nativeSpecialized.length > 0 ? nativeSpecialized
     : request.operation === 'install' || request.operation === 'update' ? ordinary
     : ordinary.length > 0 ? ordinary
@@ -254,7 +257,9 @@ export function admitPackageSemanticsFromProfiles(
 
   const gaps = requirements.flatMap((semantic) => {
     const sourceOperation = request.operation === 'install' || request.operation === 'update';
-    const hookProblem = semantic === 'agents' && sourceOperation && profile.agentPolicy === 'prompt-resources'
+    const hookProblem = semantic === 'agents' && sourceOperation && request.inventory.portableAgents && profile.agentPolicy !== 'portable-native'
+      ? { status: 'unsupported' as const, diagnostic: `target '${request.host}' has no qualified portable agent projection` }
+      : semantic === 'agents' && sourceOperation && profile.agentPolicy === 'prompt-resources'
       ? unsupportedPromptPersona(request.inventory)
       : semantic === 'hooks' && sourceOperation
       ? unsupportedHookDeclaration(request.inventory, profile.hookPolicy)

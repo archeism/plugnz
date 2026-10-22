@@ -6,6 +6,7 @@ import { createLifecycleReason, type LifecycleReason } from './lifecycle-report'
 import type { PluginSource } from './source';
 
 import { yamlParse, yamlStringify } from './yaml';
+import { planPortableAgents } from './portable-agents';
 
 
 export const PACKAGE_SEMANTICS = [
@@ -129,6 +130,8 @@ export interface HookDeclaration {
 
 export interface PackageSemanticInventory {
   schemaVersion: 1;
+  /** Explicit portable authoring; requires a qualified native agent projection. */
+  portableAgents?: true;
   package: { name: string; version: string | null; fingerprint: string | null };
   components: PackageComponentInventory;
   componentDefinitions: ComponentDefinition[];
@@ -156,11 +159,22 @@ export class SemanticInventoryError extends Error {
  */
 export function inventoryPackageSemantics(plugin: PluginSource): PackageSemanticInventory {
   const files = walkFiles(plugin.dir);
+  let portableAgents = false;
+  try { portableAgents = planPortableAgents(plugin.dir, 'inventory') !== null; }
+  catch (error) { invalid(errorDiagnostic(error)); }
   let portableHooks: ReturnType<typeof readHookConfig>;
   try { portableHooks = readHookConfig(plugin.dir); }
   catch (error) { invalid(errorDiagnostic(error)); }
   const skills = files.filter((path) => path.startsWith('skills/') && path.endsWith('/SKILL.md'));
   const componentInventory = inventoryComponentRoots(plugin.dir);
+  if (!portableAgents && componentInventory.definitions.some(component => component.kind === 'agent'
+    && component.metadataKeys?.some(key => key === 'modelAlias' || key === 'models'))) {
+    invalid('portable agent modelAlias/models require plugnz.agents.json');
+  }
+  if (portableAgents && componentInventory.definitions.some(component => component.kind === 'agent'
+    && (component.root !== 'agents' || component.dialect !== 'markdown'))) {
+    invalid('portable agents must use agents/*.md exclusively');
+  }
   const commands = componentInventory.definitions
     .filter(({ kind }) => kind === 'command')
     .map(({ path }) => path)
@@ -249,6 +263,7 @@ export function inventoryPackageSemantics(plugin: PluginSource): PackageSemantic
 
   return {
     schemaVersion: 1,
+    ...(portableAgents ? { portableAgents: true as const } : {}),
     package: {
       name: plugin.name,
       version: plugin.version ?? null,

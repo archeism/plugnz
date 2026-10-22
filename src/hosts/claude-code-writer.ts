@@ -2,6 +2,7 @@ import { yamlParse } from '../yaml';
 import { hookAdapter as portableHookAdapter } from './claude-code-hooks';
 import { portableHookProfile } from '../portable-hook-policy';
 import { compilePortableHooksInStage, preflightPortableHooks } from '../hook-install';
+import { planPortableAgents, renderPortableAgentMarkdown, PORTABLE_AGENTS_FILE } from '../portable-agents';
 /** Claude Code's native cache/registry writer. Kept separate from the read-only reader. */
 import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -204,6 +205,11 @@ function stagePlugin(source: string, stage: string, fallbackName: string, fallba
   cpSync(source, stage, { recursive: true });
   assertNoSymlinks(stage);
   compilePortableHooksInStage(portableHookAdapter, stage);
+  const agents = planPortableAgents(stage, 'claude-code');
+  if (agents !== null) {
+    for (const agent of agents) writeFileSync(join(stage, agent.path), renderPortableAgentMarkdown(agent));
+    rmSync(join(stage, PORTABLE_AGENTS_FILE));
+  }
   const root = join(stage, 'plugin.json');
   const canonical = join(stage, '.plugin', 'plugin.json');
   const manifest = existsSync(canonical) ? canonical : existsSync(root) ? root : undefined;
@@ -211,6 +217,10 @@ function stagePlugin(source: string, stage: string, fallbackName: string, fallba
   const canonicalManifest = parseManifest(manifest, 'canonical');
   if (canonicalManifest.name !== fallbackName) throw new Error(`Claude Code canonical manifest name ${canonicalManifest.name} does not match selected plugin ${fallbackName}`);
   const native = join(stage, '.claude-plugin', 'plugin.json');
+  if (agents !== null && existsSync(native)) {
+    const metadata = JSON.parse(readFileSync(native, 'utf8')) as Record<string, unknown>;
+    if (metadata['agents'] !== undefined) throw new Error('Portable agents use native agents/*.md discovery; omit the Claude manifest agents override');
+  }
   if (!existsSync(native)) {
     mkdirSync(dirname(native), { recursive: true });
     writeFileSync(native, JSON.stringify({ name: canonicalManifest.name, version: canonicalManifest.version ?? fallbackVersion, description: canonicalManifest.description, skills: './skills/' }));
@@ -875,6 +885,7 @@ function claudeCodeLifecycleDefinition(contracts: readonly ClaudeNativeRemoteUpd
     id: 'claude-code',
     evidenceProfiles: [
       ...claudeEvidenceProfiles(detectedVersion, contracts),
+      ...(['2.1.285', '2.1.296'].includes(detectedVersion ?? '') ? [claudePortableAgentProfile(detectedVersion!)] : []),
       claudeReflectionHookProfile(),
       ...(detectedVersion === '2.1.285' ? [claudeAdvisorCandidateHookProfile()] : []),
     ],
@@ -1005,6 +1016,9 @@ function nativeProjection(
   detectedVersion: string | undefined,
 ): NativeProjectionData {
   if ('snapshot' in request) {
+    if (request.snapshot.inventory.portableAgents) {
+      return { kind: 'requires-managed', reasonId: 'portable-agent-model-projection' };
+    }
     const proof = recordedPriorSource(request.snapshot);
     if (proof !== undefined) {
       const installed = request.targetObservation.installations.find(row => row.nativeId === request.snapshot.nativeId);
@@ -1078,6 +1092,16 @@ function claudeVersionObservation(observed: ReturnType<typeof observeClaudeCodeV
 // 2.1.295: native-plugin-update-capabilities-2026-10-09.md sandbox probe.
 // 2.1.296: docs/evidence/claude-code-2.1.296-native-20261013.json isolated native loader/refresh probe.
 const CLAUDE_MANAGED_RELEASES = new Set(['2.1.275', '2.1.285', '2.1.295', '2.1.296']);
+
+export function claudePortableAgentProfile(version: string): CapabilityEvidenceProfile {
+  return createCapabilityEvidenceProfile({
+    host: 'claude-code', detectedVersion: version, packageFormat: 'portable-agents', agentPolicy: 'portable-native',
+    sourceTypes: ['local', 'git'], operations: ['install', 'update'], route: 'managed', operationStatus: 'supported',
+    semantics: { ...claudeSemantics(version), agents: 'supported' },
+    hookPolicy: null,
+    evidence: ['docs/portable-agents.md'],
+  });
+}
 
 export function claudeEvidenceProfiles(
   version: string | undefined,

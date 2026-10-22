@@ -3,6 +3,7 @@ import { lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { tomlCommandMarkdown } from '../conversion';
 import { yamlParse } from '../yaml';
+import { PORTABLE_AGENTS_FILE, planPortableAgents, type PortableAgent } from '../portable-agents';
 
 declare const TextEncoder: { new (): { encode(value: string): Uint8Array } };
 declare const TextDecoder: { new (): { decode(value: Uint8Array): string } };
@@ -56,8 +57,84 @@ function validateCommand(raw: string, label: string): void {
   if (/(?:^|\n)\s*!|!`/u.test(raw.slice(fm.end))) throw new Error(`ZCode shell command expansion is unsupported: ${label}`);
 }
 
+/** ZCode's runtime parser strips quotes but does not decode YAML/JSON escapes. */
+function nativeAgentScalar(value: string, field: string): string {
+  const candidates = [JSON.stringify(value), `'${value}'`, value];
+  for (const candidate of candidates) {
+    if (/[\r\n]/u.test(candidate)) continue;
+    try {
+      const parsed = yamlParse(`value: ${candidate}`) as Record<string, unknown>;
+      if (parsed.value !== value) continue;
+    } catch { continue; }
+    let raw = candidate.trim(), quote: string | undefined;
+    for (let index = 0; index < raw.length; index++) {
+      const char = raw[index];
+      if ((char === '"' || char === "'") && raw[index - 1] !== '\\') {
+        quote = quote === char ? undefined : (quote ?? char);
+      }
+      if (!quote && char === '#' && /\s/u.test(raw[index - 1] ?? '')) {
+        raw = raw.slice(0, index).trimEnd(); break;
+      }
+    }
+    if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) raw = raw.slice(1, -1);
+    if (raw === value) return candidate;
+  }
+  throw new Error(`ZCode portable agent ${field} cannot be represented losslessly by its native frontmatter parser`);
+}
+
+function renderZcodeAgent(agent: PortableAgent): string {
+  const description = agent.description.replace(/\n/gu, '\\n');
+  if (agent.description.includes('\\n') || agent.description.includes('\r') || description.trim() !== description) {
+    throw new Error('ZCode portable agent description cannot preserve literal \\n, carriage returns, or surrounding whitespace');
+  }
+  const fields = [`name: ${nativeAgentScalar(agent.name, 'name')}`, `description: ${nativeAgentScalar(description, 'description')}`];
+  if (agent.model !== undefined) {
+    if (/[\r\n]/u.test(agent.model)) throw new Error('ZCode portable agent model must be single-line');
+    fields.push(`model: ${nativeAgentScalar(agent.model, 'model')}`);
+  }
+  return `---\n${fields.join('\n')}\n---\n${agent.body}`;
+}
+
+/** ZCode silently inherits for malformed model strings; fail before installation instead. */
+function validateAgentModel(model: string | undefined): void {
+  if (model === undefined) return;
+  const value = model.trim();
+  let provider: string, name: string;
+  if (value.startsWith('custom:')) {
+    const body = value.slice('custom:'.length);
+    const separator = body.startsWith('builtin:') ? body.indexOf(':', 'builtin:'.length) : body.indexOf(':');
+    provider = separator < 0 ? '' : body.slice(0, separator);
+    name = separator < 0 ? '' : body.slice(separator + 1);
+    const decode = (part: string): string => { try { return decodeURIComponent(part); } catch { return part; } };
+    provider = decode(provider); name = decode(name);
+  } else {
+    const separator = value.indexOf('/');
+    provider = separator < 0 ? '' : value.slice(0, separator);
+    name = separator < 0 ? '' : value.slice(separator + 1);
+    // Native picker syntax treats an interior $ as a reasoning-level suffix.
+    // Validate the model before that suffix; whitespace there otherwise causes
+    // ZCode to discard the entire selection and silently inherit the parent.
+    const reasoningSeparator = name.indexOf('$');
+    if (reasoningSeparator > 0 && reasoningSeparator < name.length - 1) {
+      name = name.slice(0, reasoningSeparator);
+    }
+  }
+  if (!provider.trim() || !name.trim()) {
+    throw new Error('ZCode portable agent model must be a native provider/model or custom: encoded selection; omit the mapping to inherit');
+  }
+}
+
 export function projectZcodePayload(source: string, resourceLinks: string, nativeVersion: string): { payload: ZcodeProjectionTree; resources: ZcodeProjectionTree } {
   const payload = readZcodeProjectionTree(source), resources: ZcodeProjectionTree = new Map();
+  const agents = planPortableAgents(source, 'zcode-cli');
+  if (agents === null && (payload.has('agents') || payload.has('.claude/agents'))) {
+    throw new Error('ZCode agents require the portable plugnz.agents.json contract');
+  }
+  if (agents !== null) payload.delete(PORTABLE_AGENTS_FILE);
+  for (const agent of agents ?? []) {
+    validateAgentModel(agent.model);
+    put(payload, agent.path, { kind: 'file', mode: 0o644, bytes: encode(renderZcodeAgent(agent)) });
+  }
   if (payload.has('.plgnz-install.json')) throw new Error('ZCode Source contains a reserved ownership marker');
   const manifest: unknown = JSON.parse(text(payload, 'plugin.json'));
   if (!object(manifest) || typeof manifest.name !== 'string') throw new Error('ZCode projection requires plugin.json name');
@@ -70,7 +147,7 @@ export function projectZcodePayload(source: string, resourceLinks: string, nativ
     const native: unknown = JSON.parse(text(payload, '.zcode-plugin/plugin.json'));
     if (!object(native) || native.name !== name) throw new Error('ZCode native manifest identity differs from plugin.json');
     const metadata = new Set(['name', 'version', 'description', 'author', 'license', 'homepage', 'repository', 'keywords']);
-    const conventional: Record<string, string> = { skills: 'skills', commands: 'commands', hooks: 'hooks/hooks.json' };
+    const conventional: Record<string, string> = { skills: 'skills', commands: 'commands', hooks: 'hooks/hooks.json', ...(agents === null ? {} : { agents: 'agents' }) };
     for (const [key, value] of Object.entries(native)) {
       if (metadata.has(key)) continue;
       const path = conventional[key];
@@ -167,6 +244,7 @@ export function projectZcodePayload(source: string, resourceLinks: string, nativ
     }
   }
   const nativeManifest: Record<string, unknown> = { name, version: nativeVersion };
+  if (agents !== null) nativeManifest.agents = 'agents';
   for (const key of ['description', 'author', 'license']) if (typeof manifest[key] === 'string') nativeManifest[key] = manifest[key];
   if ([...payload.keys()].some(path => /^skills\/[^/]+\/SKILL.md$/u.test(path))) nativeManifest.skills = 'skills';
   if ([...payload.keys()].some(path => path.startsWith('commands/') && path.endsWith('.md'))) nativeManifest.commands = 'commands';

@@ -21,6 +21,8 @@ tool did not install. Details: `docs/pin-and-update.md`.
 
 **Portable context hooks:** run `npx plugnz install` inside a package containing `plugnz.hooks.json`, or `npx plugnz install <source>`. Installation compiles and registers session-start, stop, and pre/post-tool handlers through each supported harness's native loader. Handlers receive normalized JSON and return context; `plugnz hooks targets` exposes delivery and continuation limits. See [the contract, usage, and native map](docs/hooks.md) and [real-model Docker verification](docs/hooks-live-verification.md).
 
+**Portable agents:** use `agents/*.md` plus `plugnz.agents.json` for shared model aliases such as `fast` and `smart`. Explicit per-agent destination mappings win; unmapped models are omitted. User aliases live in `~/.open-plugin/model-aliases.json`. The first qualified targets are Claude Code and ZCode CLI; see [authoring, precedence and limits](docs/portable-agents.md).
+
 Why another tool: `npx plugins` is closed-source and its Cursor target does not install into Cursor; nothing in the ecosystem checks that an installed plugin still *works*. See `docs/research/`.
 
 The published CLI runs under Node.js 22 or newer; `npx` needs npm, not Bun. `bunx` also works. Bun is used for development and building. `add` accepts a local plugin or marketplace directory as well as a Git URL. Native plugin targets currently include Claude Code, Codex, Kimi, Cursor, OMP, Hermes, Grok, DCode, and ZCode CLI. Portable hook packages also have native Pi extension and OpenCode plugin routes for install, update, and remove. Run `plugnz targets --all` to see supported and unsupported capabilities for each host; standalone skill distribution is outside this CLI's scope.

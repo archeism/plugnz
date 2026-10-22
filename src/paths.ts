@@ -99,6 +99,11 @@ export function cacheRoot(): string {
   return join(process.env['HOME'] ?? '.', '.open-plugin', 'cache');
 }
 
+/** Shared portable-agent aliases; frozen into effective Source snapshots on resolution. */
+export function modelAliasesFile(): string {
+  return join(dirname(stateFile()), 'model-aliases.json');
+}
+
 /** Test/debug helper: does a path exist? */
 export function pathExists(p: string): boolean {
   return existsSync(p);

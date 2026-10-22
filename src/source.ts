@@ -1,7 +1,8 @@
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, basename, isAbsolute, relative, resolve } from 'node:path';
-import { cacheRoot } from './paths';
+import { cacheRoot, modelAliasesFile } from './paths';
+import { PORTABLE_AGENTS_FILE, parsePortableAgentConfig, type ModelAliases } from './portable-agents';
 import { isGitUrl } from './exec';
 import { fingerprintTree } from './fingerprint';
 import { validateGitRef, validateSourceBinding, validateStableIdentityString, type SourceBinding, type SourceSnapshotReference } from './source-reference';
@@ -9,7 +10,7 @@ import { validateGitRef, validateSourceBinding, validateStableIdentityString, ty
 export type { SourceBinding, SourceSnapshotReference } from './source-reference';
 
 export interface PluginSource {
-  /** Immutable package bytes inside the resolved Source snapshot. */
+  /** Immutable effective package bytes, including captured local model aliases. */
   dir: string;
   /** Canonical authored package path for local-source provenance. */
   sourceDir?: string;
@@ -18,7 +19,7 @@ export interface PluginSource {
   name: string;
   version?: string;
   marketplace?: string;
-  /** Stable digest of the source directory bytes, independent of version/SHA. */
+  /** Stable digest of effective package bytes, independent of version/SHA. */
   contentFingerprint?: string;
 }
 
@@ -139,7 +140,69 @@ function resolvedSource(sourceUri: string, sha: string, isGit: boolean, snapshot
     if (seen.has(identity)) throw new Error(`Duplicate plugin identity discovered: ${identity}`);
     seen.add(identity);
   }
-  return { sourceUri, sha, isGit, snapshot, snapshotDir, plugins };
+  // Keep authored provenance (binding, revision, sourceDir) while freezing local
+  // alias choices into the effective bytes. Recovery never rereads user config.
+  const effective = freezeModelAliases(snapshotDir, plugins);
+  return {
+    sourceUri, sha, isGit,
+    snapshot: effective === null ? snapshot : { ...snapshot, fingerprint: effective.fingerprint },
+    snapshotDir: effective?.snapshotDir ?? snapshotDir,
+    plugins: effective?.plugins ?? plugins,
+  };
+}
+
+/** Derive, never rewrite, a content-addressed snapshot with user alias overrides. */
+function freezeModelAliases(snapshotDir: string, plugins: PluginSource[]): { snapshotDir: string; plugins: PluginSource[]; fingerprint: string } | null {
+  const portable = plugins.filter(plugin => existsSync(join(plugin.dir, PORTABLE_AGENTS_FILE)));
+  if (portable.length === 0) return null;
+  const path = modelAliasesFile();
+  let configStat: ReturnType<typeof lstatSync>;
+  try { configStat = lstatSync(path); }
+  catch (error) {
+    if ((error as { code?: string }).code === 'ENOENT') return null;
+    throw error;
+  }
+  if (!configStat.isFile()) throw new Error(`Model aliases config must be a regular file: ${path}`);
+  const overrides = parsePortableAgentConfig(readFileSync(path, 'utf8'), path).modelAliases ?? {};
+  const changes = new Map<string, string>();
+  for (const plugin of portable) {
+    const configPath = join(plugin.dir, PORTABLE_AGENTS_FILE);
+    const config = parsePortableAgentConfig(readFileSync(configPath, 'utf8'), configPath);
+    const original = config.modelAliases ?? {};
+    const merged: ModelAliases = Object.fromEntries(
+      [...new Set([...Object.keys(original), ...Object.keys(overrides)])].sort().map(alias => [
+        alias, Object.fromEntries(Object.entries({ ...original[alias], ...overrides[alias] }).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)),
+      ]),
+    );
+    if (sameAliases(original, merged)) continue;
+    changes.set(relative(snapshotDir, configPath), `${JSON.stringify({ version: 1, modelAliases: merged }, null, 2)}\n`);
+  }
+  if (changes.size === 0) return null;
+  const snapshots = join(cacheRoot(), 'source-snapshots');
+  const candidate = mkdtempSync(join(snapshots, '.aliases-'));
+  try {
+    copySourceTree(snapshotDir, candidate);
+    for (const [path, content] of changes) writeFileSync(join(candidate, path), content);
+    const fingerprint = fingerprintTree(candidate);
+    const target = join(snapshots, fingerprint);
+    if (existsSync(target)) {
+      if (fingerprintTree(assertSafeSourceTree(target)) !== fingerprint) throw new Error(`Cached Source snapshot is corrupt: ${target}`);
+    } else renameSync(candidate, target);
+    return {
+      snapshotDir: target, fingerprint,
+      plugins: plugins.map(plugin => withFingerprint({ ...plugin, dir: join(target, relative(snapshotDir, plugin.dir)) })),
+    };
+  } finally {
+    rmSync(candidate, { recursive: true, force: true });
+  }
+}
+
+function sameAliases(left: ModelAliases, right: ModelAliases): boolean {
+  return Object.keys(left).length === Object.keys(right).length && Object.entries(left).every(([alias, targets]) => {
+    const other = Object.hasOwn(right, alias) ? right[alias] : undefined;
+    return other !== undefined && Object.keys(targets).length === Object.keys(other).length
+      && Object.entries(targets).every(([target, model]) => Object.hasOwn(other, target) && other[target] === model);
+  });
 }
 
 /** Owner/repo is the public GitHub shorthand; all local roots become absolute. */

@@ -256,6 +256,33 @@ function zcodeInstallProfile(): CapabilityEvidenceProfile {
   });
 }
 
+/** Portable definitions are projected into ZCode's native plugin agent directory. */
+export function zcodePortableAgentProfile(): CapabilityEvidenceProfile {
+  return createCapabilityEvidenceProfile({
+    host: 'zcode-cli',
+    detectedVersion: ZCODE_PROVEN_VERSION,
+    packageFormat: 'portable-agents',
+    agentPolicy: 'portable-native',
+    sourceTypes: ['local', 'git'],
+    operations: ['install', 'update'],
+    route: 'native',
+    operationStatus: 'supported',
+    semantics: zcodeSemantics({
+      agents: 'supported',
+      'ordinary-skills': 'supported',
+      commands: 'supported',
+      'model-invocation-control': 'supported',
+      'auto-update-control': 'supported',
+      resources: 'supported',
+      'retention-safety': 'supported',
+      readback: 'supported',
+      rollback: 'supported',
+      'activation-reload': 'supported',
+    }),
+    evidence: [...ZCODE_EVIDENCE, 'docs/portable-agents.md'],
+  });
+}
+
 /** Native hooks remain host/version qualified; no portable event translation is implied. */
 export function zcodeNativeHookProfile(): CapabilityEvidenceProfile {
   return createCapabilityEvidenceProfile({
@@ -293,6 +320,7 @@ export const zcodeCliEvidenceProfiles: readonly CapabilityEvidenceProfile[] = Ob
   zcodeRetireProfile('native', 'unsupported', 'unsupported', 'unsupported'),
   zcodeRetireProfile('managed', 'supported', 'supported', 'supported'),
   zcodeInstallProfile(),
+  zcodePortableAgentProfile(),
   zcodeNativeHookProfile(),
   portableHookProfile(portableHookAdapter, 'native', ['install', 'update']),
 ]);
@@ -741,7 +769,7 @@ function installProjection(request: NativeProjectionRequest): NativeProjectionDa
   if (!('snapshot' in request) || request.pins.length > 0) return { kind: 'unverified', reasonId: 'zcode-native-projection-unverified' };
   const inventory = request.snapshot.inventory;
   const unsupported = inventory.requiredSemantics.find((semantic) =>
-    !ZCODE_INSTALL_SEMANTICS.has(semantic));
+    !ZCODE_INSTALL_SEMANTICS.has(semantic) && !(semantic === 'agents' && inventory.portableAgents === true));
   if (unsupported !== undefined) return { kind: 'unverified', reasonId: `zcode-semantic-unverified:${unsupported}` };
   return { kind: 'equivalent', proofId: 'zcode-marketplace-projection' };
 }
