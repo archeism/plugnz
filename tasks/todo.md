@@ -1,28 +1,21 @@
-# plgnz consolidation issue index
+# Portable-agent parity issue index
 
-GitHub is the canonical status tracker: [milestone #1](https://github.com/archeism/plgnz/milestone/1). This file indexes its published issues and does not duplicate their checklists.
+Canonical status: [GitHub milestone](https://github.com/archeism/plugnz/milestone/2). Decision map: [Map native portable-agent parity across supported harnesses](https://github.com/archeism/plugnz/issues/91).
 
-| Key | Issue | Dependencies |
+This file is a navigation index; acceptance checklists and status live on GitHub.
+
+| Stage | Work | Blocked by |
 | --- | --- | --- |
-| `prior-art` | [#3](https://github.com/archeism/plgnz/issues/3) bounded prior-art decisions | — |
-| `contract` | [#4](https://github.com/archeism/plgnz/issues/4) public outcome and ownership contract | #3 |
-| `source-cli` | [#5](https://github.com/archeism/plgnz/issues/5) source resolution and diagnostics | #3, #4 |
-| `conversion-codex` | [#6](https://github.com/archeism/plgnz/issues/6) Addy/Codex conversion | #3, #4, #5 |
-| `lifecycle-codex` | [#7](https://github.com/archeism/plgnz/issues/7) Codex lifecycle persistence | #4, #6 |
-| `native-proof-codex` | [#8](https://github.com/archeism/plgnz/issues/8) native Codex proof | #7 |
-| `personal-client` | [#9](https://github.com/archeism/plgnz/issues/9) pinned Personal client | #8 |
-| `codex-cutover-cleanup` | [#10](https://github.com/archeism/plgnz/issues/10) Codex cutover and cleanup | #9 |
-| `harness-claude-code` | [#11](https://github.com/archeism/plgnz/issues/11) Claude Code | #3, #7, #9 |
-| `harness-cursor` | [#12](https://github.com/archeism/plgnz/issues/12) Cursor | #3, #7, #9 |
-| `harness-omp` | [#13](https://github.com/archeism/plgnz/issues/13) OMP | #3, #7, #9 |
-| `harness-dcode` | [#14](https://github.com/archeism/plgnz/issues/14) dcode | #3, #7, #9 |
-| `harness-hermes` | [#15](https://github.com/archeism/plgnz/issues/15) Hermes | #3, #7, #9 |
-| `harness-openclaw` | [#16](https://github.com/archeism/plgnz/issues/16) OpenClaw | #3, #7, #9 |
-| `harness-grok` | [#17](https://github.com/archeism/plgnz/issues/17) Grok Build | #3, #7, #9 |
-| `harness-kimi` | [#18](https://github.com/archeism/plgnz/issues/18) Kimi | #3, #7, #9 |
-| `harness-zcode-cli` | [#19](https://github.com/archeism/plgnz/issues/19) ZCode CLI | #3, #7, #9 |
-| `harness-zcode-desktop` | [#20](https://github.com/archeism/plgnz/issues/20) ZCode Desktop | #3, #7, #9 |
-| `harness-gemini-cli` | [#23](https://github.com/archeism/plgnz/issues/23) Gemini CLI native extension (unverified) | #3, #7, #9 |
-| `final-parity` | [#26](https://github.com/archeism/plgnz/issues/26) consolidation acceptance | #10–#20, #23 |
-
-OpenCode, Pi, Factory, and Grok Bot are excluded standalone-skill/command routes. They have no migration task; Pi/OpenCode reader/remover support remains only for safe cleanup of prior plgnz-owned installs. Gemini CLI stays listed because a native extension surface is possible but unverified.
+| Decision | [Choose native agent registration for OMP and Cursor](https://github.com/archeism/plugnz/issues/92) | — |
+| Decision | [Choose native agent registration for Kimi, Hermes, Grok Build and DCode](https://github.com/archeism/plugnz/issues/93) | — |
+| Decision | [Decide native agent routes for Pi and OpenCode without a custom runtime](https://github.com/archeism/plugnz/issues/94) | — |
+| Decision | [Decide how explicit model mappings respect native fallback policy](https://github.com/archeism/plugnz/issues/104) | — |
+| Delivery | [Portable agents: deliver native OMP integration](https://github.com/archeism/plugnz/issues/95) | [Choose native agent registration for OMP and Cursor](https://github.com/archeism/plugnz/issues/92); [Decide how explicit model mappings respect native fallback policy](https://github.com/archeism/plugnz/issues/104) |
+| Delivery | [Portable agents: deliver native Cursor integration](https://github.com/archeism/plugnz/issues/96) | [Choose native agent registration for OMP and Cursor](https://github.com/archeism/plugnz/issues/92); [Decide how explicit model mappings respect native fallback policy](https://github.com/archeism/plugnz/issues/104) |
+| Delivery | [Portable agents: deliver native Kimi integration](https://github.com/archeism/plugnz/issues/97) | [Choose native agent registration for Kimi, Hermes, Grok Build and DCode](https://github.com/archeism/plugnz/issues/93) |
+| Delivery | [Portable agents: deliver native Hermes integration](https://github.com/archeism/plugnz/issues/98) | [Choose native agent registration for Kimi, Hermes, Grok Build and DCode](https://github.com/archeism/plugnz/issues/93) |
+| Delivery | [Portable agents: deliver native Grok Build integration](https://github.com/archeism/plugnz/issues/99) | [Choose native agent registration for Kimi, Hermes, Grok Build and DCode](https://github.com/archeism/plugnz/issues/93) |
+| Delivery | [Portable agents: deliver native DCode integration](https://github.com/archeism/plugnz/issues/100) | [Choose native agent registration for Kimi, Hermes, Grok Build and DCode](https://github.com/archeism/plugnz/issues/93) |
+| Delivery | [Portable agents: deliver native Pi integration](https://github.com/archeism/plugnz/issues/101) | [Decide native agent routes for Pi and OpenCode without a custom runtime](https://github.com/archeism/plugnz/issues/94) |
+| Delivery | [Portable agents: deliver native OpenCode integration](https://github.com/archeism/plugnz/issues/102) | [Decide native agent routes for Pi and OpenCode without a custom runtime](https://github.com/archeism/plugnz/issues/94) |
+| Acceptance | [Accept portable-agent parity and publish the support matrix](https://github.com/archeism/plugnz/issues/103) | All eight delivery issues |
