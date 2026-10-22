@@ -9,6 +9,7 @@ import { spawnSync } from 'node:child_process';
 import { parse as parseToml } from 'smol-toml';
 import { readPluginManifest } from './source';
 import { hermesCommandCompanionId } from './hermes-identity';
+import { projectCodexAgents } from './hosts/codex-agents';
 
 import { yamlParse, yamlStringify } from './yaml';
 
@@ -60,7 +61,8 @@ export function projectPluginForCodex(sourceDir: string, destinationDir: string)
     const commands = discoverCommands(source);
     validateClaudeNativeSemantics(source, commands);
     const namespace = readPackageName(source);
-    for (const command of commands) { if (command.userInvocable === false) throw new Error(`user-invocable: false is unsupported by Codex: ${command.source}`); writeCommandSkill(stage, command, namespace, new Set(commands.map(item => item.name))); }
+    const nativeAgents = projectCodexAgents(source, stage, namespace);
+    for (const command of commands) { if (command.userInvocable === false) throw new Error(`user-invocable: false is unsupported by Codex: ${command.source}`); writeCommandSkill(stage, command, namespace, new Set(commands.map(item => item.name)), nativeAgents); }
     translateNativeSkillPolicies(stage);
     publishStage(stage, destination);
   } catch (error) {
@@ -431,13 +433,15 @@ function validateMetadata(metadata: Record<string, unknown>, path: string): void
   }
 }
 
-function writeCommandSkill(stage: string, command: Command, namespace: string, commandNames: Set<string>): void {
+function writeCommandSkill(stage: string, command: Command, namespace: string, commandNames: Set<string>, nativeAgents = false): void {
   const skillDir = join(stage, 'skills', command.name);
   if (existsSync(skillDir)) throw new Error(`collision: command ${command.name} would replace an existing skill`);
   const body = command.body.replace(/\$ARGUMENTS\b/gu, 'the invocation tail').replace(/(^|[^A-Za-z0-9_-])\/([a-z0-9][a-z0-9-]*)(?=\s|$|[.,:;!?])/giu, (whole, prefix: string, name: string) => commandNames.has(name) ? `${prefix}$${namespace}:${name}` : whole);
   const hint = command.argumentHint === undefined ? '' : `argument-hint: ${yamlString(command.argumentHint)}\n`;
   const userInvocable = command.userInvocable === undefined ? '' : `user-invocable: ${command.userInvocable}\n`;
-  const preface = "Use the user's text after the skill invocation as command arguments; no text means empty arguments. Load referenced skills from sibling directories (../<skill>/SKILL.md). Plugin personas live at ../../agents/<persona>.md and shared references at ../../references/, relative to this file.\n\nFor persona work, read the persona file and use the current harness's available delegation facility with those instructions. Persona names are not assumed to be registered tools or agent types. These adaptation instructions override any native-agent registration assumptions in the command body below. If delegation is unavailable, perform the passes sequentially and report that limitation.\n\n";
+  const preface = nativeAgents
+    ? `Use the user's invocation tail as command arguments. Load sibling skills from ../<skill>/SKILL.md and shared references from ../../references/. Plugin agents are registered as ${namespace}:<agent-name>; use that exact agent_type with the native spawn_agent tool. Their source prose remains at ../../agents/<agent-name>.md. If native delegation is disabled, report that limitation.\n\n`
+    : "Use the user's text after the skill invocation as command arguments; no text means empty arguments. Load referenced skills from sibling directories (../<skill>/SKILL.md). Plugin personas live at ../../agents/<persona>.md and shared references at ../../references/, relative to this file.\n\nFor persona work, read the persona file and use the current harness's available delegation facility with those instructions. Persona names are not assumed to be registered tools or agent types. These adaptation instructions override any native-agent registration assumptions in the command body below. If delegation is unavailable, perform the passes sequentially and report that limitation.\n\n";
   mkdirSync(join(skillDir, 'agents'), { recursive: true });
   writeFileSync(join(skillDir, 'SKILL.md'), `---\nname: ${command.name}\ndescription: ${yamlString(command.description)}\n${hint}${userInvocable}disable-model-invocation: ${!command.allowImplicit}\n---\n\n${preface}${body}`);
   writePolicy(join(skillDir, 'agents', 'openai.yaml'), command.allowImplicit);

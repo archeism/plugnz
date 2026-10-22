@@ -1,0 +1,118 @@
+{
+  "base_commit": "5d57841158f264b639b5d67ffd4969e89828d67d",
+  "raw_root": "/root/.local/state/plugnz-codex-agents-20261022",
+  "native_versions": [
+    "0.161.0",
+    "0.162.0"
+  ],
+  "reports": {
+    "public-161-01/report.json": {
+      "sha256": "e73c5041e51096634daefef373de86e5fb0f62c1de73854333bedce4ad47a94f",
+      "result": {
+        "version": "codex-cli 0.161.0",
+        "installed": true,
+        "four_roles_registered": true,
+        "four_roles_native_schema": true,
+        "child_exact_body": true,
+        "child_model_inherited": true,
+        "native_exec_command_available": true,
+        "requests": 3,
+        "elapsed_seconds": 2.435028076171875,
+        "paid_requests": 0,
+        "cli_sha256": "567099054ad0920d0971bd6330780f436123677043bffd5ad075c1df6eeb3130",
+        "native_child_tool_names_match_unrestricted_role_baseline": true,
+        "native_child_tool_names": [
+          "create_goal",
+          "exec_command",
+          "get_goal",
+          "request_user_input",
+          "update_goal",
+          "view_image",
+          "web_search",
+          "write_stdin"
+        ]
+      }
+    },
+    "public-162-01/report.json": {
+      "sha256": "fd9229b688a2708db614972e36ebe4df1b8ecbc7318c2b5e35bf3e82fa3ea76a",
+      "result": {
+        "version": "codex-cli 0.162.0",
+        "installed": true,
+        "four_roles_registered": true,
+        "four_roles_native_schema": true,
+        "child_exact_body": true,
+        "child_model_inherited": true,
+        "native_exec_command_available": true,
+        "requests": 3,
+        "elapsed_seconds": 3.4334371089935303,
+        "paid_requests": 0,
+        "cli_sha256": "567099054ad0920d0971bd6330780f436123677043bffd5ad075c1df6eeb3130",
+        "native_child_tool_names_match_unrestricted_role_baseline": true,
+        "native_child_tool_names": [
+          "create_goal",
+          "exec_command",
+          "get_goal",
+          "request_user_input",
+          "update_goal",
+          "view_image",
+          "web_search",
+          "write_stdin"
+        ]
+      }
+    },
+    "public-162-01/models-report.json": {
+      "sha256": "a8f04e5c88a36d2cf7f6329d8e397b678eda0586de64dcb12bcf4ab9de15f0d9",
+      "result": {
+        "public_install": true,
+        "runtime_models": {
+          "alias": "gpt-6.1-sol",
+          "explicit": "gpt-6-sol",
+          "omitted": "gpt-5.3-codex"
+        },
+        "user_alias_over_plugin": true,
+        "direct_over_alias": true,
+        "omission_inherits": true,
+        "alias_only_update": true,
+        "remove_only_own_roles": true,
+        "addy_removal_unregisters_all": true,
+        "requests": 7,
+        "paid_requests": 0
+      }
+    }
+  },
+  "artifacts": {
+    "public-161-01/report.json": "e73c5041e51096634daefef373de86e5fb0f62c1de73854333bedce4ad47a94f",
+    "public-162-01/report.json": "fd9229b688a2708db614972e36ebe4df1b8ecbc7318c2b5e35bf3e82fa3ea76a",
+    "public-162-01/models-report.json": "a8f04e5c88a36d2cf7f6329d8e397b678eda0586de64dcb12bcf4ab9de15f0d9",
+    "qualify-public.py": "20f19a507f737d504a523cf2b04b2c65e4137f2ed828f56c21f067ca3db2db26",
+    "qualify-public-models.py": "ad6feb7b4f438cbbb9cfdac77fb0aafecc92c467b715a5c301638c4f049172d9",
+    "review-sibling.test.ts": "5dc005523623410322f2d4d9b6e12e10417c71b983dd86b3f2c1ab62955088ea"
+  },
+  "source_sha256": {
+    "src/portable-agents.ts": "1e3caf087782aa96dc79282f24acf21ef3cc1e5f51b4b6ff582a90086294cafd",
+    "src/conversion.ts": "7fc2b578ac70ec2e2be25e72581d2973642adb797fb8c5c8cd0a2fe38455db9e",
+    "src/capability-evidence.ts": "5eafab1b30adeb9ef56b562895f9a5a329a03452dbbdd3263572c2baa910e23a",
+    "src/hosts/codex-agents.ts": "aefb11f3a469546370325573a1b6ed1fb4697f6eeef2d460093be0f3f974b0d4",
+    "src/hosts/codex-agent-config.ts": "082e1cb14720a2283b8617ab3e315537e690ae9dd3077eb7c2387c1c4db911a3",
+    "src/hosts/codex-writer.ts": "cb0042025f2186ac85f72c00616074f163f0af9a1554ae79f3728c4681107eb5",
+    "test/codex-agents.test.ts": "8517945e023d5475bc2bfaffcb9ac5b00d64dbf0977c49adccef9336ba4028f9",
+    "test/codex-agent-config.test.ts": "efd9163b805806ec03cc8e292aa993a08f57eb0f87aa03ddb72886e4f55ca035",
+    "test/codex-native-agents-public.test.ts": "03b3ee01ce91402efdf8351e4be20a3867b8924fac07c2338d5205c0ed80498b",
+    "test/codex-lifecycle-route.test.ts": "bbb0657d2ad578e524734423ceb6c33a40f8ce60ec13b446f15580ec35f225af"
+  },
+  "verification": {
+    "full_suite": {
+      "passed": 1307,
+      "skipped": 7,
+      "failed": 0,
+      "assertions": 8593,
+      "test_files": 120,
+      "elapsed_seconds": 209.77,
+      "log_sha256": "282acf9cc2d7f869ee3d03f97ac4aecb8bf4d591245c8fecd5b75afd6ea7b09c"
+    },
+    "typecheck": "passed",
+    "build": "passed",
+    "independent_review": "GPT-6 Astra: no remaining blocker after native-refresh guard fix"
+  },
+  "skills": "unchanged"
+}

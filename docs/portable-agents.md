@@ -1,9 +1,11 @@
 # Portable agents and model aliases
 
 Author one agent definition and install it through a harness's native plugin loader.
-This increment supports Claude Code 2.1.285/2.1.296 and ZCode CLI 0.16.9.
+Qualified targets are Claude Code 2.1.285/2.1.296, Codex 0.161.0/0.162.0 and
+ZCode CLI 0.16.9.
 Other targets refuse this format until their native agent projection is qualified.
-Existing native agent packages without the sidecar keep their existing behavior.
+Codex also projects plain canonical `agents/*.md` with only `name` and
+`description`, without a sidecar. Other native packages keep their existing behavior.
 
 ## Author a plugin
 
@@ -85,7 +87,7 @@ displays their native `\n` escape. Model identifiers must be single-line.
 ## Install and update
 
 ```sh
-plugnz install ./my-plugin --target claude-code --target zcode-cli
+plugnz install ./my-plugin --target claude-code --target codex --target zcode-cli
 plugnz update my-plugin
 ```
 
@@ -97,15 +99,45 @@ The source binding/revision retains authored provenance; the source fingerprint
 describes effective bytes including local choices. Source files are never edited.
 Under test isolation, `OPEN_PLUGIN_HOME/model-aliases.json` replaces the usual path.
 
-The generated native package contains ordinary native agent Markdown, without
+Claude and ZCode generated packages contain ordinary native agent Markdown, without
 `modelAlias`, `models`, or the portable sidecar. Claude's managed installation route
 prevents a native Git refresh from bypassing projection. ZCode's native marketplace
 route installs the generated package. Both use their existing update/rollback flow.
 
 Mixed portable-agent/hook packages are not qualified in this increment and are
 refused rather than silently dropping either behavior. Native agent metadata
-without the sidecar remains native; portable model fields without the sidecar fail
+without the sidecar remains native on Claude and ZCode; portable model fields without the sidecar fail
 validation. No agent runtime or execution abstraction is added to plugnz.
+
+## Codex native roles
+
+Codex receives `agents/<name>.toml` with `name`, `description`,
+`developer_instructions`, and `model` only when resolved. Its model mapping key is
+`codex`. Names are scoped to the plugin, such as `addy:code-reviewer`.
+The adapter registers each generated file through
+`[agents."addy:code-reviewer"]` / `config_file` in `CODEX_HOME/config.toml`.
+Original Markdown remains available for resource links. Codex loads the role and
+runs its native subagent; plugnz does not implement an agent runtime.
+
+Plain definitions need no portable sidecar or companion command. Alias/model
+fields require the sidecar. Arbitrary native TOML input and tools/permissions/memory
+metadata are not part of this conversion contract and are refused.
+
+Install, update and removal manage only registrations backed by plugnz ownership.
+Existing user roles and edited owned registrations cause a visible refusal, not an
+overwrite. Updates rename/retire roles, track versioned paths and repair missing
+references. Rollback restores prior references and preserves unrelated user config.
+Marketplace refreshes use the managed route when generated roles would be affected.
+
+**Reload Codex after changes.** Native delegation must be available in the harness;
+plugnz does not change feature flags or tool permissions. Codex's native plugin
+`enabled` flag does not disable these separately registered roles. Use
+`plugnz remove <plugin> --target codex` to unregister them. Two marketplaces cannot
+claim the same `<plugin>:<agent>` role; the second installation refuses the collision.
+
+Public installation and actual native child execution were verified for both
+qualified Codex versions, including all four upstream Addy agents. See
+[Codex native qualification](evidence/codex-native-agents-20261022.md).
 
 ## Implementation and verification
 

@@ -15,6 +15,8 @@ import { tmpdir } from 'node:os';
 import { parse as parseToml } from 'smol-toml';
 import { createCapabilityEvidenceProfile, type CapabilityEvidenceProfile, type CapabilityStatus } from '../capability-evidence';
 import { projectPluginForCodex } from '../conversion';
+import { readCodexAgents } from './codex-agents';
+import { planCodexAgentConfig, type CodexAgentConfigRef } from './codex-agent-config';
 import { fingerprintTree } from '../fingerprint';
 import { codexMarketplaceMetadataFile, codexMarketplaceSourceFingerprint } from './codex-marketplace-proof';
 import { capturePriorSourceRepair, priorSourceRepairAllows, recordedPriorSource, releasePriorSourceRepair, type PriorSourceProof } from '../prior-source-proof';
@@ -72,6 +74,7 @@ export const codexWriter: HostWriter = {
         projectPluginForCodex(plugin.dir, stage);
         ensureNativeManifest(stage, plugin.name, version);
         validateStage(stage);
+        planCodexAgentConfig(currentConfig(), ownedAgentRefs(id), agentRefs(stage, targetDir));
         writeFileSync(join(stage, OWNERSHIP), JSON.stringify({ source: resolved.sourceUri, pluginId: id, fingerprint: plugin.contentFingerprint ?? '' }));
         assertManagedPath(codexHome(), slot);
         if (existsSync(slot)) {
@@ -108,16 +111,20 @@ export const codexWriter: HostWriter = {
         validateCachedIdentity(targetDir, plugin.name, version);
       }
       const unchanged = marker !== null && marker.fingerprint === plugin.contentFingerprint && sameTree(stage, targetDir);
+      const priorRefs = ownedAgentRefs(id);
+      const nextRefs = agentRefs(stage, targetDir);
+      const agentsUnchanged = planCodexAgentConfig(currentConfig(), priorRefs, nextRefs) === currentConfig();
       if (unchanged) {
         const alreadyEnabled = isEnabled(configPath, id);
-        try { if (!alreadyEnabled) enable(configPath, id); }
+        try { if (!alreadyEnabled) enable(configPath, id); writeAgentRefs(priorRefs, nextRefs); }
         finally { rmSync(stage, { recursive: true, force: true }); }
-        return alreadyEnabled ? 'unchanged' : undefined;
+        return alreadyEnabled && agentsUnchanged ? 'unchanged' : undefined;
       }
       const configBefore = readConfigSnapshot(configPath);
       const activation = activate(stage, targetDir, slot);
       try {
         enable(configPath, id);
+        writeAgentRefs(priorRefs, nextRefs);
       } catch (error) {
         try { restoreConfig(configPath, configBefore); }
         finally { activation.rollback(); }
@@ -143,6 +150,8 @@ export const codexWriter: HostWriter = {
   async remove(id: string): Promise<void> {
     const configPath = configFile();
     assertManagedConfigPath(codexHome(), configPath);
+    const priorRefs = ownedAgentRefs(id);
+    planCodexAgentConfig(currentConfig(), priorRefs, []);
     const at = id.indexOf('@');
     const owned: string[] = [];
     if (at !== -1) {
@@ -170,6 +179,7 @@ export const codexWriter: HostWriter = {
         writeFileSync(configPath, toml.slice(0, idx) + replacement + toml.slice(end));
       }
     }
+    writeAgentRefs(priorRefs, []);
     for (const candidate of owned) rmSync(candidate, { recursive: true, force: true });
   }
 };
@@ -246,6 +256,60 @@ function restoreConfig(path: string, snapshot: ConfigSnapshot): void {
   }
   const write = writeFileSync as unknown as (file: string, bytes: Uint8Array) => void;
   write(path, snapshot.bytes);
+}
+
+function agentRefs(root: string, activeRoot = root): CodexAgentConfigRef[] {
+  return readCodexAgents(root).map(agent => ({ name: agent.name, configFile: join(activeRoot, agent.path) }));
+}
+
+function ownedAgentRefs(nativeId: string): CodexAgentConfigRef[] {
+  const plugin = codex.listInstalled().find(item => item.id === nativeId);
+  return plugin?.path !== undefined && readOwnership(plugin.path)?.pluginId === nativeId ? agentRefs(plugin.path) : [];
+}
+
+function currentConfig(): string {
+  return existsSync(configFile()) ? readFileSync(configFile(), 'utf8') : '';
+}
+
+function refsMatch(config: string, refs: readonly CodexAgentConfigRef[], names = refs.map(ref => ref.name)): boolean {
+  const roles = table((parseToml(config) as Record<string, unknown>)['agents']);
+  return names.every(name => {
+    const expected = refs.find(ref => ref.name === name);
+    const actual = roles?.[name];
+    return expected === undefined ? actual === undefined
+      : table(actual)?.['config_file'] === expected.configFile && Object.keys(table(actual)!).length === 1;
+  });
+}
+
+function registrationsCurrent(root: string): boolean {
+  return refsMatch(currentConfig(), agentRefs(root));
+}
+
+function writeAgentRefs(prior: readonly CodexAgentConfigRef[], next: readonly CodexAgentConfigRef[]): void {
+  const before = currentConfig();
+  const after = planCodexAgentConfig(before, prior, next);
+  if (after !== before) writeFileSync(configFile(), after);
+}
+
+function captureAgentConfig(attemptId: string, operationId: string, prior: readonly CodexAgentConfigRef[], next: readonly CodexAgentConfigRef[]): void {
+  if (prior.length + next.length === 0) return;
+  const config = currentConfig();
+  planCodexAgentConfig(config, prior, next); // Refuse collisions before acquiring rollback authority.
+  const roles = table((parseToml(config) as Record<string, unknown>)['agents']);
+  const before = prior.filter(ref => roles?.[ref.name] !== undefined);
+  writeFileSync(join(rollbackBundle(attemptId, operationId), 'agent-config.json'), JSON.stringify({ before, after: next }));
+}
+
+/** Restore just captured role references, preserving unrelated concurrent settings. */
+function restoreAgentConfig(handle: DurableLifecycleOperation, apply: boolean): void {
+  const file = join(rollbackBundle(handle.attemptId, handle.operationId), 'agent-config.json');
+  if (!existsSync(file)) return;
+  const saved = JSON.parse(readFileSync(file, 'utf8')) as { before: CodexAgentConfigRef[]; after: CodexAgentConfigRef[] };
+  const current = currentConfig();
+  const names = [...new Set([...saved.before, ...saved.after].map(ref => ref.name))];
+  if (refsMatch(current, saved.before, names)) return;
+  const next = planCodexAgentConfig(current, saved.after, saved.before);
+  if (apply && next !== current) writeFileSync(configFile(), next);
 }
 
 function pluginVersion(dir: string): string {
@@ -533,7 +597,7 @@ export const codexEvidenceProfiles: readonly CapabilityEvidenceProfile[] = [
   codexRouteProfile(CODEX_NATIVE_ROUTE_VERSION, 'native', ['update'], UPDATE_SEMANTICS, ['docs/research/native-plugin-update-capabilities-2026-10-09.md', 'docs/evidence/codex-native-released-20261011.md']),
   ...CODEX_MANAGED_ROUTE_VERSIONS.map(version => codexRouteProfile(version, 'managed', ['install', 'update', 'retire'], version === '0.161.0' ? [...OH_MY_AI_INSTALL_SEMANTICS, 'retirement', 'retention-safety', 'commands', 'model-invocation-control', 'agents'] : MANAGED_SEMANTICS, [
     'docs/hosts/codex.md',
-    ...(['0.161.0', '0.162.0'].includes(version) ? ['docs/evidence/codex-addy-20261019.json'] : []),
+    ...(['0.161.0', '0.162.0'].includes(version) ? ['docs/evidence/codex-addy-20261019.json', 'docs/evidence/codex-native-agents-20261022.md'] : []),
     'docs/adr/0004-retain-plugin-state-on-removal.md',
     'docs/evidence/codex-policy-mcp-20261013.json',
     'docs/evidence/codex-native-released-20261011.md',
@@ -604,7 +668,7 @@ function codexRouteProfile(
     route,
     operationStatus: 'supported',
     semantics,
-    ...(supported.has('agents') ? { agentPolicy: 'prompt-resources' as const } : {}),
+    ...(supported.has('agents') ? { agentPolicy: 'portable-native' as const } : {}),
     evidence,
   });
 }
@@ -676,6 +740,7 @@ function captureCodexActivation(projection: PinsAppliedProjection, projectedFing
   });
   capturePriorSourceRepair(projection, prior.installedFingerprint);
   saveCodexRollback(projection.attemptId, projection.operationId, projection.affectedNativeIds);
+  captureAgentConfig(projection.attemptId, projection.operationId, ownedAgentRefs(projection.nativeId), agentRefs(projection.stagingRoot, destination));
   if (projection.route === 'native') {
     captureNativeCacheSnapshots(projection);
     captureMarketplaceRollback(projection);
@@ -706,6 +771,7 @@ function captureCodexRetirement(request: Parameters<LifecycleHostDefinition['cap
     route: 'managed',
   });
   saveCodexRollback(request.attemptId, request.operationId, request.selection.affectedNativeIds);
+  captureAgentConfig(request.attemptId, request.operationId, ownedAgentRefs(request.activation.nativeId), []);
   return {
     prior,
     rollbackReference: codexRollbackReference(request.attemptId, request.operationId),
@@ -749,10 +815,14 @@ function applyManagedCodexActivation(prepared: PreparedActivationMutation): Muta
     throw new Error(`codex cache slot ${targetDir} has a different owned source identity; refusing to replace it`);
   }
   const before = cacheFingerprint(handle.nativeId);
+  const priorRefs = ownedAgentRefs(handle.nativeId);
+  const nextRefs = agentRefs(stagingRoot, targetDir);
+  planCodexAgentConfig(currentConfig(), priorRefs, nextRefs);
   const configBefore = readConfigSnapshot(configPath);
   const activation = activate(stagingRoot, targetDir, slot);
   try {
     enable(configPath, handle.nativeId);
+    writeAgentRefs(priorRefs, nextRefs);
   } catch (error) {
     try { restoreConfig(configPath, configBefore); }
     finally { activation.rollback(); }
@@ -931,7 +1001,7 @@ function readInstall(identity: {
     route: owned && marker.route !== undefined ? marker.route : identity.route ?? (owned ? 'managed' : 'none'),
     presence: 'present',
     enablement: plugin.enabled ? 'enabled' : 'disabled',
-    activation: plugin.enabled ? 'active' : 'inactive',
+    activation: plugin.enabled && registrationsCurrent(plugin.path) ? 'active' : 'inactive',
     installedFingerprint,
     contentRoots: [{ label: 'plugin', path: plugin.path, fingerprint: installedFingerprint }],
   };
@@ -1207,10 +1277,12 @@ function restoreCodexRollback(handle: DurableLifecycleOperation): MutationResult
   const manifestPath = join(bundle, 'manifest.json');
   if (!existsSync(manifestPath)) throw new Error(`codex lifecycle rollback bundle is missing: ${handle.operationId}`);
   const manifest = parseRollbackManifest(readFileSync(manifestPath, 'utf8'));
+  restoreAgentConfig(handle, false);
   assertMarketplaceRollbackCurrent(handle);
   const nativeSlots = handle.route === 'native' ? assertNativeRollbackSurfaces(handle, manifest, bundle) : null;
   const before = rollbackSurface(manifest.installs.map((install) => install.nativeId));
   restorePluginTables(manifest.tables);
+  restoreAgentConfig(handle, true);
   if (nativeSlots !== null) restoreNativeCacheSnapshots(handle, nativeSlots);
   else for (const install of manifest.installs) {
     if (!install.existed) {
@@ -1525,7 +1597,7 @@ function installationRecord(plugin: InstalledPlugin): TargetInstallationData {
     ownership,
     presence: 'present',
     enablement: plugin.enabled ? 'enabled' : 'disabled',
-    activation: plugin.enabled ? 'active' : 'inactive',
+    activation: plugin.enabled && (linked || registrationsCurrent(plugin.path)) ? 'active' : 'inactive',
     installedFingerprint,
     installedVersion: plugin.version ?? null,
     ...(owned?.pluginId === plugin.id && owned.scopeId !== undefined && owned.route !== undefined ? { observedRoute: owned.route } : {}),
@@ -1543,6 +1615,7 @@ function nativeProjection(request: NativeProjectionRequest): NativeProjectionDat
     assertRequestedCacheOwnership(destination, installed?.contentRoots ?? []);
     const configuredMarketplace = marketplaceOf(request.snapshot.nativeId);
     if (configuredMarketplace !== null) catalogBinding(configuredMarketplace); // Invalid config blocks Managed as well as Native.
+    if (request.snapshot.inventory.components.agents.length > 0) return { kind: 'requires-managed', reasonId: 'native-agent-toml-projection' };
     const proof = recordedPriorSource(request.snapshot);
     if (proof !== undefined) {
       const installed = request.targetObservation.installations.find(row => row.nativeId === request.snapshot.nativeId);
@@ -1563,6 +1636,13 @@ function nativeProjection(request: NativeProjectionRequest): NativeProjectionDat
   }
   const marketplace = marketplaceOf(request.snapshot.nativeId);
   if (marketplace === null) return { kind: 'requires-managed', reasonId: 'catalog-absent' };
+  // Native upgrades refresh every package in the marketplace and cannot preserve
+  // generated role files or retire their config references. Include prior roles
+  // even when the requested source has removed all of its agent definitions.
+  const affected = request.targetObservation.installations.filter(row => marketplaceOf(row.nativeId) === marketplace);
+  if (affected.some(row => row.contentRoots.some(root => readCodexAgents(root.path).length > 0))) {
+    return { kind: 'requires-managed', reasonId: 'native-agent-registration-preservation' };
+  }
   const binding = catalogBinding(marketplace);
   const git = request.snapshot.nativeGit;
   if (binding.kind === 'sha-bound' && git !== undefined && git.resolvedRevision === binding.sha && git.locator === binding.source) {

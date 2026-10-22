@@ -35,7 +35,7 @@ limited to managed install, changed-byte update, and retirement for ordinary
 skills, MCP, resources, and the adapter-owned safeguards for atomic
 activation, rollback, readback, reload, and retained plugin data. The subsequent
 Addy evidence below extends that managed envelope to manual commands and bounded
-prompt personas.
+native agent roles.
 
 Measured 2026-09-16 on this machine (`~/.codex`). Reader: `src/hosts/codex.ts`.
 
@@ -117,9 +117,9 @@ A portable `mcp.json` without `.mcp.json` requires an explicit native manifest
 has no existing pointer or default `.mcp.json`; native `mcpServerStatus/list`
 then discovers the local server and its tool. Existing authored pointers stay
 intact. This proves wiring and native discovery, not third-party authentication.
-Native agent registration and user-invocation suppression remain unsupported.
-The bounded prompt-persona adaptation below permits resource-only agent files;
-stronger agent declarations still refuse the whole package before mutation.
+User-invocation suppression remains unsupported. Native agent registration is
+qualified for 0.161.0 and 0.162.0 as described below. Unsupported agent metadata
+still refuses the whole package before mutation.
 
 Inline manifest `mcpServers` remain unverified and are refused before activation.
 Native MCP pointers must name an existing file inside the plugin. When canonical
@@ -135,39 +135,22 @@ existing complete-slot rollback and CAS tests cover mode preservation and refusa
 of later mode changes without weakening physical-fingerprint checks.
 
 
-## Prompt personas on Codex 0.161.0 and 0.162.0 (issue #90)
+## Native agents on Codex 0.161.0 and 0.162.0
 
-The full amended Personal Addy package is supported through the existing managed
-plugin projection, not standalone skill copies or native agent registration.
-The source inventory still records `agents`. For these two exact releases the
-profile admits only canonical `agents/*.md` personas whose frontmatter contains
-`name` and `description`, alongside at least one projected command. That command
-instructs Codex to read persona files and supply their instructions to available
-harness delegation (or disclose sequential execution when unavailable). The
-adaptation explicitly overrides native-registration assumptions in command prose.
-All persona bytes and resource-relative paths survive installation and updates.
+The managed adapter converts canonical `agents/*.md` into native TOML roles and
+registers their files in Codex's global configuration. The exact-version profile
+uses `agentPolicy: portable-native`. Plain `name`/`description` definitions such as
+Addy's four agents require no sidecar or companion command. Portable aliases and
+explicit model mappings use `plugnz.agents.json` and the `codex` destination.
 
-Agent model/tool/permission/memory metadata, unknown fields, alternate agent roots,
-and agent-only packages remain refused; no unsupported semantics are dropped.
-This is a qualified `agents` capability with `agentPolicy: prompt-resources`, not
-proof that the harness registers dedicated native agent roles. The policy is part
-of the evidence content address. Other Codex versions remain separately gated.
+Role names are scoped to the plugin (`addy:code-reviewer`); original prose and
+native tool defaults are preserved. Projected commands refer to those actual roles.
+Update/removal and rollback manage owned references with collision protection.
+A native marketplace refresh cannot bypass generated-role preservation.
 
-[`evidence/codex-addy-20261019.json`](../evidence/codex-addy-20261019.json)
-records actual native loading on both versions: 34 Addy entries, all nine manual
-commands excluded from the automatic catalog, explicit command-body injection,
-and four byte-identical, resolvable persona resources. The credential-free probe
-captures native outbound prompts on localhost; it does not claim model inference.
-The older `codex-personal-20260922.json` additionally records real model tool reads
-of a sibling skill and persona. Those findings explain why an older installed
-Addy package worked while the newer lifecycle gate rejected the same source.
-
-`test/codex-persona-public.test.ts` checks the public lifecycle (preview, install,
-update and zero-mutation native-metadata refusal). The full amended source is
-also replayed through the public CLI in the evidence record. Genuine capability
-gaps now report the specific failed semantic before an absent alternative-route
-profile, while preserving all internal route gaps. No new CLI or adapter route is
-introduced; the reviewed boundary in [`research/prior-art-2026-09-22.md`](../research/prior-art-2026-09-22.md)
-remains applicable: neither the pinned skills nor add-mcp implementation supplies
-Agent Plugin command projection or native plugin-store activation. Supporting
-files are preserved; standalone skill distribution and bare-MCP writes are not added.
+See [authoring and lifecycle limits](../portable-agents.md#codex-native-roles),
+including reload requirements and the native plugin-disable limitation.
+[The native evidence](../evidence/codex-native-agents-20261022.md) proves public
+installation and actual child execution on both versions, with model inheritance,
+explicit selection and native tools. This supersedes the resource-only adaptation
+recorded in `codex-addy-20261019.json`; that older evidence remains historical.

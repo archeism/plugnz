@@ -36,7 +36,7 @@ describe('codex native marketplace upgrade route', () => {
         expect(selectedRoute(await selectedUpdate(snapshot, createResolvedLifecyclePins([]))).route).toBe('managed');
         const profile = codexEvidenceProfiles.find((candidate) => candidate.detectedVersion === '0.161.0' && candidate.route === 'managed' && candidate.packageFormat === undefined);
         expect(profile?.operations).toEqual(['install', 'retire', 'update']);
-        expect(profile?.agentPolicy).toBe('prompt-resources');
+        expect(profile?.agentPolicy).toBe('portable-native');
         expect(Object.entries(profile?.semantics ?? {}).filter(([, status]) => status === 'supported').map(([semantic]) => semantic).sort()).toEqual([
           'activation-reload', 'agents', 'auto-update-control', 'commands', 'mcp', 'model-invocation-control', 'ordinary-skills', 'readback', 'resources', 'retention-safety', 'retirement', 'rollback',
         ]);
@@ -60,6 +60,26 @@ describe('codex native marketplace upgrade route', () => {
       }
       writeFileSync(config, original.replace('[marketplaces.demo-market]', '[marketplaces.demo-market]\nsparse_paths = []'));
       expect(selectedRoute(await selectedUpdate(snapshot, createResolvedLifecyclePins([]))).route).toBe('native');
+      expect(readFileSync(join(home, 'codex-invocations.log'), 'utf8').includes('marketplace upgrade')).toBe(false);
+    });
+  });
+  for (const roleOwner of ['demo-plugin', 'other-plugin']) test(`existing ${roleOwner} native roles require Managed when the new requested source has no agents`, async () => {
+    await withCodexBinary(async home => {
+      const snapshot = frozenSnapshot(home, '1.1.0');
+      writeCatalog(home, frozenSha, [demoId, otherId]);
+      installPlugin(home, 'demo-plugin', demoId, true);
+      installPlugin(home, 'other-plugin', otherId, true);
+      const root = join(home, '.codex/plugins/cache/demo-market', roleOwner, '1.0.0');
+      const name = `${roleOwner}:reviewer`;
+      writeFiles(root, {
+        '.plgnz-codex-agents.json': JSON.stringify({ version: 1, agents: [{ name, path: 'agents/reviewer.toml', description: 'Review' }] }),
+        'agents/reviewer.toml': `name = "${name}"\ndescription = "Review"\ndeveloper_instructions = "Review carefully"\n`,
+      });
+      const config = join(home, '.codex/config.toml');
+      writeFileSync(config, readFileSync(config, 'utf8') + `\n[agents."${name}"]\nconfig_file = ${JSON.stringify(join(root, 'agents/reviewer.toml'))}\n`);
+      const before = fingerprintTree(join(home, '.codex'));
+      expect(selectedRoute(await selectedUpdate(snapshot, createResolvedLifecyclePins([]))).route).toBe('managed');
+      expect(fingerprintTree(join(home, '.codex'))).toBe(before);
       expect(readFileSync(join(home, 'codex-invocations.log'), 'utf8').includes('marketplace upgrade')).toBe(false);
     });
   });

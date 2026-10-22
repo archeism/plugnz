@@ -105,6 +105,16 @@ export function planPortableAgents(root: string, target: string, overrides: Port
   const overrideObject = object(overrides, 'overrides');
   fields(overrideObject, ['modelAliases'], 'overrides');
   const overrideAliases = overrideObject['modelAliases'] === undefined ? {} : aliases(overrideObject['modelAliases'], 'overrides.modelAliases');
+  return readAgentDefinitions(root, target, packageAliases, overrideAliases, true);
+}
+
+/** Canonical instruction-only agents need no portable model configuration. */
+export function planPromptResourceAgents(root: string): PortableAgent[] | null {
+  if (stat(join(root, 'agents')) === undefined) return null;
+  return readAgentDefinitions(root, undefined, {}, {}, false);
+}
+
+function readAgentDefinitions(root: string, target: string | undefined, packageAliases: ModelAliases, overrideAliases: ModelAliases, portable: boolean): PortableAgent[] {
   const directory = join(root, 'agents');
   if (!stat(directory)?.isDirectory()) invalid('agents', 'must be a directory (symlinks are not supported)');
   // Native hidden agent roots would otherwise bypass this projection entirely.
@@ -128,7 +138,7 @@ export function planPortableAgents(root: string, target: string, overrides: Port
     const match = /^(?:\uFEFF)?---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(raw);
     if (match === null) invalid(path, 'requires YAML frontmatter');
     const metadata = parseYaml(match[1]!, path);
-    fields(metadata, ['name', 'description', 'modelAlias', 'models'], path);
+    fields(metadata, portable ? ['name', 'description', 'modelAlias', 'models'] : ['name', 'description'], path);
     const name = text(metadata['name'], `${path}.name`);
     if (!/^[a-z][a-z0-9-]*$/.test(name)) invalid(`${path}.name`, 'must start with a lowercase letter and contain only lowercase letters, digits, or hyphens');
     if (file !== `${name}.md`) invalid(`${path}.name`, 'must match the Markdown filename');
@@ -140,7 +150,7 @@ export function planPortableAgents(root: string, target: string, overrides: Port
     const direct = metadata['models'] === undefined ? {} : models(metadata['models'], `${path}.models`);
     const defaults = alias === undefined ? {} : own(packageAliases, alias) ?? {};
     const replacements = alias === undefined ? {} : own(overrideAliases, alias) ?? {};
-    const model = own(direct, target) ?? own(replacements, target) ?? own(defaults, target);
+    const model = target === undefined ? undefined : own(direct, target) ?? own(replacements, target) ?? own(defaults, target);
     return { path, name, description, body, ...(model === undefined ? {} : { model }) };
   });
 }

@@ -21,7 +21,7 @@ tool did not install. Details: `docs/pin-and-update.md`.
 
 **Portable context hooks:** run `npx plugnz install` inside a package containing `plugnz.hooks.json`, or `npx plugnz install <source>`. Installation compiles and registers session-start, stop, and pre/post-tool handlers through each supported harness's native loader. Handlers receive normalized JSON and return context; `plugnz hooks targets` exposes delivery and continuation limits. See [the contract, usage, and native map](docs/hooks.md) and [real-model Docker verification](docs/hooks-live-verification.md).
 
-**Portable agents:** use `agents/*.md` plus `plugnz.agents.json` for shared model aliases such as `fast` and `smart`. Explicit per-agent destination mappings win; unmapped models are omitted. User aliases live in `~/.open-plugin/model-aliases.json`. The first qualified targets are Claude Code and ZCode CLI; see [authoring, precedence and limits](docs/portable-agents.md).
+**Portable agents:** use `agents/*.md` plus `plugnz.agents.json` for shared model aliases such as `fast` and `smart`. Explicit per-agent destination mappings win; unmapped models are omitted. User aliases live in `~/.open-plugin/model-aliases.json`. Qualified targets are Claude Code, Codex and ZCode CLI; see [authoring, precedence and limits](docs/portable-agents.md).
 
 Why another tool: `npx plugins` is closed-source and its Cursor target does not install into Cursor; nothing in the ecosystem checks that an installed plugin still *works*. See `docs/research/`.
 

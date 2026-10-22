@@ -42,11 +42,11 @@ for (const version of ['2.1.285', '2.1.296']) test(`Claude ${version} public ins
   });
 }, 30_000);
 
-test('portable agents cannot be silently installed as Codex prompt resources', async () => {
+test('an unqualified Codex version cannot claim native agent registration', async () => {
   await withLifecycleCliHarness(h => {
     h.writeHome({ '.codex/.keep': '' });
     const source = h.source('portable-review', fixture);
-    const binary = h.fakeNative('codex', Array.from({ length: 8 }, () => ({ args: ['--version'], stdout: 'codex-cli 0.162.0\n' })));
+    const binary = h.fakeNative('codex', Array.from({ length: 8 }, () => ({ args: ['--version'], stdout: 'codex-cli 0.160.0\n' })));
     const result = h.run(['install', source, '--target', 'codex', '--json'], { env: { OPEN_PLUGIN_CODEX_BIN: binary.path } });
     expect(result.exitCode).toBe(1);
     expect(parseLifecycleReport(JSON.parse(result.stdout)).summary.mutationStarted).toBe(false);

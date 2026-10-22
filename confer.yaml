@@ -12,3 +12,9 @@ sources:
     category: agent
     relevance: "Provides the native agent loader and model-selection parser; defines the exact serialization and omission behavior the ZCode adapter must preserve."
     targets: [src/hosts/zcode-cli-projection.ts, src/hosts/zcode-cli-writer.ts]
+  - owner: openai
+    name: codex
+    url: https://github.com/openai/codex/tree/83086188ae0614bd882818ff1aa23f3194962012
+    category: agent
+    relevance: "Native role loader defines TOML fields, namespaced registration and model inheritance; prevents treating plugin Markdown as executable agents."
+    targets: [src/hosts/codex-agents.ts, src/hosts/codex-agent-config.ts, src/hosts/codex-writer.ts]

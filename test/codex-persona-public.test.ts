@@ -12,7 +12,7 @@ const files = {
   'agents/reviewer.md': persona,
 };
 
-for (const version of ['0.161.0', '0.162.0']) test(`public Codex ${version} lifecycle preserves prompt personas and manual command adaptation through update`, async () => {
+for (const version of ['0.161.0', '0.162.0']) test(`public Codex ${version} lifecycle registers native agents and preserves manual command adaptation through update`, async () => {
   await withLifecycleCliHarness(h => {
     h.writeHome({ '.codex/.keep': '' });
     const source = h.source('personas', files);
@@ -27,7 +27,7 @@ for (const version of ['0.161.0', '0.162.0']) test(`public Codex ${version} life
     const read = (suffix: string) => bytesToText(installedFiles[Object.keys(installedFiles).find(p => p.endsWith(suffix))!]!);
     expect(read('/agents/reviewer.md')).toBe(persona);
     expect(read('/skills/review/SKILL.md')).toBe(files['skills/review/SKILL.md']);
-    expect(read('/skills/ship/SKILL.md')).toContain('Persona names are not assumed to be registered tools or agent types.');
+    expect(read('/skills/ship/SKILL.md')).toContain('Plugin agents are registered as personas:<agent-name>');
     expect(read('/skills/ship/agents/openai.yaml')).toContain('allow_implicit_invocation: false');
     writeFileSync(join(source, 'agents/reviewer.md'), `${persona}Also inspect regressions.\n`);
     const updated = h.run(['sync', source, '--target', 'codex', '--json'], { env });
@@ -54,7 +54,7 @@ for (const field of ['model: opus', 'tools: Read', 'memory: project', 'permissio
   }, 20_000);
 }
 
-for (const variant of ['alternate-root', 'without-command']) {
+for (const variant of ['alternate-root']) {
   test(`prompt-resource admission refuses ${variant}`, async () => {
     await withLifecycleCliHarness(h => {
       h.writeHome({ '.codex/.keep': '' });

@@ -259,6 +259,8 @@ export function admitPackageSemanticsFromProfiles(
     const sourceOperation = request.operation === 'install' || request.operation === 'update';
     const hookProblem = semantic === 'agents' && sourceOperation && request.inventory.portableAgents && profile.agentPolicy !== 'portable-native'
       ? { status: 'unsupported' as const, diagnostic: `target '${request.host}' has no qualified portable agent projection` }
+      : semantic === 'agents' && sourceOperation && profile.agentPolicy === 'portable-native' && !request.inventory.portableAgents
+      ? unsupportedPromptPersona(request.inventory, false)
       : semantic === 'agents' && sourceOperation && profile.agentPolicy === 'prompt-resources'
       ? unsupportedPromptPersona(request.inventory)
       : semantic === 'hooks' && sourceOperation
@@ -376,7 +378,7 @@ export function createCapabilityEvidenceProfile(
 }
 
 /** Narrow, fail-closed adaptation: no native role metadata may be discarded. */
-function unsupportedPromptPersona(inventory: PackageSemanticInventory): HookProblem | null {
+function unsupportedPromptPersona(inventory: PackageSemanticInventory, requiresCommand = true): HookProblem | null {
   for (const path of inventory.components.agents) {
     const agent = inventory.componentDefinitions.find(item => item.kind === 'agent' && item.path === path);
     if (agent?.root !== 'agents' || agent.dialect !== 'markdown' || agent.metadataKeys === undefined) {
@@ -385,7 +387,7 @@ function unsupportedPromptPersona(inventory: PackageSemanticInventory): HookProb
     const field = agent.metadataKeys.find(key => key !== 'name' && key !== 'description');
     if (field !== undefined) return unsupportedHookProblem(`prompt-resource agent adaptation cannot preserve '${path}' metadata '${field}'; native agent registration is unsupported`);
   }
-  if (inventory.components.agents.length > 0 && inventory.components.commands.length === 0) {
+  if (requiresCommand && inventory.components.agents.length > 0 && inventory.components.commands.length === 0) {
     return unsupportedHookProblem('prompt-resource agent adaptation requires a projected command with persona loading instructions');
   }
   return null;
