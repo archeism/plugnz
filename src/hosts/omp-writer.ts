@@ -29,6 +29,7 @@ import type {
 import { createLifecycleHostAdapter, createTargetInventoryObservation } from '../lifecycle-runtime';
 import { pinPluginMcpFiles } from '../mcp-write';
 import { resolveLegacyV1MarkerScopeId } from '../legacy-claim-ownership';
+import { readLifecycleState } from '../state';
 import { recordedPriorSource } from '../prior-source-proof';
 import { CryptoHasher, spawnSync, which } from '../runtime';
 import { PACKAGE_SEMANTICS, type PackageSemantic } from '../semantic-inventory';
@@ -628,7 +629,7 @@ function installationOf(plugin: InstalledPlugin): TargetInstallationData {
       && linkPointsTo(managedLink(plugin.id), path) ? { observedRoute: 'managed' as const } : {}),
     installedFingerprint: digest,
     installedVersion: plugin.version ?? null,
-    source: sourceOf(owner),
+    source: sourceOf(owner) ?? (owner !== null && owner.scopeId === undefined && resolvedScopeId !== undefined ? legacySourceOf(resolvedScopeId, plugin.id) : null),
     contentRoots: [{ label: 'package', path, fingerprint: digest }],
   };
 }
@@ -637,6 +638,26 @@ function sourceOf(owner: Ownership | null): TargetInstallationData['source'] {
   if (owner?.sourceType === 'local' && owner.sourceRevision !== undefined) return { type: 'local', immutableRevision: owner.sourceRevision, locator: null };
   if (owner?.sourceType === 'git' && owner.sourceRevision !== undefined && typeof owner.sourceLocator === 'string') return { type: 'git', immutableRevision: owner.sourceRevision, locator: owner.sourceLocator };
   return null;
+}
+
+/**
+ * A legacy v1 marker predates provenance fields, so its Git-backed scope cannot
+ * pass the shared Git provenance gate on marker bytes alone. When the imported
+ * ledger proof (resolveLegacyV1MarkerScopeId) already matched this exact marker
+ * identity, source fingerprint, and unmodified installed fingerprint, carry
+ * that scope's recorded Git binding into the observation. Downstream locator
+ * and revision comparisons still refuse any mismatch, so nothing is trusted
+ * beyond the already-proven legacy claim.
+ */
+function legacySourceOf(scopeId: string, nativeId: string): TargetInstallationData['source'] {
+  let loaded: ReturnType<typeof readLifecycleState>;
+  try { loaded = readLifecycleState(); }
+  catch { return null; }
+  const activation = loaded.state.activations.find(row => row.scopeId === scopeId && row.nativeId === nativeId
+    && row.ownership.kind === 'legacy-claim' && row.route.kind === 'legacy-unverified');
+  const scope = loaded.state.scopes.find(row => row.id === scopeId);
+  if (activation === undefined || activation.sourceRevision === undefined || scope === undefined || scope.source.kind !== 'git') return null;
+  return { type: 'git', immutableRevision: activation.sourceRevision, locator: scope.source.locator };
 }
 
 function observeReadback(identity: Pick<DurableLifecycleOperation, 'adapterId' | 'target' | 'scopeId' | 'packageName' | 'nativeId' | 'route'>): LifecycleReadbackData {

@@ -1,8 +1,13 @@
 import { expect, test } from 'bun:test';
-import { readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { snapshotTree, withLifecycleCliHarness, type LifecycleCliHarness, type CliRunResult } from './lifecycle-cli-harness';
 import { parseLifecycleReport } from '../src/lifecycle-report';
+import { resolveSource } from '../src/source';
+import { ompWriter } from '../src/hosts/omp-writer';
+import { createDeploymentScopeIdentity } from '../src/deployment-scope';
+import { fingerprintTree } from '../src/fingerprint';
 
 const agent = (name: string, metadata = '', body = 'Keep the explanation and reasoning intact.\n') =>
   `---\nname: ${name}\ndescription: Review the change\n${metadata}---\n${body}`;
@@ -248,6 +253,77 @@ test('OMP collision scan skips disabled packages and follows native enablement',
     expect(readdirSync(join(h.storePath('omp'), 'plugins/plgnz')).sort().length).toBe(2);
   });
 }, 30_000);
+
+test('OMP migrates a legacy Git installation to portable agents with scoped markers and provenance', () => {
+  return withLifecycleCliHarness(async h => {
+    const env = prepare(h);
+    const locator = 'https://example.test/portable-review.git';
+    const repo = h.source('portable-review', { ...fixture, 'payload.txt': 'V1\n' });
+    const git = (args: string[]): string => {
+      const result = spawnSync('/usr/bin/git', ['-C', repo, ...args], { encoding: 'utf8', env: { ...process.env, HOME: h.home, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' } });
+      if (result.status !== 0) throw new Error(result.stderr);
+      return result.stdout.trim();
+    };
+    git(['init', '--quiet']);
+    git(['add', '.']);
+    git(['-c', 'user.name=Proof', '-c', 'user.email=proof@example.invalid', 'commit', '--quiet', '-m', 'legacy']);
+    const script = join(h.home, 'source-git.mjs');
+    const bin = join(h.home, 'source-git');
+    writeFileSync(script, `import {spawnSync} from 'node:child_process'; const args=process.argv.slice(2).map(x=>x===${JSON.stringify(locator)}?${JSON.stringify(repo)}:x); const r=spawnSync('/usr/bin/git',args,{stdio:'inherit'}); process.exit(r.status??1);`);
+    writeFileSync(bin, `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(script)} "$@"\n`);
+    chmodSync(bin, 0o755);
+    const previous = {
+      OPEN_PLUGIN_OMP_ROOT: process.env['OPEN_PLUGIN_OMP_ROOT'],
+      OPEN_PLUGIN_HOME: process.env['OPEN_PLUGIN_HOME'],
+      OPEN_PLUGIN_GIT_BIN: process.env['OPEN_PLUGIN_GIT_BIN'],
+    };
+    let path = '';
+    let scopeId = '';
+    try {
+      process.env['OPEN_PLUGIN_OMP_ROOT'] = h.storePath('omp');
+      process.env['OPEN_PLUGIN_HOME'] = h.home;
+      process.env['OPEN_PLUGIN_GIT_BIN'] = bin;
+      const resolved = resolveSource(locator);
+      const plugin = resolved.plugins.find(candidate => candidate.name === 'portable-review')!;
+      await ompWriter.add(plugin, resolved);
+      path = ompWriter.listInstalled().find(candidate => candidate.id === 'portable-review@local')!.path!;
+      scopeId = createDeploymentScopeIdentity({ kind: 'git', locator, ref: 'HEAD' }, { kind: 'omp', instance: 'default' }).id;
+      h.writeHome({ 'state.json': JSON.stringify({
+        version: 2,
+        stateGeneration: 1,
+        scopes: [{ id: scopeId, source: { kind: 'git', locator, ref: 'HEAD' }, target: { kind: 'omp', instance: 'default' }, authority: 'legacy-import', lifecycle: 'active', selectorMode: 'legacy-unknown' }],
+        activations: [{ scopeId, packageId: 'portable-review@local', nativeId: 'portable-review@local', sourceRelativeDir: '.', sourceRevision: resolved.sha,
+          route: { kind: 'legacy-unverified' }, ownership: { kind: 'legacy-claim', prior: 'plgnz' },
+          fingerprints: { source: plugin.contentFingerprint, installed: fingerprintTree(path) }, activationState: 'unknown', readbackState: 'unverified', pins: [] }],
+        attempts: [],
+        tombstones: [],
+      }, null, 2) });
+    } finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+    const marker = (): Record<string, unknown> => JSON.parse(file(path, '.plgnz-install.json'));
+    expect(marker()['scopeId']).toBeUndefined();
+    const gitEnv = { ...env, OPEN_PLUGIN_GIT_BIN: bin };
+    success(h.run(['sync', locator, '--target', 'omp', '--json'], { env: gitEnv }));
+    expect(marker()['scopeId']).toBe(scopeId);
+    expect(marker()['sourceType']).toBe('git');
+    expect(marker()['sourceLocator']).toBe(locator);
+    expect(file(path, 'agents/reviewer.md')).toBe(reviewerBytes('Keep the explanation and reasoning intact.\n'));
+    const again = h.run(['sync', locator, '--target', 'omp', '--json'], { env: gitEnv });
+    success(again);
+    expect(parseLifecycleReport(JSON.parse(again.stdout)).outcomes.every(outcome => outcome.action === 'unchanged')).toBe(true);
+    // A different source cannot claim the migrated Git-owned slot.
+    const foreign = h.source('portable-review', fixture);
+    expect(h.run(['install', foreign, '--target', 'omp', '--json'], { env }).exitCode).toBe(1);
+    // Edited installed bytes still refuse after migration.
+    writeFileSync(join(path, 'agents/reviewer.md'), 'edited\n');
+    expect(h.run(['sync', locator, '--target', 'omp', '--json'], { env: gitEnv }).exitCode).toBe(1);
+    expect(file(path, 'agents/reviewer.md')).toBe('edited\n');
+  });
+}, 60_000);
 
 test('OMP failed update rolls the installed package back to the prior bytes', () => {
   return withLifecycleCliHarness(h => {

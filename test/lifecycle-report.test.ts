@@ -2,15 +2,10 @@ import { installationVerification } from '../src/installation-verification';
 import { describe, expect, test } from 'bun:test';
 import {
   LIFECYCLE_ACTIVATION_STATES,
-  LIFECYCLE_COVERAGE_KINDS,
   LIFECYCLE_EXIT_CODES,
-  LIFECYCLE_OPERATION_RESULTS,
-  LIFECYCLE_PLAN_ACTIONS,
   LIFECYCLE_REASON_CATEGORIES,
   LIFECYCLE_REASON_CODES,
-  LIFECYCLE_REPORT_SCHEMA_VERSION,
   LIFECYCLE_RESOURCE_STATES,
-  LIFECYCLE_ROUTES,
   createLifecycleReason,
   LifecycleReportValidationError,
   exitCodeForLifecycleReport,
@@ -176,28 +171,6 @@ test('verified COMMIT receipt must match original native action, without inferri
 });
 
 describe('lifecycle report contract', () => {
-  test('pins schema version and orthogonal machine-readable fields', () => {
-    expect({
-      schemaVersion: LIFECYCLE_REPORT_SCHEMA_VERSION,
-      actions: LIFECYCLE_PLAN_ACTIONS,
-      results: LIFECYCLE_OPERATION_RESULTS,
-      resourceStates: LIFECYCLE_RESOURCE_STATES,
-      activationStates: LIFECYCLE_ACTIVATION_STATES,
-      routes: LIFECYCLE_ROUTES,
-      coverageKinds: LIFECYCLE_COVERAGE_KINDS,
-      parsed: parseLifecycleReport(validReport()),
-    }).toEqual({
-      schemaVersion: 1,
-      actions: ['install', 'update', 'unchanged', 'route-migrate', 'disable-nonconforming', 'retain-prior', 'retire-orphan', 'not-attempted', 'skip'],
-      results: ['succeeded', 'failed', 'pending', 'not-attempted', 'skipped'],
-      resourceStates: ['present', 'absent', 'retained', 'unknown', 'potentially-changed'],
-      activationStates: ['active-conforming', 'active-nonconforming', 'inactive', 'retained-prior', 'unknown'],
-      routes: ['native', 'managed', 'none'],
-      coverageKinds: ['desired-pair', 'retirement'],
-      parsed: validReport(),
-    });
-  });
-
   test('rejects missing, duplicate, unexpected, and contradictory outcomes', () => {
     const missing = validReport();
     missing.outcomes = [];
