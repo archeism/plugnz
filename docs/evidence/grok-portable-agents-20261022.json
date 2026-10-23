@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "base": "dedbdc9",
+  "rawRoot": "/root/.local/state/plugnz-grok-portable-agents-20261022",
+  "sourceSha256": {
+    "src/hosts/grok-writer.ts": "1b3a16163dabb51273fa424ae9b827f9cd972646e1a20cb148af1435e579f02e",
+    "test/grok-portable-agents.test.ts": "d026d7b00cc5412fb8eb5669dfa0ce69ca59986ac4bf2e39479840df387bcbc7",
+    "test/grok-native-agents-probe.py": "531e7371ac2f7ccb1a30d21f3e6843d5067f2159f315c47c5d4665655a209027"
+  },
+  "evidenceSha256": {
+    "native-run3/case/verification.json": "0bb906de926609f5a8fcfec5b4848f6a0b87a2c00fa7be9639549f5d54741224",
+    "native-run3/case/requests.jsonl": "9a9a53b6206be9f9ce8990bdb818f1c55cfa728c97f9e26e91a5f2de19822342",
+    "native-run3/case/generated.json": "b245906b8da2fa71763340a12d1878298834372d4fbec72a9fe150f4c5dc1eea",
+    "native-run3/case/resources.json": "b07fcbdcb269b2c74e2653f16b226142ef4cefe0691d5a78c7af124f1d302840",
+    "native-run3/case/run.json": "9e116c3cabb20245ec104889b2bd5f6bdbc02b80624e18b777bb2b3555d1b925",
+    "native-run3/case/invocation.json": "5b5534a97f98ccd206fdab00a7b59424a5630fb6426f1e4c324ded75557da5eb",
+    "native-run3/case/install.stdout": "0e13377708c842512fc72a034e6a8ddf41460af090aa11642ac54468caa35b3a",
+    "native-run3/case/inspect.json": "029a35f360abbb748fd8afc49f7ea69e80d35e65354346cfdbd0ea3b55abcec7",
+    "native-run3/case/stdout.json": "d401017c32a29e66cf5c363be27e58af5cfb0aa6d49116eff75664bcfb2cb925",
+    "native-run3/case/remove.stdout": "271438fedad0f8d827bfe6dd2ee9e55561c6e80914da6f17de9b76fa709b7aec",
+    "native-run3/case/remove-inspect.json": "84940251245d46c9fb8fc50629cbfc0207082ccf5b13dbcea1e62df16f6a3e8e",
+    "native-run3/case/removal-state.json": "15465753ad9d5864367c075eff72aa98008ec49f14f5e2f05c8ea2b170f2cce8"
+  },
+  "native": {
+    "version": "grok 1.0.46 (2765805b9442)",
+    "binary": "/root/.grok/bin/grok-1.0.46",
+    "binarySha256": "41626a53292324140b92556b9d42ff5542e3dcd04aff85eafb8689dd4adb44fc",
+    "route": "native marketplace --trust install: plugin agents/<name>.md registered as <plugin>:<agent> spawn_subagent types",
+    "requests": 17,
+    "childRequests": 5,
+    "assertions": 51
+  },
+  "verification": {
+    "focusedTestsPassed": 9,
+    "focusedTestsFailed": 0,
+    "adjacentCheckpoint": "63 passed across Grok lifecycle, lifecycle SPI, portable agents and focused tests after disabled rollback repair",
+    "nativeQualified": true,
+    "retirement": "public plgnz remove with the real 1.0.46 binary: plugin, demo:* agents, activation link, marketplace, and registry row disappear; unrelated user-scope plugin and config section survive; crash-mid-removal rollback and same-verb retry proven with the fake-native suite",
+    "knownOutsideFailures": "grok-native-loader.test.ts fails before its Grok leg at HEAD (claude-code 2.1.285 commands unsupported on this machine, needs separate Claude version proof); two add.test.ts failures are chmod-based root DAC-override artifacts, green under the final gate's setpriv bounding set",
+    "integrationRepeat": {
+      "rawRoot": "/root/.local/state/plugnz-native-parity/grok-release-proof",
+      "assertionsPassed": 51,
+      "verificationSha256": "0bb906de926609f5a8fcfec5b4848f6a0b87a2c00fa7be9639549f5d54741224",
+      "removalStateSha256": "04afeea4b27a0c48fec85848c2cada8e55e7e550fdd069a709180ba9730729d0",
+      "corrections": "sidecar captured before cleanup; dangling links detected; exact user configuration bytes preserved, excluding native-owned marketplace stanza"
+    }
+  },
+  "limits": [
+    "Only grok 1.0.46 (2765805b9442) marketplace --trust route qualified; 1.0.24/1.0.41 refuse portable agents and retirement",
+    "Untrusted user-scope ~/.grok/plugins copies do not register agent types in 1.0.46",
+    "Native parser trims body whitespace in the delivered child prompt; generated files keep exact bytes",
+    "Unknown mapped model ids fall back to the parent model with a warning (native policy, disclosed)",
+    "Deterministic loopback fixture; no live inference or paid model calls",
+    "Reversible disable remains unverified and fails closed; ACP face not exercised"
+  ]
+}

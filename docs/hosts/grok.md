@@ -16,6 +16,30 @@ Session start scans marketplaces and fans out plugin updates unless `plugin_auto
 
 Native `skills/*/SKILL.md` and `commands/*.md` are discovered under the installed plugin. Grok parses `disable-model-invocation`, `user-invocable`, `argument-hint`, `$ARGUMENTS`, and positional `$1`/`$ARGUMENTS[N]` (`xai-grok-tools/src/implementations/skills/discovery.rs`, `skill.rs`). plgnz preserves ordinary skill discovery, translates a Codex `agents/openai.yaml` implicit-invocation policy into Grok frontmatter when needed, normalizes supported alias spellings, and rejects contradictory policies. Prompt-only TOML commands become native Markdown commands with the original prompt body and argument tokens; executable preprocessing and unverified permission semantics are refused. `.mcp.json` and manifest MCP declarations stay inside the native plugin, and a lone spec `mcp.json` is copied to Grok's `.mcp.json` path. The reader exposes plugin MCP entries to doctor; the writer applies requested MCP command pins without entering doctor's import graph.
 
+
+## Portable agents (Grok Build 1.0.46)
+
+Portable agents ride the same native marketplace route: `projectGrokSource`
+renders the resolved `agents/<name>.md` (bare authored name; the loader
+registers `<plugin>:<agent>` itself), removes the sidecar, refuses a manifest
+`agents` pointer other than the default `./agents`, and refuses a resolved
+model whose trimmed value is case-insensitive `inherit`, Grok's inheritance
+sentinel; multiline model IDs are also refused. Marketplace `--trust` installs
+register the definitions as spawnable `spawn_subagent` types; untrusted
+user-scope `~/.grok/plugins` copies are counted by `inspect` but do not
+register types in 1.0.46. Actual child requests against a deterministic
+loopback provider proved exact model resolution (explicit > user alias >
+package alias > inherit), the disclosed native fallback to the parent model
+for unknown ids, authored prose (trim-normalized), and the ordinary native
+toolset; `1.0.24`/`1.0.41` and plain native agent packages stay refused.
+Public `remove` retires the lifecycle-recorded install through the same
+ownership guard as the direct writer: the plugin, its `demo:*` agent types, activation
+link, marketplace, and registry row disappear natively while unrelated
+plugins and user configuration survive; a crash mid-removal rolls the install
+back before a same-verb retry, and reversible disable stays fail-closed. See
+[the qualification](../evidence/grok-portable-agents-20261022.md) and
+`test/grok-portable-agents.test.ts`.
+
 ## Verification on 2026-09-23
 
 The native-loader test used a temporary home and empty working directory, with `GROK_HOME`, `GROK_CONFIG_DIR`, and `CLAUDE_CONFIG_DIR` profile overrides cleared at the public CLI boundary. The gated `OPEN_PLUGIN_GROK_NATIVE_BIN=/tmp/grok-native-batch2/node_modules/.bin/grok bun test test/grok-native-loader.test.ts` passed 1/1 in 3.04 s. It exercised public add, unchanged re-add, native `inspect --json`, source resource readback, sidecar-derived manual skill, ordinary skill, TOML command, MCP server, and public remove. Inspect reported one enabled plugin at the native installed path, three plugin skills/commands, and one plugin MCP server. Public doctor reported content `✓` for `demo@catalog`; no model request was needed for loader verification. The source parser and skill listing tests establish that `disable_model_invocation` suppresses automatic discovery; a live model invocation/transcript was not run in this bounded native-loader probe.

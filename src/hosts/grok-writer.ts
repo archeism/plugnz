@@ -33,6 +33,7 @@ import { grok, MARKER, canonical, configFile, localSourceOf, marketplacesRoot, n
 
 import { yamlParse, yamlStringify } from '../yaml';
 import { CryptoHasher } from '../runtime';
+import { PORTABLE_AGENTS_FILE, planPortableAgents, renderPortableAgentMarkdown } from '../portable-agents';
 
 
 type MarketplaceRow = { name?: unknown; kind?: unknown; source?: { path?: unknown } };
@@ -131,27 +132,7 @@ export const grokWriter: HostWriter = {
     } finally { rmSync(stage, { recursive: true, force: true }); }
   },
   async remove(id: string): Promise<void> {
-    if (!registryIsReadable()) throw new Error('Grok native registry is unreadable or unsupported; refusing mutation');
-    const installed = grok.listInstalled().filter(plugin => plugin.id === id);
-    if (installed.length !== 1 || installed[0]?.path === undefined) throw new Error(`Grok ${id} is not a single plgnz-owned install; refusing native removal`);
-    const native = repos().find(([, candidate]) => candidate.path === installed[0]!.path);
-    if (native === undefined) throw new Error(`Grok ${id}: native registry readback is missing`);
-    const repo = native[1];
-    const provenance = provenanceOf(repo); if (provenance === null) throw new Error(`Grok ${id}: native install has no marketplace provenance`);
-    const root = canonical(provenance.root); const marker = root === undefined ? null : ownership(root);
-    if (root === undefined || marker?.pluginId !== id || marker.source === '' || provenance.subdir !== `plugins/${installed[0]!.name}` || canonical(localSourceOf(repo) ?? '') !== canonical(join(root, 'plugins', installed[0]!.name)) || namesOf(repo).length !== 1 || namesOf(repo)[0] !== installed[0]!.name) throw new Error(`Grok ${id}: native ownership proof is incomplete; refusing removal`);
-    assertOwnedRoot(root);
-    const shared = repos().filter(([, candidate]) => canonical(provenanceOf(candidate)?.root ?? '') === root);
-    if (shared.length !== 1) throw new Error(`Grok ${id}: marketplace root is shared by another native install; refusing removal`);
-    const sources = marketplaceSources().filter(source => typeof source.source?.path === 'string' && canonical(source.source.path) === root);
-    if (sources.length !== 1) throw new Error(`Grok ${id}: marketplace source is missing or ambiguous; refusing removal`);
-    const activation = join(grokRoot(), 'plugins', installed[0]!.name);
-    assertActivationLink(activation, installed[0]!.path);
-    const linked = lstatExists(activation);
-    run(['plugin', 'marketplace', 'remove', sources[0]!.source!.path as string]);
-    if (grok.listInstalled().some(plugin => plugin.id === id)) throw new Error(`Grok ${id}: native removal did not deactivate the plugin`);
-    if (linked) rmSync(activation);
-    rmSync(root, { recursive: true, force: true });
+    removeOwnedGrokInstall(id);
   },
   async pin(plugin: InstalledPlugin, opts?: PinOptions): Promise<PinOutcome> {
     return plugin.path === undefined ? { changes: [], refusals: [] } : pinPluginMcpFiles(plugin.path, [
@@ -160,6 +141,38 @@ export const grokWriter: HostWriter = {
     ], opts);
   },
 };
+
+/**
+ * Ownership-preserving native removal shared by the direct writer and the
+ * durable retirement route: provenance, marker identity, single-plugin
+ * marketplace ownership, an unambiguous marketplace source row, and a guarded
+ * activation link must all check out before the native marketplace remove
+ * deactivates the plugin. Unrelated native installs and user configuration
+ * are never touched.
+ */
+function removeOwnedGrokInstall(id: string): void {
+  if (!registryIsReadable()) throw new Error('Grok native registry is unreadable or unsupported; refusing mutation');
+  const installed = grok.listInstalled().filter(plugin => plugin.id === id);
+  if (installed.length !== 1 || installed[0]?.path === undefined) throw new Error(`Grok ${id} is not a single plgnz-owned install; refusing native removal`);
+  const native = repos().find(([, candidate]) => candidate.path === installed[0]!.path);
+  if (native === undefined) throw new Error(`Grok ${id}: native registry readback is missing`);
+  const repo = native[1];
+  const provenance = provenanceOf(repo); if (provenance === null) throw new Error(`Grok ${id}: native install has no marketplace provenance`);
+  const root = canonical(provenance.root); const marker = root === undefined ? null : ownership(root);
+  if (root === undefined || marker?.pluginId !== id || marker.source === '' || provenance.subdir !== `plugins/${installed[0]!.name}` || canonical(localSourceOf(repo) ?? '') !== canonical(join(root, 'plugins', installed[0]!.name)) || namesOf(repo).length !== 1 || namesOf(repo)[0] !== installed[0]!.name) throw new Error(`Grok ${id}: native ownership proof is incomplete; refusing removal`);
+  assertOwnedRoot(root);
+  const shared = repos().filter(([, candidate]) => canonical(provenanceOf(candidate)?.root ?? '') === root);
+  if (shared.length !== 1) throw new Error(`Grok ${id}: marketplace root is shared by another native install; refusing removal`);
+  const sources = marketplaceSources().filter(source => typeof source.source?.path === 'string' && canonical(source.source.path) === root);
+  if (sources.length !== 1) throw new Error(`Grok ${id}: marketplace source is missing or ambiguous; refusing removal`);
+  const activation = join(grokRoot(), 'plugins', installed[0]!.name);
+  assertActivationLink(activation, installed[0]!.path);
+  const linked = lstatExists(activation);
+  run(['plugin', 'marketplace', 'remove', sources[0]!.source!.path as string]);
+  if (grok.listInstalled().some(plugin => plugin.id === id)) throw new Error(`Grok ${id}: native removal did not deactivate the plugin`);
+  if (linked) rmSync(activation);
+  rmSync(root, { recursive: true, force: true });
+}
 
 function basename(path: string): string { return path.slice(path.lastIndexOf('/') + 1); }
 /** Native user plugins precede Claude compatibility imports; never replace foreign paths. */
@@ -197,6 +210,23 @@ function projectGrokSource(dir: string): void {
     const doc = JSON.parse(readFileSync(manifest, 'utf8')) as Record<string, unknown>;
     if (doc['permissions'] !== undefined) throw new Error(`Grok permission semantics are unverified: ${manifest}`);
     if (doc['commands'] !== undefined && doc['commands'] !== './commands' && doc['commands'] !== './commands/') throw new Error(`Grok custom command path is unverified: ${manifest}`);
+    if (doc['agents'] !== undefined && doc['agents'] !== './agents' && doc['agents'] !== './agents/' && doc['agents'] !== 'agents') throw new Error(`Grok custom agent path is unverified: ${manifest}`);
+  }
+  // Portable agents ride the native `<plugin_root>/agents` directory. Grok's
+  // plugin loader registers each definition as `<plugin>:<agent>`, so the
+  // generated native name must stay the bare authored name; no double
+  // namespacing here.
+  const agents = planPortableAgents(dir, 'grok');
+  if (agents !== null) {
+    for (const agent of agents) {
+      // Grok parses `model: ""` and ASCII case-insensitive `inherit` as the
+      // inherit sentinel; an explicit mapping must stay a concrete model id.
+      if (agent.model !== undefined && (/[\r\n]/u.test(agent.model) || agent.model.trim().toLowerCase() === 'inherit')) {
+        throw new Error(`Grok portable agent model must be a concrete single-line model identifier (not "inherit"): ${agent.path}`);
+      }
+      writeFileSync(join(dir, agent.path), renderPortableAgentMarkdown(agent));
+    }
+    rmSync(join(dir, PORTABLE_AGENTS_FILE));
   }
   const skills = join(dir, 'skills');
   if (existsSync(skills)) for (const name of readdirSync(skills)) {
@@ -334,20 +364,76 @@ const grokNativeSemantics = {
   'reversible-disable': 'unverified',
 } as const;
 
-function grokEvidenceProfiles(): readonly CapabilityEvidenceProfile[] {
-  return GROK_PROVEN_VERSIONS.map((detectedVersion) => createCapabilityEvidenceProfile({
+/**
+ * Portable agents ride Grok's native plugin `agents/` directory on the
+ * marketplace `--trust` route, which registers `<plugin>:<agent>` subagent
+ * types. Qualified only for the exact version whose registration and actual
+ * native child execution were exercised; every other Grok profile keeps
+ * `agents` unverified and fails closed.
+ */
+export function grokPortableAgentProfile(version: string): CapabilityEvidenceProfile {
+  return createCapabilityEvidenceProfile({
     host: 'grok',
-    detectedVersion,
+    detectedVersion: version,
+    packageFormat: 'portable-agents',
+    agentPolicy: 'portable-native',
     sourceTypes: ['local'],
     operations: ['install', 'update'],
     route: 'native',
     operationStatus: 'supported',
-    semantics: grokNativeSemantics,
+    semantics: { ...grokNativeSemantics, agents: 'supported' },
+    hookPolicy: null,
     evidence: [
+      'docs/evidence/grok-portable-agents-20261022.md',
+      'docs/portable-agents.md',
       'docs/hosts/grok.md',
-      'docs/research/native-plugin-update-capabilities-2026-10-09.md',
     ],
-  }));
+  });
+}
+
+
+/**
+ * Native retirement is qualified only where the public remove lifecycle was
+ * actually exercised: ownership guards, native disappearance, unrelated-data
+ * preservation, and failed-retire rollback. Every other version keeps
+ * retirement unverified and fails closed.
+ */
+export function grokRetireProfile(version: string): CapabilityEvidenceProfile {
+  return createCapabilityEvidenceProfile({
+    host: 'grok',
+    detectedVersion: version,
+    sourceTypes: ['local'],
+    operations: ['retire'],
+    route: 'native',
+    operationStatus: 'supported',
+    semantics: { ...grokNativeSemantics, retirement: 'supported', 'retention-safety': 'supported' },
+    hookPolicy: null,
+    evidence: [
+      'docs/evidence/grok-portable-agents-20261022.md',
+      'docs/hosts/grok.md',
+    ],
+  });
+}
+const GROK_PORTABLE_AGENT_VERSIONS = ['1.0.46'] as const;
+
+function grokEvidenceProfiles(): readonly CapabilityEvidenceProfile[] {
+  return [
+    ...GROK_PROVEN_VERSIONS.map((detectedVersion) => createCapabilityEvidenceProfile({
+      host: 'grok',
+      detectedVersion,
+      sourceTypes: ['local'],
+      operations: ['install', 'update'],
+      route: 'native',
+      operationStatus: 'supported',
+      semantics: grokNativeSemantics,
+      evidence: [
+        'docs/hosts/grok.md',
+        'docs/research/native-plugin-update-capabilities-2026-10-09.md',
+      ],
+    })),
+    ...GROK_PORTABLE_AGENT_VERSIONS.map((detectedVersion) => grokPortableAgentProfile(detectedVersion)),
+    ...GROK_PORTABLE_AGENT_VERSIONS.map((detectedVersion) => grokRetireProfile(detectedVersion)),
+  ];
 }
 
 function probeGrokVersion(): TargetVersionObservation {
@@ -455,9 +541,15 @@ function absentReadback(handle: Pick<DurableLifecycleOperation, 'adapterId' | 't
   };
 }
 
-function liveReadback(handle: Pick<DurableLifecycleOperation, 'adapterId' | 'target' | 'scopeId' | 'packageName' | 'nativeId' | 'route'>): LifecycleReadbackData {
+function liveReadback(handle: Pick<DurableLifecycleOperation, 'adapterId' | 'target' | 'scopeId' | 'packageName' | 'nativeId' | 'route'> & { action?: LifecycleMutationAction }): LifecycleReadbackData {
   const plugin = grok.listInstalled().find((candidate) => candidate.id === handle.nativeId);
-  if (plugin?.path === undefined || provenMarker(plugin) === undefined) return absentReadback(handle);
+  if (plugin?.path === undefined || provenMarker(plugin) === undefined) {
+    // Retirement verification expects a disabled inactive absent observation,
+    // unlike the not-applicable absence observed before a first install.
+    return handle.action === 'retire-orphan' || handle.action === 'remove'
+      ? { ...absentReadback(handle), route: handle.route, enablement: 'disabled', transition: IDLE_EFFECTIVE }
+      : absentReadback(handle);
+  }
   const digest = fingerprintTree(plugin.path);
   const enabled = plugin.enabled !== false && inspectCurrent(plugin.name, plugin.path);
   return {
@@ -652,6 +744,9 @@ function captureHostSnapshot(directory: string, nativeId: string, packageName: s
     const native = resolve(plugin.path);
     cpSync(native, join(directory, 'native'), { recursive: true });
     writeFileSync(join(directory, 'native-path.txt'), native);
+    // The rollback must restore the user's enablement choice exactly; an
+    // externally disabled plugin may not come back enabled.
+    writeFileSync(join(directory, 'enabled.txt'), plugin.enabled === false ? 'false' : 'true');
   }
   const marker = plugin === undefined ? undefined : provenMarker(plugin);
   if (marker !== undefined) {
@@ -714,6 +809,9 @@ function restoreHostSnapshot(directory: string, scopeId: string, nativeId: strin
     rmSync(finalPath, { recursive: true, force: true });
     mkdirSync(dirname(finalPath), { recursive: true });
     cpSync(join(directory, 'marketplace'), finalPath, { recursive: true });
+    // A failed retirement may have deregistered the marketplace natively;
+    // restore the registration before the refresh re-installs the plugin.
+    ensureMarketplace(finalPath);
   } else {
     removeMarketplaceRow(finalPath);
     rmSync(finalPath, { recursive: true, force: true });
@@ -729,8 +827,15 @@ function restoreHostSnapshot(directory: string, scopeId: string, nativeId: strin
   if (existsSync(backupPath)) rmSync(readFileSync(backupPath, 'utf8'), { recursive: true, force: true });
   if (hadNative) {
     run(['plugin', 'update', packageName]);
-    run(['plugin', 'enable', packageName]);
+    restoreEnablementState(directory, packageName);
   }
+}
+
+/** Restore the captured enablement choice; a disabled plugin stays disabled. */
+function restoreEnablementState(directory: string, packageName: string): void {
+  const record = join(directory, 'enabled.txt');
+  const enabled = existsSync(record) ? readFileSync(record, 'utf8').trim() === 'true' : true;
+  run(['plugin', enabled ? 'enable' : 'disable', packageName]);
 }
 
 function withPluginAutoUpdate(text: string): string {
@@ -788,6 +893,7 @@ const grokLifecycleDefinition: LifecycleHostDefinition = {
   },
   async observeNativeProjection(request): Promise<NativeProjectionData> {
     if ('snapshot' in request) return { kind: 'equivalent', proofId: `grok.staged-marketplace:${request.snapshot.packageFingerprint}` };
+    if (request.operation === 'retire') return { kind: 'equivalent', proofId: 'grok-native-marketplace-remove' };
     return { kind: 'unverified', reasonId: 'grok.recorded-operation-unverified' };
   },
   async revalidateTargetPrecondition(handle) {
@@ -836,8 +942,23 @@ const grokLifecycleDefinition: LifecycleHostDefinition = {
   async captureDisablePreparation(): Promise<never> {
     throw new Error('Grok reversible disable is unverified');
   },
-  async captureRetirementPreparation(): Promise<never> {
-    throw new Error('Grok retirement is unverified on this native route');
+  async captureRetirementPreparation(request) {
+    const directory = rollbackDirectory(request.attemptId, request.operationId);
+    captureHostSnapshot(directory, request.activation.nativeId, request.activation.packageName, request.attemptId, request.operationId);
+    const handle = {
+      adapterId: 'grok',
+      target: request.activation.target,
+      scopeId: request.activation.scopeId,
+      packageName: request.activation.packageName,
+      nativeId: request.activation.nativeId,
+      route: request.selection.route,
+    };
+    return {
+      prior: liveReadback(handle),
+      rollbackReference: directory,
+      rollbackCoverageOperationIds: request.selection.affectedOperationIds,
+      transition: IDLE_EFFECTIVE,
+    };
   },
   async apply(prepared) {
     try {
@@ -869,6 +990,9 @@ const grokLifecycleDefinition: LifecycleHostDefinition = {
       if (native === undefined || fingerprintTree(native) !== nativeFingerprint || !inspectCurrent(prepared.handle.packageName, native)) {
         throw new Error(`Grok ${prepared.handle.nativeId}: native readback does not match staged content`);
       }
+      // The verified commit owns its previous marketplace bytes; drop the
+      // rollback backup so the store keeps no stale copies.
+      if (backup !== undefined) rmSync(backup, { recursive: true, force: true });
       return { receiptId: `apply:${prepared.handle.attemptId}:${prepared.handle.operationId}`, changed: true };
     } finally {
       discardStage(prepared.handle.attemptId, prepared.handle.operationId);
@@ -877,8 +1001,9 @@ const grokLifecycleDefinition: LifecycleHostDefinition = {
   async disable(): Promise<never> {
     throw new Error('Grok reversible disable is unverified');
   },
-  async retire(): Promise<never> {
-    throw new Error('Grok retirement is unverified on this native route');
+  async retire(prepared) {
+    removeOwnedGrokInstall(prepared.handle.nativeId);
+    return { receiptId: `retire:${prepared.handle.attemptId}:${prepared.handle.operationId}`, changed: true };
   },
   async readback(handle) {
     return liveReadback(handle);
