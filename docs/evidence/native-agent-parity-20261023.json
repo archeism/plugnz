@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "implementationCheckpoint": "92cd137",
+  "upstreamIntegrated": "ad394d6",
+  "rawRoot": "/root/.local/state/plugnz-native-parity",
+  "candidate": {
+    "path": "candidate/plugnz-0.0.31.tgz",
+    "sha256": "ed7d40825fee9a940dc9e62dbec6571f42626b3a6bffcddca0ebcd46819707bb",
+    "note": "Unreleased candidate built from this implementation; registry 0.0.31 does not contain these changes",
+    "consumer": "candidate/consumer/node_modules/plugnz",
+    "cliRuntime": "Node 22.23.1"
+  },
+  "combinedGate": {
+    "command": "setpriv --bounding-set=-dac_override,-dac_read_search -- bun test && bun run check && bun run build",
+    "bun": "1.4.2",
+    "passed": 1357,
+    "skipped": 7,
+    "failed": 0,
+    "assertions": 9119,
+    "files": 125,
+    "testWallSeconds": 285.2,
+    "typecheck": "passed",
+    "build": "passed"
+  },
+  "evidenceSha256": {
+    "omp-packed-proof/case/verification.json": "ef14fe398a6a7a53223a2d35c8f5eb21346f04618a4d39157e2a4fdc7f3b3a59",
+    "opencode-packed-proof/summary.json": "c7b8e78ee4e002d4f12ff507f7d07f04e4a9a3cb1b732ea8c8c6a58363750db6",
+    "grok-packed-proof2/case/verification.json": "0bb906de926609f5a8fcfec5b4848f6a0b87a2c00fa7be9639549f5d54741224",
+    "pi-packed-proof/summary.json": "1688cbb648b6b3b7cee832a43c04ac845b1fa0b0750e550cfa9f978072f4db10"
+  },
+  "finalProbeSha256": {
+    "test/grok-native-agents-probe.py": "e9b134a0d689d5293eae659c23036f05147f9ffe20e8007bb1634e198170a5cb",
+    "test/native-agent-probe-opencode.py": "1626c77e6d7a54b140721e857617f6686091d82d9085486aa6e61de4cd8690b9"
+  },
+  "scope": {
+    "native": ["omp/18.8.7", "opencode/1.19.0", "grok/1.0.46"],
+    "warningSkip": ["pi"],
+    "ownerDeferred": ["cursor", "kimi", "hermes", "dcode"],
+    "skillsChanged": false,
+    "paidInference": false,
+    "fleetRollout": false
+  },
+  "releaseReceipt": "https://github.com/archeism/plugnz/issues/103"
+}

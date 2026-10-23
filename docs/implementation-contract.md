@@ -14,6 +14,18 @@ Mutation `--json` writes only the schema-v1 `LifecycleReport` envelope to stdout
 
 On a dry run, `action` is prospective but `resourceState` and `activationState` describe the native inventory actually observed during preflight. A successful install preview can therefore report `absent`/`inactive`; a retirement preview can report `present`/`active-conforming`. Preview success means the operation is admissible, not that deployment has happened. Applied success still requires verified terminal state. Absent resources cannot report active activation, and previews never report mutation or potentially changed resources. `test/dryrun-observations.test.ts` proves the public CLI distinction used by Personal status.
 
+An owner-authorized component exclusion uses `action: "skip"` with
+`result: "skipped"`, `route: "none"`, `changed: false` and a structured
+capability reason. Skip does not claim delivered or active-conforming content,
+but may contribute to an exit-0 converged command. Optional
+`ignoredComponents` on outcomes and installation-verification rows identifies
+what was excluded; mixed packages may succeed for their remaining components.
+Pi portable agents use this contract. An agent-only update retains any prior
+hook installation and ledger without writing a pending intent. A malformed
+native store or unrelated unsupported component still fails. Public behavior is
+covered in `test/pi-portable-agents-public.test.ts`; report validation checks
+non-delivery and contradictory skip states rather than duplicating enum lists.
+
 Migration preflight also requires an independently observed prior route. The
 writer SPI's optional `TargetInstallationData.observedRoute` comes from the
 owned native representation or validated lifecycle receipt, never a copied

@@ -193,15 +193,18 @@ def main():
                             delta, finish = {"content": "ALL_DONE"}, "stop"
                 else:
                     delta, finish = {"content": "SUMMARY"}, "stop"
-                self.send_response(200)
-                self.send_header("Content-Type", "text/event-stream")
-                self.send_header("Connection", "close")
-                self.end_headers()
+                frames = []
                 for hook, reason in [({"role": "assistant"}, None), (delta, None), ({}, finish)]:
                     chunk = {"id": f"chatcmpl-{request_index}", "object": "chat.completion.chunk", "created": 1,
                              "model": body.get("model"), "choices": [{"index": 0, "delta": hook, "finish_reason": reason}]}
-                    self.wfile.write(("data: " + json.dumps(chunk) + "\n\n").encode())
-                self.wfile.write(b"data: [DONE]\n\n")
+                    frames.append(("data: " + json.dumps(chunk) + "\n\n").encode())
+                payload = b"".join(frames) + b"data: [DONE]\n\n"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Content-Length", str(len(payload)))
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.wfile.write(payload)
                 self.wfile.flush()
                 self.close_connection = True
             except Exception as exc:  # noqa: BLE001 - fixture must record, never serve wrong data

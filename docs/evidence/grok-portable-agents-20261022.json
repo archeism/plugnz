@@ -5,7 +5,7 @@
   "sourceSha256": {
     "src/hosts/grok-writer.ts": "1b3a16163dabb51273fa424ae9b827f9cd972646e1a20cb148af1435e579f02e",
     "test/grok-portable-agents.test.ts": "d026d7b00cc5412fb8eb5669dfa0ce69ca59986ac4bf2e39479840df387bcbc7",
-    "test/grok-native-agents-probe.py": "531e7371ac2f7ccb1a30d21f3e6843d5067f2159f315c47c5d4665655a209027"
+    "test/grok-native-agents-probe.py": "e9b134a0d689d5293eae659c23036f05147f9ffe20e8007bb1634e198170a5cb"
   },
   "evidenceSha256": {
     "native-run3/case/verification.json": "0bb906de926609f5a8fcfec5b4848f6a0b87a2c00fa7be9639549f5d54741224",

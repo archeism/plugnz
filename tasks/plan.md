@@ -7,7 +7,7 @@ The previous [distributor plan](archive/distributor/plan.md) and [issue index](a
 
 ## Outcome and fixed contract
 
-Extend portable agent definitions and deterministic model selection to the seven remaining native targets. Pi is an explicit owner-approved exception: loudly warn and ignore portable agents without failing, not a native parity claim ([decision](https://github.com/archeism/plugnz/issues/101#issuecomment-6346092250)). Preserve the qualified Claude Code, Codex and ZCode CLI baseline at `bda34a0390667ed3ca32635f29d0bd35256eb5a9` (released as 0.0.31).
+This increment extends portable agent definitions and deterministic model selection to OMP, OpenCode and Grok Build. Pi is an explicit owner-approved exception: loudly warn and ignore portable agents without failing, not a native parity claim ([decision](https://github.com/archeism/plugnz/issues/101#issuecomment-6346092250)). Charles subsequently deferred Cursor, Kimi, Hermes and DCode; their open delivery issues remain TODOs, not support claims. Preserve the qualified Claude Code, Codex and ZCode CLI baseline at `bda34a0390667ed3ca32635f29d0bd35256eb5a9` (released as 0.0.31).
 
 Use the [existing authoring contract](../docs/portable-agents.md): one name, description and prose body; optional alias and explicit destination mapping. Explicit mapping wins over user alias, then package alias; absent mapping omits the native model field. `fast` and `smart` are naming conventions, not automatic provider guesses. Native tools remain the harness's responsibility. Do not add tool/permission preferences, a daemon, ACP execution or another agent runtime.
 
@@ -28,11 +28,11 @@ flowchart TD
   E[Pi and OpenCode route decision] --> P[Pi delivery]
   E --> OC[OpenCode delivery]
   O --> F[Combined acceptance and publication]
-  C --> F
-  K --> F
-  H --> F
+  C -. deferred .-> TODO[Future native integrations]
+  K -. deferred .-> TODO
+  H -. deferred .-> TODO
   G --> F
-  D --> F
+  D -. deferred .-> TODO
   P --> F
   OC --> F
 ```
@@ -60,9 +60,8 @@ Charles chose [preserve native model policy](https://github.com/archeism/plugnz/
 ### First delivery checkpoint
 
 1. [Portable agents: deliver native OMP integration](https://github.com/archeism/plugnz/issues/95)
-2. [Portable agents: deliver native Cursor integration](https://github.com/archeism/plugnz/issues/96)
 
-Recommended first batch because these are existing plugin adapters used by the house. Each is independently blocked by its route and native-fallback policy decisions, not by the other implementation. Inspect the first native traces, obtain independent review and verify the combined regression floor before broadening. Plan review occurs before implementation; no new adapter is authorized by a mere green research result.
+Cursor (#96/#105) is explicitly deferred without adapter changes. Its plugin loader strips agent model fields; the separate P-stack convention supplies a model in the parent's runtime Task call rather than preserving install-time mappings.
 
 ### Remaining plugin adapters
 
@@ -71,7 +70,7 @@ Recommended first batch because these are existing plugin adapters used by the h
 3. [Portable agents: deliver native Grok Build integration](https://github.com/archeism/plugnz/issues/99)
 4. [Portable agents: deliver native DCode integration](https://github.com/archeism/plugnz/issues/100)
 
-Proceed in small independent batches after decisions. Repeat combined verification after every two or three deliveries. Serialize any shared resolver, capability contract or CLI/state changes. Each host delivery normally changes its host projection/writer, one public test file and host/evidence docs (approximately 3–5 files). Refine any larger slice after research, with explicit task dependencies.
+Grok Build proceeds through its native plugin-agent loader. Kimi, Hermes and DCode were explicitly deferred after source/native investigation: Kimi Code 2.1.1 discovers plugin agents but has no agent-file model field; Hermes has no named-agent registrar or per-agent model selector; DCode excludes agents from plugin discovery and its separate user agent store is assistant-scoped. Keep these TODOs open and their adapters unchanged.
 
 ### Extension scope checkpoint
 
@@ -84,7 +83,7 @@ OpenCode uses its native plugin configuration hook and existing owned package li
 
 [Accept portable-agent parity and publish the support matrix](https://github.com/archeism/plugnz/issues/103)
 
-All eight delivery issues block acceptance: seven native integrations and Pi's owner-approved warning/skip behavior. A missing native primitive in another target remains a blocker or a proposal for upstream work, never successful parity. Publish via existing exact-SHA CI gates; fleet rollout is separate.
+Current acceptance covers three native integrations (OMP, OpenCode, Grok Build) and Pi's owner-approved warning/skip behavior. Cursor, Kimi, Hermes and DCode remain open deferred TODOs outside this increment. Do not claim the original eight-target parity milestone is complete. Publish verified work via existing exact-SHA CI gates; fleet rollout is separate.
 
 ## Per-delivery verification
 
@@ -110,7 +109,7 @@ The user has already settled the basic contract and requested milestone governan
 
 ## Session evidence
 
-Tracker verification checks milestone membership, four native child links and eighteen native blocking edges (eight route blockers, two policy blockers and eight acceptance blockers). No implementation changes or native model calls are part of this planning session. Skills are unchanged; this is a planning deliverable, not a skill-improvement claim.
+The original planning checkpoint verified milestone membership and blocking edges. Subsequent owner scope decisions above supersede its eight-delivery acceptance graph. Versioned native execution evidence lives under `docs/evidence/`; research alone is not delivery proof. Skills remain unchanged: no skill-improvement claim.
 
 ## Bounded research assets
 

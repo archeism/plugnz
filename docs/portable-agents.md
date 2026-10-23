@@ -1,9 +1,12 @@
 # Portable agents and model aliases
 
 Author one agent definition and install it through a harness's native plugin loader.
-Qualified targets are Claude Code 2.1.285/2.1.296, Codex 0.161.0/0.162.0 and
-ZCode CLI 0.16.9.
-Other targets refuse this format until their native agent projection is qualified.
+Qualified targets are Claude Code 2.1.285/2.1.296, Codex 0.161.0/0.162.0,
+ZCode CLI 0.16.9, OMP 18.8.7, OpenCode 1.19.0 and Grok Build 1.0.46.
+Pi deliberately warns and skips portable agents without failing; it is not
+qualified for execution. Cursor, Kimi, Hermes and DCode remain unchanged and
+explicitly deferred as [owner follow-ups](../tasks/todo.md#owner-deferred-follow-ups).
+These targets refuse this format until their native agent projection is qualified.
 Codex also projects plain canonical `agents/*.md` with only `name` and
 `description`, without a sidecar. Other native packages keep their existing behavior.
 
@@ -112,10 +115,72 @@ Claude and ZCode generated packages contain ordinary native agent Markdown, with
 prevents a native Git refresh from bypassing projection. ZCode's native marketplace
 route installs the generated package. Both use their existing update/rollback flow.
 
-Mixed portable-agent/hook packages are not qualified in this increment and are
-refused rather than silently dropping either behavior. Native agent metadata
-without the sidecar remains native on Claude and ZCode; portable model fields without the sidecar fail
-validation. No agent runtime or execution abstraction is added to plugnz.
+Mixed portable-agent/hook packages are refused on qualified native-agent targets.
+Pi is the owner-approved exception: it warns, excludes agents and installs only
+supported hooks. Native agent metadata without the sidecar remains native on
+Claude and ZCode; portable model fields without the sidecar fail validation.
+No agent runtime or execution abstraction is added to plugnz.
+
+## OMP native task agents
+
+OMP 18.8.7 discovers generated `<plugin>:<agent>` names through the enabled
+native extension package's `agents/*.md`. Explicit `models.omp` and alias
+mappings use native OMP model selectors; no mapping emits no model field.
+Native task children keep their ordinary tools. OMP may fall back to the parent
+model when requested credentials are unavailable. Its parser trims outer
+whitespace, normalizes line endings and removes HTML comments; generated files
+retain authored body bytes. Do not place required instructions in HTML comments.
+
+Owned payload edits and user/enabled-package agent-name collisions refuse
+replacement, including absolute or `~/` persisted user extension paths.
+Project agents and relative extension paths are session-relative and may override
+the installed definition under native policy. Start a fresh session after changes. See
+[OMP qualification](evidence/omp-portable-agents-20261022.md).
+
+## OpenCode native subagents
+
+OpenCode 1.19.0 uses a generated native plugin `config(cfg)` callback to register
+`<plugin>:<agent>` definitions. Its task tool executes the children. Resolved
+`models.opencode` values use `provider/model`; omission inherits the invoking
+parent model. The full prompt survives this route unchanged, and tools remain
+native. An unavailable mapped model fails with `Model not found`, without a
+fallback request in the qualified version.
+
+User config/name collisions and edited owned payloads/loaders refuse mutation.
+The runtime callback also checks project-local collisions before registering any
+roles; OpenCode logs its error but continues starting. Restart OpenCode after
+install/update/removal. See [OpenCode qualification](evidence/opencode-portable-agents-20261022.md).
+
+## Grok Build native plugin agents
+
+Grok Build 1.0.46 registers `agents/<name>.md` from a trusted marketplace
+plugin as `<plugin>:<agent>` subagent types; its `spawn_subagent` tool then
+advertises and accepts those namespaced types. Generated definitions keep the
+bare authored name because the loader adds the plugin namespace itself.
+Resolved `models.grok` values pin the child model when Grok knows that id; an
+omitted mapping inherits the parent model, and an unknown mapped id falls back
+to the parent model with a warning (native policy, disclosed). A resolved
+model whose value is `inherit` (case-insensitive) is refused because Grok treats
+it as inheritance rather than a concrete model; multiline model IDs are also refused.
+Native children keep their ordinary tools, and the child prompt carries the
+authored body with surrounding whitespace trimmed. Plain native
+`agents/*.md` without the sidecar, and versions other than 1.0.46, fail
+closed. Public `remove` retires the owned marketplace install natively
+(plugin, namespaced types, link, and registry row disappear; unrelated plugins
+and user configuration survive; mid-removal failures roll back). See
+[Grok qualification](evidence/grok-portable-agents-20261022.md).
+
+## Pi: explicit non-failing skip
+
+Pi agent-only packages produce a loud stderr warning, including with `--json`,
+and a `skipped` outcome with `ignoredComponents: ["agents"]`. No native agent
+registration or installation record is created. Existing supported hooks in a
+mixed package remain eligible for installation; malformed definitions and
+unrelated unsupported components still fail. Updating an installed mixed package
+to agent-only skips the update and retains its previous hooks and ledger unchanged,
+reported as `retained-prior`; explicitly remove that installation to retire its hooks. This is the
+[owner-approved deferral](https://github.com/archeism/plugnz/issues/101#issuecomment-6346092250),
+not a claim of Pi parity.
 
 ## Codex native roles
 
@@ -157,7 +222,8 @@ profile, so a prompt resource cannot masquerade as a runnable agent.
 Tests cover destination-specific precedence, omission, prose preservation,
 malformed input, immutable aliases, source fingerprints, native projection and
 public lifecycle updates. Native qualification details and limitations are recorded
-in [the evidence report](evidence/portable-agents-20261022.md).
+in the [baseline evidence](evidence/portable-agents-20261022.md) and the
+[integrated support matrix and installed-package proof](evidence/native-agent-parity-20261023.md).
 
 The design follows the existing canonical-source/generated-harness-tree pattern
 used by [Cursor's pstack generator](https://github.com/cursor/plugins/blob/eb4db2b55b2b7dec3d9282754cddf0a56bf4ff10/scripts/generate-pstack-harness-trees.mjs).
