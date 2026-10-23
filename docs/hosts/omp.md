@@ -154,3 +154,21 @@ The exact profile is limited to managed install, changed-byte update, and
 retirement for ordinary skills, MCP, resources, and the adapter-owned
 safeguards for atomic activation, rollback, readback, reload, and retained
 plugin data. No neighboring OMP release is inferred from this proof.
+
+## Portable agents on OMP 18.8.7
+
+The portable-agent profile adds generated namespaced `agents/*.md` to the same
+enabled extension package. It does not use Claude-dialect discovery, which may
+drop model metadata. Public installation and real native task children proved
+explicit, user-alias, package-alias and omitted model behavior, with ordinary
+native tools and authored instructions. No adjacent release is inferred.
+
+The native parser trims outer whitespace, normalizes line endings and removes
+HTML comments. OMP's native credential policy may fall back to the parent model.
+Generated body bytes remain unchanged; these are native transformations, not
+Plugnz model guessing or prompt rewriting. Start a fresh session after changes.
+
+Current marker-owned projections detect edited payloads before replacement or
+removal. Agent-name collisions with observable user/enabled-package definitions
+refuse installation; project/session-only roots remain native runtime policy.
+See [the qualification and lifecycle evidence](../evidence/omp-portable-agents-20261022.md).

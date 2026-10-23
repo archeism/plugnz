@@ -10,6 +10,7 @@ import { parse as parseToml } from 'smol-toml';
 import { readPluginManifest } from './source';
 import { hermesCommandCompanionId } from './hermes-identity';
 import { projectCodexAgents } from './hosts/codex-agents';
+import { projectOmpAgents } from './hosts/omp-agents';
 
 import { yamlParse, yamlStringify } from './yaml';
 
@@ -114,6 +115,7 @@ export function projectPluginForOmp(sourceDir: string, destinationDir: string, o
       rmSync(join(destination, 'skills', entry), { recursive: true, force: true });
     }
   }
+  projectOmpAgents(source, destination, options.namespace);
   writeFileSync(join(destination, 'package.json'), `${JSON.stringify({ name: options.packageName, version: options.version, omp: {} }, null, 2)}\n`);
 }
 

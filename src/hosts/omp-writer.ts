@@ -3,13 +3,13 @@ import { portableHookProfile } from '../portable-hook-policy';
 import { compilePortableHooksInStage, preflightPortableHooks, registerProjectedExtension } from '../hook-install';
 /** Transactional writer for OMP's native npm/link extension-package lane. */
 import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { AddOptions, HostWriter, InstalledPlugin, PinOptions, PinOutcome } from '../host';
 import type { PluginSource, ResolvedSource } from '../source';
-import { createCapabilityEvidenceProfile, type CapabilityStatus } from '../capability-evidence';
+import { createCapabilityEvidenceProfile, type CapabilityEvidenceProfile, type CapabilityStatus } from '../capability-evidence';
 import { projectPluginForOmp } from '../conversion';
-import { fingerprintTree } from '../fingerprint';
+import { fingerprintSourceTree, fingerprintTree } from '../fingerprint';
 import type {
   ActivationTransitionObservation,
   CleanupDisposition,
@@ -32,6 +32,9 @@ import { recordedPriorSource } from '../prior-source-proof';
 import { CryptoHasher, spawnSync, which } from '../runtime';
 import { PACKAGE_SEMANTICS, type PackageSemantic } from '../semantic-inventory';
 import { omp, mcpCandidates, ompUpgradeMutationScope, ompUpgradeProjection, pluginsDir, type OmpNativeUpgradeCandidate } from './omp';
+import { assertOmpAgentIdentitiesAvailable } from './omp-agents';
+import { ompRoot } from '../paths';
+import { yamlParse } from '../yaml';
 
 const MARKER = '.plgnz-install.json';
 const MANAGED = 'plgnz';
@@ -44,6 +47,8 @@ type Ownership = {
   sourceType?: 'local' | 'git';
   sourceRevision?: string;
   sourceLocator?: string | null;
+  /** Payload fingerprint plugnz wrote, used to detect edits before replacement. */
+  projection?: string;
 };
 type Doc = Record<string, unknown>;
 
@@ -71,6 +76,8 @@ export const ompWriter: HostWriter = {
     if (owner === null && lstatExists(target)) throw new Error(`OMP managed package slot is unowned; refusing to replace it: ${target}`);
     if (owner !== null && (owner.source !== resolved.sourceUri || owner.pluginId !== id || owner.packageName !== packageName)) throw new Error(`OMP plugin ${id} belongs to another source; refusing to replace it`);
     assertOwnedLink(link, target, owner !== null);
+    if (lstatExists(target)) assertOwnedPayloadIntact(target, owner, id);
+    assertOmpAgentIdentities(plugin.dir, plugin.name, target);
 
     // Activation uses rename, so real installs must stage on the target's
     // filesystem. Dry-runs still project in system temp without creating a store.
@@ -79,7 +86,7 @@ export const ompWriter: HostWriter = {
     const stage = mkdtempSync(join(stageParent, '.plgnz-omp-package-'));
     try {
       projectPluginForOmp(plugin.dir, stage, { packageName, version, activeRoot: target, namespace: plugin.name });
-      writeFileSync(join(stage, MARKER), JSON.stringify({ source: resolved.sourceUri, pluginId: id, fingerprint: plugin.contentFingerprint ?? '', packageName } satisfies Ownership));
+      writeFileSync(join(stage, MARKER), JSON.stringify({ source: resolved.sourceUri, pluginId: id, fingerprint: plugin.contentFingerprint ?? '', packageName, projection: fingerprintSourceTree(stage, [MARKER]) } satisfies Ownership));
       const unchanged = owner !== null && owner.fingerprint === (plugin.contentFingerprint ?? '') && sameTree(stage, target) && linkPointsTo(link, target) && lockEnabled(lockPlugins[packageName]);
       if (opts?.dryRun) return unchanged ? 'unchanged' : undefined;
       if (unchanged && rows.length === 0) return 'unchanged';
@@ -110,10 +117,14 @@ export const ompWriter: HostWriter = {
   },
   async pin(plugin: InstalledPlugin, opts?: PinOptions): Promise<PinOutcome> {
     if (plugin.path === undefined || !existsSync(plugin.path)) return { changes: [], refusals: [] };
-    return pinPluginMcpFiles(plugin.path, mcpCandidates(), opts);
+    if (lstatExists(join(plugin.path, MARKER))) assertOwnedPayloadIntact(plugin.path, ownership(plugin.path), plugin.id);
+    const outcome = pinPluginMcpFiles(plugin.path, mcpCandidates(), opts);
+    if (opts?.dryRun !== true && outcome.changes.length > 0) refreshProjectionMarker(plugin.path);
+    return outcome;
   },
   async remove(id: string): Promise<void> {
     const owned = findOwned(id); if (owned === null) throw new Error(`OMP plugin ${id} is not plgnz-owned; refusing to remove it`);
+    assertOwnedPayloadIntact(owned.path, owned.owner, id);
     const link = join(pluginsDir(), 'node_modules', owned.owner.packageName);
     if (!linkPointsTo(link, owned.path)) throw new Error(`OMP native link for ${id} is missing or redirected; refusing to remove it`);
     let movedRoot: Move | null = null; let movedLink: Move | null = null;
@@ -166,6 +177,106 @@ function findOwned(id: string): { path: string; owner: Ownership } | null {
 function assertOwnedLink(path: string, target: string, owned: boolean): void {
   if (!lstatExists(path)) return;
   if (!owned || !linkPointsTo(path, target)) throw new Error(`OMP native package slot is unowned or redirected: ${path}`);
+}
+
+/** Refuse to replace or retire an owned package whose recorded payload bytes changed. */
+function assertOwnedPayloadIntact(target: string, owner: Ownership | null, nativeId: string): void {
+  if (!lstatExists(target)) return;
+  if (owner === null) throw new Error(`OMP managed package slot is unowned; refusing to replace it: ${target}`);
+  const { marketplace, plugin } = parsePublicId(nativeId);
+  if (owner.pluginId !== nativeId || owner.packageName !== nativePackageName(marketplace, plugin)) {
+    throw new Error(`OMP managed package belongs to another identity; refusing to replace it: ${target}`);
+  }
+  if (owner.projection === undefined) return; // Historical marker: no recorded projection to verify.
+  let live: string;
+  try { live = fingerprintSourceTree(target, [MARKER]); }
+  catch (error) { throw new Error(`OMP managed package contains unsupported content; refusing to replace it: ${target} (${(error as Error).message})`); }
+  if (live !== owner.projection) throw new Error(`OMP managed package payload was edited; refusing to replace it: ${target}`);
+}
+
+/** Re-record the payload fingerprint after an authorized staging or pin mutation. */
+function refreshProjectionMarker(root: string): void {
+  const marker = join(root, MARKER);
+  if (!existsSync(marker)) return;
+  writeDoc(marker, { ...readDoc(marker, {}, 'ownership marker'), projection: fingerprintSourceTree(root, [MARKER]) });
+}
+
+/** Enabled extension packages per the native loader: dependencies plus lock rows, minus disabled or stale entries. */
+function enabledPluginPackageRoots(): string[] {
+  const root = pluginsDir();
+  const modules = join(root, 'node_modules');
+  if (!existsSync(modules)) return [];
+  const lock = readDoc(join(root, 'omp-plugins.lock.json'), { plugins: {}, settings: {} }, 'lockfile');
+  const plugins = object(lock.plugins, 'lockfile plugins');
+  const manifestPath = join(root, 'package.json');
+  let dependencies: string[] = [];
+  if (existsSync(manifestPath)) {
+    try {
+      const pkg = JSON.parse(readFileSync(manifestPath, 'utf8')) as { dependencies?: Record<string, string> };
+      dependencies = Object.keys(pkg.dependencies ?? {});
+    } catch {
+      return [];
+    }
+  }
+  const roots: string[] = [];
+  for (const name of [...new Set([...dependencies, ...Object.keys(plugins)])].sort()) {
+    const packageJson = join(modules, name, 'package.json');
+    if (!existsSync(packageJson)) continue;
+    let manifest: unknown;
+    try {
+      const pkg = JSON.parse(readFileSync(packageJson, 'utf8')) as { omp?: unknown; pi?: unknown };
+      manifest = pkg.omp ?? pkg.pi;
+    } catch { continue; }
+    if (!isDoc(manifest)) continue;
+    if (entry(plugins[name]).enabled === false) continue;
+    if (dependencies.length > 0 && !dependencies.includes(name) && !lstatSync(join(modules, name)).isSymbolicLink()) continue;
+    roots.push(join(modules, name));
+  }
+  return roots;
+}
+
+/**
+ * Persisted user `extensions:` directories. Relative entries resolve against
+ * the harness session cwd and are not install-time observable, so only
+ * absolute and `~/` entries are checked; project scope stays session-relative.
+ * A present user `config.yml`/`config.yaml` suppresses legacy `settings.json`.
+ */
+function configuredUserExtensionRoots(): string[] {
+  const agentDir = join(ompRoot(), 'agent');
+  const entries = (raw: unknown): string[] | null => {
+    if (!Array.isArray(raw)) return null;
+    const home = dirname(ompRoot());
+    const roots: string[] = [];
+    for (const value of raw) {
+      if (typeof value !== 'string' || value.length === 0) continue;
+      if (value.startsWith('~/')) roots.push(join(home, value.slice(2)));
+      else if (isAbsolute(value)) roots.push(value);
+    }
+    return roots;
+  };
+  for (const filename of ['config.yml', 'config.yaml']) {
+    const file = join(agentDir, filename);
+    if (!existsSync(file)) continue;
+    try { return entries((yamlParse(readFileSync(file, 'utf8')) as Record<string, unknown>)['extensions']) ?? []; }
+    catch { return []; }
+  }
+  const settings = join(agentDir, 'settings.json');
+  if (!existsSync(settings)) return [];
+  try { return entries((JSON.parse(readFileSync(settings, 'utf8')) as Record<string, unknown>)['extensions']) ?? []; }
+  catch { return []; }
+}
+
+function ompAgentIdentityRoots(ownedRoot: string) {
+  return {
+    userAgents: join(ompRoot(), 'agent', 'agents'),
+    packageRoots: enabledPluginPackageRoots(),
+    configuredExtensions: configuredUserExtensionRoots(),
+    ownedRoot,
+  };
+}
+
+function assertOmpAgentIdentities(source: string, namespace: string, ownedRoot: string): void {
+  assertOmpAgentIdentitiesAvailable(source, namespace, ompAgentIdentityRoots(ownedRoot));
 }
 function lstatExists(path: string): boolean { try { lstatSync(path); return true; } catch { return false; } }
 function linkPointsTo(path: string, target: string): boolean { try { return lstatSync(path).isSymbolicLink() && resolve(dirname(path), readlinkSync(path)) === resolve(target); } catch { return false; } }
@@ -233,6 +344,7 @@ function ownership(path: string): Ownership | null {
     ...(sourceType === undefined ? {} : { sourceType }),
     ...(typeof value.sourceRevision === 'string' ? { sourceRevision: value.sourceRevision } : {}),
     ...(sourceLocator === undefined ? {} : { sourceLocator }),
+    ...(typeof value.projection === 'string' ? { projection: value.projection } : {}),
   };
 }
 function readDoc(path: string, fallback: Doc, label: string): Doc { if (!existsSync(path)) return fallback; try { const value: unknown = JSON.parse(readFileSync(path, 'utf8')); if (!isDoc(value)) throw new Error('expected object'); return value; } catch (error) { throw new Error(`invalid OMP ${label}: ${path} (${(error as Error).message})`); } }
@@ -276,9 +388,34 @@ export const ompManagedProfiles = ['18.1.4', '18.8.7', '18.10.3'].map(detectedVe
   ],
 }));
 
+/**
+ * Portable agents ride OMP's native extension `agents/*.md` discovery with the
+ * `<plugin>:<agent>` name namespace. Qualified only where an actual native
+ * task child run proved registration, prose, model resolution and lifecycle;
+ * the base managed profile's semantics still govern every other component.
+ */
+export function ompPortableAgentProfile(version: string): CapabilityEvidenceProfile {
+  return createCapabilityEvidenceProfile({
+    host: 'omp',
+    detectedVersion: version,
+    packageFormat: 'portable-agents',
+    agentPolicy: 'portable-native',
+    sourceTypes: ['local', 'git'],
+    operations: ['install', 'update', 'retire'],
+    route: 'managed',
+    operationStatus: 'supported',
+    semantics: Object.fromEntries(PACKAGE_SEMANTICS.map((semantic) => [
+      semantic,
+      semantic === 'agents' || ohMyAiInstallSemantics.has(semantic) ? 'supported' : 'unsupported',
+    ])) as Record<PackageSemantic, CapabilityStatus>,
+    hookPolicy: null,
+    evidence: ['docs/evidence/omp-portable-agents-20261022.md', 'docs/portable-agents.md'],
+  });
+}
+
 const ompLifecycleDefinition: LifecycleHostDefinition = {
   id: 'omp',
-  evidenceProfiles: [...ompManagedProfiles, portableHookProfile(portableHookAdapter, 'managed', ['install', 'update', 'disable', 'retire'])],
+  evidenceProfiles: [...ompManagedProfiles, ompPortableAgentProfile('18.8.7'), portableHookProfile(portableHookAdapter, 'managed', ['install', 'update', 'disable', 'retire'])],
   probeVersion: (target) => probeOmpVersion(target),
   observeTarget: (target) => observeInventory(target),
   observeNativeMutationScope: (request) => Promise.resolve(ompUpgradeMutationScope(unprovenCandidate(request.nativeId), request.nativeId)),
@@ -310,6 +447,7 @@ const ompLifecycleDefinition: LifecycleHostDefinition = {
     if (request.snapshot.packageName !== plugin) throw new Error(`OMP package name does not match native id: ${request.snapshot.packageName}`);
     const npm = nativePackageName(marketplace, plugin);
     const version = request.snapshot.inventory.package.version ?? request.snapshot.packageFingerprint;
+    assertOmpAgentIdentities(request.snapshot.packageRoot, plugin, managedPackageDir(nativeId));
     const parent = preparationDir(request.snapshot.attemptId, request.snapshot.operationId);
     mkdirSafe(parent);
     const stage = join(parent, 'stage');
@@ -326,6 +464,7 @@ const ompLifecycleDefinition: LifecycleHostDefinition = {
       sourceType: request.snapshot.sourceType,
       sourceRevision: request.snapshot.immutableRevision,
       sourceLocator: locator,
+      projection: fingerprintSourceTree(stage, [MARKER]),
     } satisfies Ownership));
     return { stagingId: `${request.snapshot.attemptId}:${request.snapshot.operationId}`, stagingRoot: resolve(stage) };
   },
@@ -335,6 +474,7 @@ const ompLifecycleDefinition: LifecycleHostDefinition = {
     const outcome = pinPluginMcpFiles(projection.stagingRoot, mcpCandidates(), {});
     const applied = outcome.changes.map((change) => change.server);
     if (JSON.stringify(applied) !== JSON.stringify(projection.pins.map((pin) => pin.server))) throw new Error('OMP pin proof does not match the requested servers');
+    refreshProjectionMarker(projection.stagingRoot);
     return applied;
   },
   captureActivationPreparation: async (projection, projectedFingerprint) => ({
@@ -625,6 +765,7 @@ async function applyManaged(handle: DurableLifecycleOperation, stagingRoot: stri
   if (activationAlreadyCurrent(handle.nativeId, stagingRoot, version)) return { receiptId, changed: false };
   const npm = npmName(handle.nativeId);
   const target = managedPackageDir(handle.nativeId);
+  assertOwnedPayloadIntact(target, ownership(target), handle.nativeId);
   const link = managedLink(handle.nativeId);
   const file = lockPath();
   const lock = readDoc(file, { plugins: {}, settings: {} }, 'lockfile');
@@ -679,6 +820,7 @@ async function disableManaged(handle: DurableLifecycleOperation): Promise<Mutati
 async function retireManaged(handle: DurableLifecycleOperation): Promise<MutationResultData> {
   const receiptId = `retire:${handle.attemptId}:${handle.operationId}`;
   const owned = findOwned(handle.nativeId);
+  if (owned !== null) assertOwnedPayloadIntact(owned.path, owned.owner, handle.nativeId);
   const link = managedLink(handle.nativeId);
   if (owned === null && !lstatExists(link)) return { receiptId, changed: false };
   if (owned !== null && lstatExists(link) && !linkPointsTo(link, owned.path)) throw new Error(`OMP native link for ${handle.nativeId} is missing or redirected; refusing to retire it`);

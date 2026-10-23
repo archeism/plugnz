@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "base": "636aa91",
+  "rawRoot": "/root/.local/state/plugnz-omp-portable-agents-20261022",
+  "sourceSha256": {
+    "src/hosts/omp-agents.ts": "15baf07482f2e07c37ff235ca858521891255628f0aed12c8369dadcffbe38d3",
+    "src/conversion.ts": "b7a420231fd4a6b1008bb4f7ad3e3d31fbcad2706990d9dfd693f8d9dadb57c6",
+    "src/hosts/omp-writer.ts": "8ab0b87a393a7a0c972fc956e420cfb49824bdca30fb4ec23974bbb91c3ae8cf",
+    "src/portable-agents.ts": "1e3caf087782aa96dc79282f24acf21ef3cc1e5f51b4b6ff582a90086294cafd",
+    "test/omp-portable-agents.test.ts": "7fef1004aac26c9a41485ba79878c7875abd69f33aaf2a86cd93eecb31bb0a8d",
+    "test/omp-native-agents-probe.py": "09692565b2de4fb41b5178acf6b86a7c75fcec0fdec62bd9ef3946b26ba5883d"
+  },
+  "evidenceSha256": {
+    "parser-probe.ts": "60da94bd15cb42d2c216e356e43af8e978065850aee3c54ffbce8ece43b6a711",
+    "parser-results.json": "a164b24bef882dac3b7436e68f363ad31e3ed6f83d57bbf04fbd7bf978872fed",
+    "native-run7/case/verification.json": "f921c1e6890444b4edf2d47457ffa24ebc1a78849a4c059f8d752ac9ffb31f19",
+    "native-run7/case/requests.jsonl": "677f8817db7c01d9a125879a3702a5953c2be9b12be8fa73b6b12ef605c13dfe",
+    "native-run7/case/generated.json": "89a20cda5cf120a1c99cb913a864ac00a81c7cea6df8605971ecec577e5fd953",
+    "native-run7/case/resources.json": "31c1c29330ca892386956c4d0bbd5502fc2d5459175e0dfbc9a753bb2e2e3701",
+    "native-run7/case/run.json": "ad332af213b56921341918d2f076a3e049708e415bed08e76e3c6f2e7ed4c384",
+    "native-run7/case/invocation.json": "74c89f74e154234d4e9dd5252e2df888cd8fbc808c0a4296a95d73c549561950",
+    "native-run7/case/install.stdout": "3582bdd3bc5a81e84ba6babe6e1682d0197a59a7529ee2c2f20146de4a5a81e3",
+    "native-run7/case/stdout.jsonl": "d7c25e708b9e54c0f5b005549309991999d535631d9a05daf781b41cbaeabca3"
+  },
+  "native": {
+    "version": "omp/18.8.7",
+    "package": "@oh-my-pi/pi-coding-agent",
+    "binarySha256": "2a1f0be0d536031830c2de5abc1a0f7f06948e7c3fdcb77542ef70cba3497481",
+    "route": "managed extension package: agents/*.md discovered from ~/.omp/plugins/node_modules/@plgnz/*",
+    "requests": 9,
+    "childRequests": 4,
+    "assertions": 41
+  },
+  "verification": {
+    "focusedTestsPassed": 37,
+    "focusedTestFiles": 5,
+    "focusedTestsFailed": 0,
+    "protectionTests": 7,
+    "reviewFixes": "pin-aware projection fingerprint (applyPins + direct pin validate/refresh); collision scan includes persisted user extensions and native-enabled packages only",
+    "typecheck": "this slice clean; repo-wide check blocked by concurrent OpenCode slice errors outside this scope",
+    "nativeQualified": true
+  },
+  "limits": [
+    "Only installed omp/18.8.7 managed route qualified; 18.1.4/18.10.3 refuse portable agents",
+    "Native parser trims/normalizes prose and strips HTML comments; generated files keep exact authored bytes",
+    "Deterministic loopback fixture; no live inference or paid model calls",
+    "Project-scope .omp/agents and relative extensions: collisions are session-relative and not install-time checked",
+    "Skills unchanged; no model-quality claim"
+  ]
+}
