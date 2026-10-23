@@ -891,8 +891,10 @@ function refuseForeignScope(target: string, scopeId: string, nativeId: string): 
   if (marker === null || !ownsNativeDirectory(marker.pluginId, nativeId)) {
     throw new Error(`Cursor local plugin ${nativeId} is not owned by deployment scope ${scopeId}`);
   }
-  // A scope-less plgnz marker is the pre-lifecycle collection record. Applying
-  // replaces it with the scoped marker. A different scope stays foreign.
+  // A scope-less plgnz marker is the pre-lifecycle collection record. Planning
+  // preflight and revalidateTargetPrecondition gate scope-less markers through
+  // ownershipOf -> resolveLegacyV1MarkerScopeId before apply/retire runs.
+  // Applying replaces it with the scoped marker; a different scope stays foreign.
   if (marker.scopeId !== undefined && marker.scopeId !== scopeId) {
     throw new Error(`Cursor local plugin ${nativeId} is not owned by deployment scope ${scopeId}`);
   }

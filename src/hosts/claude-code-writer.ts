@@ -15,7 +15,7 @@ import { assertClaudeMarketplaceSource } from './claude-native-schema';
 import { pinPluginMcpFiles } from '../mcp-write';
 
 import { createCapabilityEvidenceProfile, type CapabilityEvidenceProfile, type CapabilityStatus } from '../capability-evidence';
-import { fingerprintTree } from '../fingerprint';
+import { fingerprintSourceTree, fingerprintTree } from '../fingerprint';
 import { resolveLegacyV1MarkerScopeId } from '../legacy-claim-ownership';
 import { recordedPriorSource } from '../prior-source-proof';
 import { createLifecycleHostAdapter, createTargetInventoryObservation, selectLifecycleRoute } from '../lifecycle-runtime';
@@ -1525,7 +1525,9 @@ function validateLifecycleCatalog(nativeId: string, scopeId: string): void {
   if (existsSync(copy)) {
     assertNoSymlinks(copy);
     const owner = readOwnership(copy);
-    const copyScopeId = owner?.scopeId ?? (owner?.pluginId === nativeId && installedScopeId === scopeId && owner.source === installedOwner?.source && owner.fingerprint === installedOwner?.fingerprint ? scopeId : undefined);
+    const copyScopeId = owner?.scopeId !== undefined
+      ? owner.scopeId
+      : (owner?.pluginId === nativeId && installed !== undefined && existsSync(installed) && installedScopeId === scopeId && owner.source === installedOwner?.source && owner.fingerprint === installedOwner?.fingerprint && (fingerprintTree(copy) === fingerprintTree(installed) || (fingerprintSourceTree(copy, [OWNERSHIP]) === owner.fingerprint && readFileSync(join(copy, OWNERSHIP), 'utf8') === readFileSync(join(installed, OWNERSHIP), 'utf8'))) ? scopeId : undefined);
     if (owner?.pluginId !== nativeId || copyScopeId !== scopeId) throw new Error(`Claude Code marketplace member ${copy} has a different owned scope; refusing to replace it`);
   } else if (selected.length > 0) {
     if (installedOwner?.pluginId !== nativeId || installedScopeId !== scopeId) throw new Error(`Claude Code marketplace member ${nativeId} has no ownership proof; refusing to replace it`);

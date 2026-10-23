@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os';
 import { createCapabilityEvidenceProfile } from '../capability-evidence';
 import { projectPluginForHermes } from '../conversion';
 import { fingerprintTree } from '../fingerprint';
-import { legacyV1MarkerMatchesScope, resolveLegacyV1MarkerScopeId } from '../legacy-claim-ownership';
 import { capturePriorSourceRepair, priorSourceRepairAllows, recordedPriorSource, releasePriorSourceRepair, type PriorSourceProof } from '../prior-source-proof';
 import type { AddOptions, HostWriter, InstalledPlugin, PinOptions, PinOutcome } from '../host';
 import {
@@ -609,7 +608,7 @@ function assertLifecycleOwned(target: string, claim: LifecycleOwner, handle?: Du
   if (!existsSync(target)) return;
   const marker = readMarker(target);
   if (marker === null) throw new Error(`Hermes plugin ${claim.pluginId} is unowned and differs from the staged representation; pass --adopt-existing to take ownership explicitly`);
-  const repairing = handle !== undefined && (priorSourceRepairAllows(handle, proof => historicalGitMarker(marker, proof)) || legacyV1MarkerMatchesScope({ target: handle.target, scopeId: claim.scopeId, nativeId: claim.pluginId, marker, installedFingerprint: handle.prior.installedFingerprint }));
+  const repairing = handle !== undefined && priorSourceRepairAllows(handle, proof => historicalGitMarker(marker, proof));
   if (!sameLifecycleOwner(marker, claim) && !repairing) throw new Error(`Hermes plugin ${claim.pluginId} belongs to another source; refusing to replace it`);
 }
 
@@ -876,21 +875,17 @@ const hermesLifecycleDefinition: LifecycleHostDefinition = {
       const marker = readMarker(packageDir);
       const companion = plugin.contentRoots?.['commands'];
       const contentRoots = Object.entries(plugin.contentRoots ?? { package: packageDir }).map(([label, path]) => ({ label, path, fingerprint: fingerprintTree(path) }));
-      const installedFp = atomicFingerprint(packageDir, companion);
-      const resolvedScopeId = marker?.pluginId === plugin.id
-        ? (marker.scopeId ?? resolveLegacyV1MarkerScopeId({ target, nativeId: plugin.id, marker, installedFingerprint: installedFp }))
-        : undefined;
       return {
         nativeId: plugin.id,
         packageName: plugin.name,
         ownership: marker === null
           ? { kind: 'unmanaged' as const }
-          : { kind: 'owned' as const, proof: 'created' as const, scopeId: resolvedScopeId ?? 'legacy', proofId: `hermes:${marker.pluginId}` },
+          : { kind: 'owned' as const, proof: 'created' as const, scopeId: marker.scopeId ?? 'legacy', proofId: `hermes:${marker.pluginId}` },
         presence: 'present' as const,
         enablement: plugin.enabled === true ? 'enabled' as const : 'disabled' as const,
         activation: plugin.enabled === true ? 'active' as const : 'inactive' as const,
         ...(marker?.pluginId === plugin.id && marker.scopeId !== undefined ? { observedRoute: 'managed' as const } : {}),
-        installedFingerprint: installedFp,
+        installedFingerprint: atomicFingerprint(packageDir, companion),
         installedVersion: plugin.version ?? null,
         source: sourceIdentity(marker),
         contentRoots,
