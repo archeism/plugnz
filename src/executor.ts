@@ -748,7 +748,7 @@ class Ledger {
   }
 
   activation(scopeId: string, packageId: string, nativeId: string): ActivationRecord | undefined {
-    return this.state.activations.find((row) => row.scopeId === scopeId && row.packageId === packageId && row.nativeId === nativeId);
+    return this.state.activations.find((row) => row.scopeId === scopeId && (row.packageId === packageId || (row.ownership.kind === 'legacy-claim' && row.nativeId === nativeId)) && row.nativeId === nativeId);
   }
 
   scope(scopeId: string): DeploymentScopeRecord | undefined {
@@ -1082,7 +1082,7 @@ function legacyMarketplaceAlias(row: ActivationRecord, canonical: ActivationReco
   const separator = row.nativeId.indexOf('@');
   if (separator <= 0 || row.packageId !== row.nativeId) return false;
   const name = row.nativeId.slice(0, separator);
-  return name === canonical.packageId && name === canonical.nativeId;
+  return name === canonical.packageId && (name === canonical.nativeId || row.nativeId === canonical.nativeId);
 }
 
 function legacyBareMarketplaceAlias(row: ActivationRecord, canonical: ActivationRecord): boolean {

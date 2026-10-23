@@ -28,6 +28,7 @@ import type {
 } from '../lifecycle-host';
 import { createLifecycleHostAdapter, createTargetInventoryObservation } from '../lifecycle-runtime';
 import { pinPluginMcpFiles } from '../mcp-write';
+import { resolveLegacyV1MarkerScopeId } from '../legacy-claim-ownership';
 import { recordedPriorSource } from '../prior-source-proof';
 import { CryptoHasher, spawnSync, which } from '../runtime';
 import { PACKAGE_SEMANTICS, type PackageSemantic } from '../semantic-inventory';
@@ -473,10 +474,13 @@ function installationOf(plugin: InstalledPlugin): TargetInstallationData {
   const owner = ownership(path);
   const digest = fingerprintTree(path);
   const enabled = plugin.enabled !== false;
+  const resolvedScopeId = owner?.pluginId === plugin.id
+    ? (owner.scopeId ?? resolveLegacyV1MarkerScopeId({ target: { kind: 'omp', instance: 'default' }, nativeId: plugin.id, marker: owner, installedFingerprint: digest }))
+    : undefined;
   return {
     nativeId: plugin.id,
     packageName: plugin.name,
-    ownership: owner?.scopeId !== undefined ? { kind: 'owned', proof: 'created', scopeId: owner.scopeId, proofId: owner.fingerprint } : { kind: 'unmanaged' },
+    ownership: resolvedScopeId !== undefined && owner !== null ? { kind: 'owned', proof: 'created', scopeId: resolvedScopeId, proofId: owner.fingerprint } : { kind: 'unmanaged' },
     presence: 'present',
     enablement: enabled ? 'enabled' : 'disabled',
     activation: enabled ? 'active' : 'inactive',
