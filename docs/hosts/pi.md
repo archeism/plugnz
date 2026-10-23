@@ -1,10 +1,24 @@
-# Pi standalone-skill store (legacy cleanup only)
+# Pi native hooks, ignored agents and legacy cleanup
 
-Pi standalone distribution is outside the native-plugin migration scope. The
-public `add` and `update` verbs refuse this target without writing a store or
-ledger record. Its reader and remover remain only so an older plgnz-owned
-installation can be inspected and removed safely; this page preserves the
-evidence for that cleanup path.
+## Portable agents: warn and skip
+
+The owner [deferred native Pi agents](https://github.com/archeism/plugnz/issues/101#issuecomment-6346092250).
+Valid agent-only packages produce a loud stderr warning (including `--json`)
+and a successful `skipped` result with `ignoredComponents: ["agents"]`.
+No native agent files, extension, dependency or installation record is created.
+This is not native agent support.
+
+Mixed portable-hook/agent packages install supported hooks and omit the agent
+component, with the same warning and explicit reporting. Unsupported skills,
+commands and malformed definitions still fail; ignoring agents never suppresses
+unrelated errors. Existing [portable-hook lifecycle](../hooks.md) stays in place.
+
+## Standalone-skill store (legacy cleanup only)
+
+Standalone distribution remains outside the migration scope. `add` and `update`
+refuse standalone skill/command packages. The reader and remover preserve safe
+cleanup of historical owned installations; the following evidence describes
+only that old route.
 
 Measured against Pi 0.80.10. Pi is a standalone-skill route, not a native
 plugin-store route. Its catalog is `~/.pi/agent/skills/`; plgnz resolves this

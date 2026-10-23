@@ -1,10 +1,36 @@
-# OpenCode standalone-skill store (legacy cleanup only)
+# OpenCode native packages and legacy cleanup
 
-OpenCode standalone distribution is outside the native-plugin migration scope.
-The public `add` and `update` verbs refuse this target without writing a store
-or ledger record. Its reader and remover remain only so an older plgnz-owned
-installation can be inspected and removed safely; this page preserves the
-evidence for that cleanup path.
+## Portable agents (OpenCode 1.19.0)
+
+Portable-agent packages use the existing owned native plugin store:
+`~/.config/opencode/.plgnz/hook-packages/<key>/plugin.mjs`, exposed through
+`plugins/plugnz-<key>.js`. The native `config(cfg)` callback registers
+`<plugin>:<agent>` subagents. OpenCode's own task tool executes them; Plugnz
+adds no runtime or tool restrictions.
+
+Resolved models use `provider/model`; omission inherits the invoking parent.
+The config-hook route preserves the full authored prompt, unlike the native
+Markdown loader's trimming. An unavailable mapped model produces OpenCode's
+native `Model not found` error. Real discovery and child requests were verified
+in a network-disabled container with a loopback provider; see the
+[native evidence](../evidence/opencode-portable-agents-20261022.md).
+
+Install preflight rejects user JSON/JSONC agent/mode collisions, user Markdown
+names and conflicting owned package namespaces. Edited owned payloads or
+loaders refuse update/removal. Atomic staging preserves prior content on
+failed activation. Project-local conflicts are checked again inside the
+generated callback before any role is registered; OpenCode logs a callback
+error rather than aborting its process. Restart OpenCode after changes.
+Mixed hook/agent packages remain unsupported on this target.
+
+Portable hooks retain their [existing native route](../hooks.md).
+
+## Standalone-skill store (legacy cleanup only)
+
+Standalone distribution remains outside the migration scope: `add`/`update`
+refuse standalone skill/command packages. The reader/remover retain safe cleanup
+of historical owned installations; the following evidence concerns only that
+old route, not current native plugins.
 
 Measured against OpenCode 1.15.13. This is a standalone projection: plgnz keeps
 the complete package privately at `~/.config/opencode/.plgnz/packages/` and

@@ -1139,6 +1139,8 @@ function outcomeFor(row: FrozenOperation): LifecycleReport['outcomes'][number] {
       };
     case 'retire-orphan':
       return { ...operation, result: 'succeeded', resourceState: 'absent', activationState: 'inactive', changed: false, reason: null };
+    case 'skip':
+      return { ...operation, result: 'skipped', resourceState: 'absent', activationState: 'inactive', changed: false, reason: row.reason };
     case 'install':
     case 'update':
     case 'unchanged':
@@ -1243,6 +1245,7 @@ function priorKind(activation: ActivationRecord | undefined): 'none' | 'conformi
 function journalFor(action: LifecyclePlanAction): FrozenOperation['journal'] {
   switch (action) {
     case 'not-attempted':
+    case 'skip':
       return { kind: 'none' };
     case 'unchanged':
     case 'retain-prior':
@@ -1265,6 +1268,7 @@ function blocksPrune(action: LifecyclePlanAction): boolean {
     case 'not-attempted':
     case 'retain-prior':
     case 'disable-nonconforming':
+    case 'skip':
       return true;
     case 'install':
     case 'update':

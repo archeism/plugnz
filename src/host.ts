@@ -112,6 +112,25 @@ export interface RemoveOptions {
   legacyNativeIds?: readonly string[];
 }
 
+/** One package component the adapter deliberately does not deliver on this host. */
+export interface IgnoredAddComponent {
+  /** Stable package semantic name that remains unprojected, e.g. `agents`. */
+  component: string;
+  /** Loud, self-contained warning; the writer emits it on stderr in every output mode. */
+  warning: string;
+}
+
+/**
+ * Adapter-owned component disposition, evaluated before any ledger or native
+ * write. `ignored` components are omitted from an otherwise delivered package;
+ * `skip` means no component can be delivered, so the pair is reported as
+ * `skipped` without claiming delivery or touching native state.
+ */
+export interface AddDisposition {
+  ignored: readonly IgnoredAddComponent[];
+  skip: boolean;
+}
+
 import type { PluginSource, ResolvedSource } from './source';
 
 export interface HostWriter extends HostReader {
@@ -127,6 +146,13 @@ export interface HostWriter extends HostReader {
   readonly persistedNativeIdMayAlias?: (persistedNativeId: string, requestedIdentity: string) => boolean;
   /** Optional read-only package/version/compiler validation before durable install intent. */
   preflightAdd?(plugin: PluginSource, resolved: ResolvedSource): Promise<void>;
+  /**
+   * Adapter-owned ignored-component policy. Evaluated before any ledger or
+   * native write: a skipped pair reports no delivery, and ignored components
+   * stay out of an otherwise delivered package. Adapters that ignore a
+   * component MUST surface its warning before mutation.
+   */
+  addDisposition?(plugin: PluginSource): AddDisposition | undefined;
   add(plugin: PluginSource, resolved: ResolvedSource, opts?: AddOptions): Promise<void | 'unchanged'>;
   remove(id: string, opts?: RemoveOptions): Promise<void>;
   /**

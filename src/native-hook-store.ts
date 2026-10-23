@@ -15,13 +15,18 @@ export interface NativeHookStore {
   entryFile: string;
   registration(id: string, entry: string): HookRegistration;
 }
+export type NativeHookOwnerKind = 'portable-hooks' | 'portable-agents';
 export interface NativeHookOwner {
-  kind: 'portable-hooks';
+  kind: NativeHookOwnerKind;
   schemaVersion: 1;
   pluginId: string;
   source: string;
   sourceSha: string;
   fingerprint: string;
+  /** Installed payload fingerprint excluding this marker; absent on hook-only packages. */
+  payloadFingerprint?: string;
+  /** Native role names claimed by a portable-agent package. */
+  agents?: string[];
 }
 
 function entryExists(path: string): boolean {
@@ -53,9 +58,13 @@ export function readHookOwner(root: string): NativeHookOwner | null {
   if (!entryExists(path)) return null;
   if (lstatSync(path).isSymbolicLink()) throw new Error('Native hook ownership marker is redirected: ' + path);
   const value = JSON.parse(readFileSync(path, 'utf8')) as Partial<NativeHookOwner>;
-  if (value.kind !== 'portable-hooks' || value.schemaVersion !== 1 ||
+  if ((value.kind !== 'portable-hooks' && value.kind !== 'portable-agents') || value.schemaVersion !== 1 ||
     typeof value.pluginId !== 'string' || typeof value.source !== 'string' ||
-    typeof value.sourceSha !== 'string' || typeof value.fingerprint !== 'string') {
+    typeof value.sourceSha !== 'string' || typeof value.fingerprint !== 'string' ||
+    (value.payloadFingerprint !== undefined && typeof value.payloadFingerprint !== 'string') ||
+    (value.agents !== undefined && (!Array.isArray(value.agents) ||
+      value.agents.some(agent => typeof agent !== 'string' || !/^[a-z0-9][a-z0-9._-]*:[a-z][a-z0-9-]*$/iu.test(agent)) ||
+      new Set(value.agents).size !== value.agents.length))) {
     throw new Error('Invalid native hook ownership marker: ' + path);
   }
   return value as NativeHookOwner;

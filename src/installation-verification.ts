@@ -6,9 +6,12 @@ export interface InstallationVerification {
   operations: Array<{
     operationId: string;
     compatibility: 'admitted' | 'unsupported' | 'unverified' | 'unknown';
+    /** Only the delivered component can be verified; ignored components never are. */
     registration: 'verified' | 'not-checked' | 'unknown';
     executionApproval: 'not-checked';
     delivery: 'not-observed';
+    /** Package components the adapter deliberately did not deliver. */
+    ignoredComponents?: readonly string[];
   }>;
 }
 
@@ -26,6 +29,8 @@ export function installationVerification(report: Pick<LifecycleReport, 'outcomes
           ? 'verified' : 'unknown',
       executionApproval: 'not-checked',
       delivery: 'not-observed',
+      ...(outcome.ignoredComponents === undefined || outcome.ignoredComponents.length === 0
+        ? {} : { ignoredComponents: [...outcome.ignoredComponents] }),
     })),
   };
 }

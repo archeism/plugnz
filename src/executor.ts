@@ -159,6 +159,7 @@ async function runOperation(
       return runDisable(plan, operation, hosts, ledger);
     case 'retain-prior':
     case 'not-attempted':
+    case 'skip':
       return stop(operation, createLifecycleReason(
         'internal',
         'internal.invariant',
@@ -1361,7 +1362,7 @@ function refusalReport(plan: FrozenPlan, reason: LifecycleReason, globalNotAttem
 }
 
 function summaryFor(outcomes: readonly LifecycleOperationOutcome[]): LifecycleReport['summary'] {
-  const failed = outcomes.find((outcome) => outcome.result !== 'succeeded');
+  const failed = outcomes.find((outcome) => outcome.result !== 'succeeded' && outcome.result !== 'skipped');
   const changed = outcomes.some((outcome) => outcome.changed);
   const pending = outcomes.find((outcome) => outcome.result === 'pending');
   const readback = outcomes.find((outcome) => outcome.reason?.category === 'readback'

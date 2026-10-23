@@ -16,7 +16,7 @@
  * modified: plgnz has no basis for saying what "up to date" means for it,
  * and a re-add would silently take ownership of someone else's install.
  */
-import type { HostWriter, InstalledPlugin } from './host';
+import type { AddDisposition, HostWriter, InstalledPlugin } from './host';
 import type { Mark } from './doctor';
 import { writers as allWriters } from './hosts/writers';
 import { resolveSource, type PluginSource, type SourceBinding } from './source';
@@ -41,7 +41,11 @@ export interface UpdateFinding {
   /** Exact evidence reference supplied by a typed adapter boundary. */
   evidenceId?: string | null;
   /** Terminal action reported only by a successfully read-back update. */
-  action?: 'update' | 'unchanged';
+  action?: 'update' | 'unchanged' | 'skip';
+  /** Adapter-owned components deliberately not delivered by this update. */
+  ignoredComponents?: readonly string[];
+  /** A deliberate non-mutating skip; the prior owned installation is retained. */
+  skipped?: true;
   /** Stable lifecycle reason when the finding needs more than the runtime default. */
   reasonCode?: 'internal.ambiguous-ownership' | 'readback.failed' | 'readback.mismatch' | 'recovery.required';
   /** Exact phase in which this finding prevented convergence. */
@@ -202,7 +206,11 @@ export async function runUpdate(name?: string, options: UpdateOptions = {}): Pro
       continue;
     }
 
-    try { await host.preflightAdd?.(plugin, resolved); }
+    let disposition: AddDisposition | undefined;
+    try {
+      await host.preflightAdd?.(plugin, resolved);
+      disposition = host.addDisposition?.(plugin);
+    }
     catch (error) {
       findings.push(findingFor(record, {
         mark: '✗', terminalPhase: 'preflight',
@@ -243,6 +251,30 @@ export async function runUpdate(name?: string, options: UpdateOptions = {}): Pro
     }
     const persistedRecord = record;
     record = { ...persistedRecord, id: canonicalNativeId };
+
+    if (disposition?.skip === true) {
+      let installed: InstalledPlugin | undefined;
+      try { installed = host.listInstalled().find((candidate) => candidate.id === record.id); }
+      catch (error) {
+        findings.push(findingFor(record, {
+          mark: '✗', terminalPhase: 'preflight',
+          message: `cannot inspect '${record.id}' before skipping it on ${host.id} — ${unknownErrorDiagnostic(error)}`,
+        }));
+        continue;
+      }
+      const ignored = disposition.ignored.map((item) => item.component);
+      findings.push(findingFor(record, {
+        mark: '!',
+        action: 'skip',
+        skipped: true,
+        ignoredComponents: ignored,
+        resourceState: installed === undefined ? 'absent' : 'retained',
+        activationState: installed === undefined ? 'inactive' : 'retained-prior',
+        message: `${prefix}skipped '${record.id}' — ${host.id} has no deliverable component in the recorded source (ignored: ${ignored.join(', ')}); ${installed === undefined ? 'no native installation is present' : 'the existing owned installation was retained'}`,
+      }));
+      continue;
+    }
+    const ignoredComponents = disposition?.ignored.map((item) => item.component) ?? [];
 
     try {
       if (options.dryRun !== true) {
@@ -300,7 +332,11 @@ export async function runUpdate(name?: string, options: UpdateOptions = {}): Pro
     const changed = nativeChanged || (options.dryRun !== true && pins.changePlanned);
 
     if (options.dryRun === true) {
-      findings.push(findingFor(record, { mark: '✓', action, message: `${prefix}${action === 'unchanged' ? 'unchanged' : 'updated'} '${record.id}' from ${record.source} → ${shortSha(resolved.sha)}` }, recordMutationStarted));
+      findings.push(findingFor(record, {
+        mark: '✓', action,
+        ...(ignoredComponents.length > 0 ? { ignoredComponents } : {}),
+        message: `${prefix}${action === 'unchanged' ? 'unchanged' : 'updated'} '${record.id}' from ${record.source} → ${shortSha(resolved.sha)}`,
+      }, recordMutationStarted));
       continue;
     }
     let installedFingerprint: string;
@@ -356,6 +392,7 @@ export async function runUpdate(name?: string, options: UpdateOptions = {}): Pro
     findings.push(findingFor(record, {
       mark: '✓',
       action,
+      ...(ignoredComponents.length > 0 ? { ignoredComponents } : {}),
       ...(changed ? { changed: true as const } : {}),
       message: `${action === 'unchanged' ? 'unchanged' : 'updated'} '${record.id}' from ${record.source} → ${shortSha(resolved.sha)}`,
     }, recordMutationStarted));

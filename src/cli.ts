@@ -17,7 +17,7 @@ import type { InstallRecord } from './state';
 import { runPin } from './pin';
 import { runUpdate, type UpdateFinding } from './update';
 import { fingerprintInstallation } from './fingerprint';
-import type { HostReader, HostWriter } from './host';
+import type { AddDisposition, HostReader, HostWriter } from './host';
 import { consumerProfiles, findConsumerProfile, type ConsumerProfile } from './consumer-profiles';
 import { CompatibilityError, compatibilityEvidenceId, requireCompatible } from './compatibility';
 import {
@@ -210,6 +210,7 @@ function outcomeFor(operation: LifecyclePlanOperation, input: {
   reason?: LifecycleReason | null;
   resourceState?: LifecycleOperationOutcome['resourceState'];
   activationState?: LifecycleOperationOutcome['activationState'];
+  ignoredComponents?: readonly string[];
 }): LifecycleOperationOutcome {
   const successfulRemoval = input.result === 'succeeded' && operation.coverage === 'retirement';
   const successfulDesired = input.result === 'succeeded' && operation.coverage === 'desired-pair';
@@ -220,7 +221,32 @@ function outcomeFor(operation: LifecyclePlanOperation, input: {
     activationState: input.activationState ?? (successfulRemoval ? 'inactive' : successfulDesired ? 'active-conforming' : 'unknown'),
     changed: input.changed,
     reason: input.reason ?? null,
+    ...(input.ignoredComponents === undefined || input.ignoredComponents.length === 0 ? {} : { ignoredComponents: input.ignoredComponents }),
   };
+}
+
+/** A deliberate whole-package skip: no ledger, native write, or delivery claim. */
+function skippedOutcome(
+  operation: LifecyclePlanOperation,
+  pair: { readonly writer: HostWriter; readonly disposition?: AddDisposition; readonly retainedPrior?: boolean },
+): LifecycleOperationOutcome {
+  const ignored = pair.disposition?.ignored ?? [];
+  const components = ignored.map((item) => item.component);
+  const retained = pair.retainedPrior === true;
+  return outcomeFor(operation, {
+    result: 'skipped',
+    changed: false,
+    resourceState: retained ? 'retained' : 'absent',
+    activationState: retained ? 'retained-prior' : 'inactive',
+    reason: reason(
+      'capability',
+      'capability.unsupported',
+      `target '${pair.writer.id}' deliberately skipped delivery: no component of '${operation.package}' was installed here (ignored: ${components.join(', ')})`,
+      components[0] ?? 'install',
+      null,
+    ),
+    ignoredComponents: components,
+  });
 }
 
 function freezePlan(operations: readonly LifecyclePlanOperation[]): readonly LifecyclePlanOperation[] {
@@ -378,8 +404,8 @@ function reportFor(
   outcomes: readonly LifecycleOperationOutcome[],
   options: ReportOptions = {},
 ): LifecycleReport {
-  const failure = options.reason ?? outcomes.find((candidate) => candidate.result !== 'succeeded')?.reason ?? null;
-  const result = options.result ?? (failure === null && outcomes.every((candidate) => candidate.result === 'succeeded') ? 'converged' : 'incomplete');
+  const failure = options.reason ?? outcomes.find((candidate) => candidate.result !== 'succeeded' && candidate.result !== 'skipped')?.reason ?? null;
+  const result = options.result ?? (failure === null && outcomes.every((candidate) => candidate.result === 'succeeded' || candidate.result === 'skipped') ? 'converged' : 'incomplete');
   const recoveryOutcome = outcomes.find((candidate) => candidate.result === 'pending' || candidate.reason?.category === 'recovery');
   const readbackOutcome = outcomes.find((candidate) =>
     candidate.reason?.category === 'readback' || (!dryRun && candidate.action === 'disable-nonconforming'));
@@ -940,7 +966,17 @@ async function runWriterAdd(
   if (incompatible !== undefined) {
     return reportFor('add', flags.dryRun, incompatible.plan, incompatible.outcomes, { terminalPhase: 'preflight', mutationStarted: false, sourceSnapshots });
   }
-  const captured = selectedWriters.flatMap((writer) => pluginSelection.selected.map((plugin) => {
+  const captured: Array<{
+    writer: HostWriter;
+    plugin: PluginSource;
+    scope: DeploymentScopeIdentity;
+    nativeId: string | null;
+    equivalent: readonly string[];
+    failure: LifecycleReason | null;
+    disposition?: AddDisposition;
+    /** Observed before planning a skip; observation errors fail preflight. */
+    retainedPrior?: boolean;
+  }> = selectedWriters.flatMap((writer) => pluginSelection.selected.map((plugin) => {
     const scope = createDeploymentScopeIdentity(resolved.snapshot.binding, { kind: writer.id, instance: 'default' });
     const identity = captureNativeIdentity(writer, plugin);
     return identity.ok
@@ -948,9 +984,16 @@ async function runWriterAdd(
       : { writer, plugin, scope, nativeId: identity.nativeId, equivalent: [] as readonly string[], failure: reason('internal', 'internal.defect', unknownErrorDiagnostic(identity.error)) };
   }));
   for (const pair of captured) {
-    if (pair.failure !== null || pair.writer.preflightAdd === undefined) continue;
-    try { await pair.writer.preflightAdd(pair.plugin, resolved); }
-    catch (error) { pair.failure = reasonForError(error); }
+    if (pair.failure !== null) continue;
+    try {
+      if (pair.writer.preflightAdd !== undefined) await pair.writer.preflightAdd(pair.plugin, resolved);
+      pair.disposition = pair.writer.addDisposition?.(pair.plugin);
+      // A skipped pair never writes, but its truthful prior state still
+      // requires a readable native store; corruption is a failure, not a skip.
+      if (pair.disposition?.skip === true) {
+        pair.retainedPrior = pair.nativeId !== null && pair.writer.listInstalled().some((item) => item.id === pair.nativeId);
+      }
+    } catch (error) { pair.failure = reasonForError(error); }
   }
   const identityFailure = captured.find((pair) => pair.failure !== null)?.failure ?? null;
   if (identityFailure !== null) {
@@ -960,15 +1003,19 @@ async function runWriterAdd(
       sourceSnapshotId,
       package: pair.plugin.name,
       nativeId: pair.nativeId,
-      action: pair.failure === null ? 'install' : 'not-attempted',
-      route: pair.failure === null ? 'managed' : 'none',
+      action: pair.failure !== null ? 'not-attempted' : pair.disposition?.skip === true ? 'skip' : 'install',
+      route: pair.failure !== null || pair.disposition?.skip === true ? 'none' : 'managed',
     })));
     const blocked = reason('runtime', 'runtime.operation-failed', 'not attempted after an adapter identity preflight failure');
-    return reportFor('add', flags.dryRun, plan, plan.map((operation, index) => outcomeFor(operation, {
-      result: captured[index]!.failure === null ? 'not-attempted' : 'failed',
-      changed: false,
-      reason: captured[index]!.failure ?? blocked,
-    })), { terminalPhase: 'preflight', mutationStarted: false, reason: identityFailure, sourceSnapshots });
+    return reportFor('add', flags.dryRun, plan, plan.map((operation, index) => {
+      const pair = captured[index]!;
+      if (pair.failure === null && pair.disposition?.skip === true) return skippedOutcome(operation, pair);
+      return outcomeFor(operation, {
+        result: pair.failure === null ? 'not-attempted' : 'failed',
+        changed: false,
+        reason: pair.failure ?? blocked,
+      });
+    }), { terminalPhase: 'preflight', mutationStarted: false, reason: identityFailure, sourceSnapshots });
   }
   if (flags.adoptExisting && selectedWriters.some((writer) => writer.supportsAdoption !== true)) {
     const blocked = reason('runtime', 'runtime.operation-failed', 'not attempted because another selected target does not support adoption');
@@ -1005,8 +1052,8 @@ async function runWriterAdd(
     sourceSnapshotId,
     package: pair.plugin.name,
     nativeId: pair.nativeId,
-    action: 'install',
-    route: 'managed',
+    action: pair.disposition?.skip === true ? 'skip' : 'install',
+    route: pair.disposition?.skip === true ? 'none' : 'managed',
   })));
   const outcomes: LifecycleOperationOutcome[] = [];
   let mutationStarted = false;
@@ -1014,11 +1061,16 @@ async function runWriterAdd(
   for (let index = 0; index < captured.length; index++) {
     const pair = captured[index]!;
     const operation = plan[index]!;
+    const ignoredComponents = pair.disposition?.ignored.map((item) => item.component) ?? [];
+    if (pair.disposition?.skip === true) {
+      outcomes.push(skippedOutcome(operation, pair));
+      continue;
+    }
     if (flags.dryRun) {
       try {
         if (mode === 'json') await withLogsOnStderr(() => pair.writer.add(pair.plugin, resolved, { dryRun: true, adoptExisting: flags.adoptExisting }));
         else await pair.writer.add(pair.plugin, resolved, { dryRun: true, adoptExisting: flags.adoptExisting });
-        outcomes.push(outcomeFor(operation, { result: 'succeeded', changed: false }));
+        outcomes.push(outcomeFor(operation, { result: 'succeeded', changed: false, ignoredComponents }));
       } catch (error) {
         outcomes.push(outcomeFor(operation, { result: 'failed', changed: false, reason: reasonForError(error) }));
         break;
@@ -1114,18 +1166,22 @@ async function runWriterAdd(
       break;
     }
     state = finalizedState;
-    outcomes.push(outcomeFor(operation, { result: 'succeeded', changed }));
+    outcomes.push(outcomeFor(operation, { result: 'succeeded', changed, ignoredComponents }));
   }
   const reported = new Set(outcomes.map((outcome) => outcome.operationId));
-  for (const operation of plan) {
+  for (let index = 0; index < plan.length; index++) {
+    const operation = plan[index]!;
     if (reported.has(operation.operationId)) continue;
-    outcomes.push(outcomeFor(operation, {
-      result: 'not-attempted',
-      changed: false,
-      reason: reason('runtime', 'runtime.operation-failed', 'not attempted after an earlier install failure'),
-    }));
+    const pair = captured[index]!;
+    outcomes.push(pair.disposition?.skip === true
+      ? skippedOutcome(operation, pair)
+      : outcomeFor(operation, {
+          result: 'not-attempted',
+          changed: false,
+          reason: reason('runtime', 'runtime.operation-failed', 'not attempted after an earlier install failure'),
+        }));
   }
-  const failure = outcomes.find((outcome) => outcome.result !== 'succeeded')?.reason ?? null;
+  const failure = outcomes.find((outcome) => outcome.result !== 'succeeded' && outcome.result !== 'skipped')?.reason ?? null;
   return reportFor('add', flags.dryRun, plan, outcomes, {
     terminalPhase: failure === null ? undefined : summaryPhase ?? (failure.category === 'readback' ? 'readback' : mutationStarted ? 'apply' : 'preflight'),
     mutationStarted,
@@ -2167,6 +2223,12 @@ export async function main(argv: string[]): Promise<number> {
       {
         updatePlan = freezePlan(selectedPairs.map((pair, index) => {
           const findings = groups.get(`${pair.scope.id}\u0000${pair.nativeId}`) ?? [];
+          if (findings.some((finding) => finding.skipped === true)) {
+            return planOperation({
+              command: 'update', scope: pair.scope, package: pair.package, nativeId: pair.nativeId,
+              action: 'skip', route: 'none',
+            });
+          }
           const failed = findings.find((finding) => finding.mark !== '✓' || finding.status !== undefined);
           const preflightCapability = (failed?.status === 'unsupported' || failed?.status === 'unverified')
             && failed.terminalPhase === 'preflight'
@@ -2193,6 +2255,23 @@ export async function main(argv: string[]): Promise<number> {
             resourceState: 'unknown',
             activationState: 'unknown',
             reason: reason('runtime', 'runtime.operation-failed', 'not attempted after an earlier update failure'),
+          });
+        }
+        const skippedFinding = findings.find((finding) => finding.skipped === true);
+        if (skippedFinding !== undefined) {
+          return outcomeFor(operation, {
+            result: 'skipped',
+            changed: false,
+            resourceState: skippedFinding.resourceState ?? 'retained',
+            activationState: skippedFinding.activationState ?? 'retained-prior',
+            reason: reason(
+              'capability',
+              'capability.unsupported',
+              skippedFinding.message,
+              skippedFinding.ignoredComponents?.[0] ?? 'update',
+              skippedFinding.evidenceId ?? null,
+            ),
+            ignoredComponents: skippedFinding.ignoredComponents,
           });
         }
         const failed = findings.find((finding) => finding.mark !== '✓' || finding.status !== undefined);
@@ -2228,6 +2307,7 @@ export async function main(argv: string[]): Promise<number> {
           resourceState: !succeeded ? failed.resourceState ?? (pairMutationStarted ? 'potentially-changed' : 'unknown') : undefined,
           activationState: !succeeded ? failed.activationState ?? 'unknown' : undefined,
           reason: failure,
+          ignoredComponents: succeeded ? findings.find((finding) => finding.ignoredComponents !== undefined)?.ignoredComponents : undefined,
         });
       });
       if (result.exitCode !== 0 && commandFailure === null && updateOutcomes.every((candidate) => candidate.result === 'succeeded')) {
@@ -2238,8 +2318,9 @@ export async function main(argv: string[]): Promise<number> {
         mutationStarted: result.mutationStarted,
         reason: commandFailure,
       });
-      printReport(report, mutationOutput);
-      return exitCodeForLifecycleReport(report);
+      const verified = parseLifecycleReport({ ...report, verification: installationVerification(report) });
+      printReport(verified, mutationOutput);
+      return exitCodeForLifecycleReport(verified);
     } catch (error) {
       const failure = reasonForError(error);
       const skipped = updatePlan.map((operation) => outcomeFor(operation, {

@@ -188,8 +188,8 @@ describe('lifecycle report contract', () => {
       parsed: parseLifecycleReport(validReport()),
     }).toEqual({
       schemaVersion: 1,
-      actions: ['install', 'update', 'unchanged', 'route-migrate', 'disable-nonconforming', 'retain-prior', 'retire-orphan', 'not-attempted'],
-      results: ['succeeded', 'failed', 'pending', 'not-attempted'],
+      actions: ['install', 'update', 'unchanged', 'route-migrate', 'disable-nonconforming', 'retain-prior', 'retire-orphan', 'not-attempted', 'skip'],
+      results: ['succeeded', 'failed', 'pending', 'not-attempted', 'skipped'],
       resourceStates: ['present', 'absent', 'retained', 'unknown', 'potentially-changed'],
       activationStates: ['active-conforming', 'active-nonconforming', 'inactive', 'retained-prior', 'unknown'],
       routes: ['native', 'managed', 'none'],
@@ -547,6 +547,34 @@ describe('lifecycle report contract', () => {
       outcomes: [{ ...preflight.outcomes[0]!, coverage: 'retirement' }],
     };
     expect(parseLifecycleReport(retirementPreflight)).toEqual(retirementPreflight);
+  });
+
+  test('an explicit skip is non-delivering, converged, and cannot claim an active component', () => {
+    const skipReason = createLifecycleReason('capability', 'capability.unsupported', 'portable agents have no native projection here', 'agents');
+    const report = validReport();
+    report.plan[0] = { ...report.plan[0]!, action: 'skip', route: 'none' };
+    report.outcomes[0] = {
+      ...report.outcomes[0]!, action: 'skip', route: 'none', result: 'skipped',
+      resourceState: 'absent', activationState: 'inactive', changed: false, reason: skipReason,
+      ignoredComponents: ['agents'],
+    };
+    report.summary = { ...report.summary, changed: false, mutationStarted: false };
+    expect(exitCodeForLifecycleReport(parseLifecycleReport(report))).toBe(0);
+    expect(installationVerification(parseLifecycleReport(report)).operations[0]).toEqual({
+      operationId: 'op-1', compatibility: 'unsupported', registration: 'unknown',
+      executionApproval: 'not-checked', delivery: 'not-observed', ignoredComponents: ['agents'],
+    });
+    const rejects = (mutate: (value: LifecycleReport) => void): boolean => {
+      const value = JSON.parse(JSON.stringify(report)) as LifecycleReport;
+      mutate(value);
+      try { parseLifecycleReport(value); return false; } catch (error) { return error instanceof LifecycleReportValidationError; }
+    };
+    expect(rejects((value) => { value.outcomes[0]!.activationState = 'active-conforming'; })).toBe(true);
+    expect(rejects((value) => { value.outcomes[0]!.resourceState = 'present'; })).toBe(true);
+    expect(rejects((value) => { value.outcomes[0]!.changed = true; value.summary.changed = true; })).toBe(true);
+    expect(rejects((value) => { value.plan[0]!.action = 'install'; value.plan[0]!.route = 'managed'; value.outcomes[0]!.route = 'managed'; })).toBe(true);
+    expect(rejects((value) => { value.outcomes[0]!.result = 'succeeded'; })).toBe(true);
+    expect(rejects((value) => { value.outcomes[0]!.ignoredComponents = []; })).toBe(true);
   });
 
   test('rejects cross-field reports that lie about mutation, recovery, or readback', () => {

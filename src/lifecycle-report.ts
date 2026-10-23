@@ -22,9 +22,10 @@ export const LIFECYCLE_PLAN_ACTIONS = [
   'retain-prior',
   'retire-orphan',
   'not-attempted',
+  'skip',
 ] as const;
 
-export const LIFECYCLE_OPERATION_RESULTS = ['succeeded', 'failed', 'pending', 'not-attempted'] as const;
+export const LIFECYCLE_OPERATION_RESULTS = ['succeeded', 'failed', 'pending', 'not-attempted', 'skipped'] as const;
 export const LIFECYCLE_RESOURCE_STATES = ['present', 'absent', 'retained', 'unknown', 'potentially-changed'] as const;
 export const LIFECYCLE_ACTIVATION_STATES = ['active-conforming', 'active-nonconforming', 'inactive', 'retained-prior', 'unknown'] as const;
 export const LIFECYCLE_ROUTES = ['native', 'managed', 'none'] as const;
@@ -140,6 +141,8 @@ export interface LifecycleOperationOutcome extends LifecyclePlanOperation {
   activationState: LifecycleActivationState;
   changed: boolean;
   reason: LifecycleReason | null;
+  /** Package components this host deliberately did not deliver (never a delivery claim). */
+  ignoredComponents?: readonly string[];
   /** Present when a successful outcome dropped recorded pins that the new source no longer contains. */
   notices?: readonly string[];
 }
@@ -520,6 +523,7 @@ const OUTCOME_FIELDS = [
   'activationState',
   'changed',
   'reason',
+  'ignoredComponents',
   'notices',
 ] as const;
 
@@ -569,8 +573,9 @@ function assertPlanOperation(
   if ((command === 'remove' || command === 'retire-source') && operation['coverage'] !== 'retirement') {
     throw invalid(`${command} cannot contain desired-pair coverage`);
   }
-  if ((operation['action'] === 'not-attempted') !== (operation['route'] === 'none')) {
-    throw contradiction(`planned operation '${operation['operationId']}' must pair action not-attempted with route none`);
+  const noDeliveryAction = operation['action'] === 'not-attempted' || operation['action'] === 'skip';
+  if (noDeliveryAction !== (operation['route'] === 'none')) {
+    throw contradiction(`planned operation '${operation['operationId']}' must pair a no-delivery action with route none`);
   }
 }
 
@@ -618,6 +623,25 @@ function assertOutcome(
     }
     if (outcome['result'] !== 'succeeded') throw contradiction(`outcome '${outcome['operationId']}' can report a dropped pin only after success`);
   }
+  const ignoredComponents = outcome['ignoredComponents'];
+  if (ignoredComponents !== undefined) {
+    if (!Array.isArray(ignoredComponents) || ignoredComponents.length === 0
+      || ignoredComponents.some((item) => typeof item !== 'string' || item.length === 0)
+      || new Set(ignoredComponents).size !== ignoredComponents.length) {
+      throw invalid(`outcome '${outcome['operationId']}' ignoredComponents must be unique non-empty strings`);
+    }
+    if (outcome['result'] !== 'succeeded' && outcome['result'] !== 'skipped') {
+      throw contradiction(`outcome '${outcome['operationId']}' can report ignored components only for delivered or skipped work`);
+    }
+  }
+  if ((outcome['action'] === 'skip') !== (outcome['result'] === 'skipped')) {
+    throw contradiction(`outcome '${outcome['operationId']}' must pair action skip with result skipped`);
+  }
+  if (outcome['result'] === 'skipped'
+    && (outcome['changed'] !== false || outcome['resourceState'] === 'present' || outcome['resourceState'] === 'potentially-changed'
+      || outcome['activationState'] === 'active-conforming' || outcome['activationState'] === 'active-nonconforming')) {
+    throw contradiction(`skipped outcome '${outcome['operationId']}' cannot claim delivery or a change`);
+  }
   if (outcome['result'] === 'succeeded' && reason !== null) throw contradiction(`successful outcome '${outcome['operationId']}' cannot have a failure reason`);
   if (outcome['result'] !== 'succeeded' && reason === null) throw contradiction(`non-success outcome '${outcome['operationId']}' needs a reason`);
   if (outcome['route'] === 'none' && outcome['result'] === 'succeeded') {
@@ -653,8 +677,9 @@ function assertOutcome(
     throw contradiction(`disable-nonconforming outcome '${outcome['operationId']}' cannot report a containment mutation on a dry run`);
   }
   if (isObject(reason) && reason['category'] === 'capability') {
-    if (outcome['action'] !== 'not-attempted' && outcome['action'] !== 'retain-prior' && outcome['action'] !== 'disable-nonconforming') {
-      throw contradiction(`capability outcome '${outcome['operationId']}' must use an explicit refusal or containment action`);
+    if (outcome['action'] !== 'not-attempted' && outcome['action'] !== 'retain-prior'
+      && outcome['action'] !== 'disable-nonconforming' && outcome['action'] !== 'skip') {
+      throw contradiction(`capability outcome '${outcome['operationId']}' must use an explicit refusal, skip, or containment action`);
     }
     if (outcome['action'] === 'disable-nonconforming') {
       if (appliedDisablement && dryRun) {
@@ -705,8 +730,8 @@ function assertSummary(summary: Record<string, unknown>, outcomes: readonly Reco
   if (reason !== null && (reason as Record<string, unknown>)['category'] !== summary['failureCategory']) {
     throw contradiction('summary failureCategory contradicts its reason');
   }
-  const nonSuccess = outcomes.some((outcome) => outcome['result'] !== 'succeeded') || receipts.some(row => row.status !== 'completed')
-    || adoptions.some(row => row.status !== 'committed');
+  const nonSuccess = outcomes.some((outcome) => outcome['result'] !== 'succeeded' && outcome['result'] !== 'skipped')
+    || receipts.some(row => row.status !== 'completed') || adoptions.some(row => row.status !== 'committed');
   const anyChanged = outcomes.some((outcome) => outcome['changed'] === true) || receipts.some(row => row.changed);
   const potentiallyChanged = outcomes.some((outcome) => outcome['resourceState'] === 'potentially-changed');
   const earlyPhase = summary['terminalPhase'] === 'parse' || summary['terminalPhase'] === 'resolve' ||
@@ -723,7 +748,7 @@ function assertSummary(summary: Record<string, unknown>, outcomes: readonly Reco
   const appliedDisablements = outcomes.filter((outcome) =>
     outcome['action'] === 'disable-nonconforming' && outcome['changed'] === true);
   const pairFailureCategories = new Set(outcomes
-    .filter((outcome) => outcome['result'] !== 'succeeded')
+    .filter((outcome) => outcome['result'] !== 'succeeded' && outcome['result'] !== 'skipped')
     .map((outcome) => (outcome['reason'] as Record<string, unknown>)['category']));
   if (summary['changed'] !== anyChanged) throw contradiction('summary changed flag contradicts its outcomes');
   if ((dryRun || summary['mutationStarted'] === false) && summary['changed'] === true) throw contradiction('summary cannot report changed=true before mutation');

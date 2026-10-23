@@ -1,0 +1,219 @@
+{
+  "base_commit": "636aa91",
+  "raw_root": "/root/workspace/plugnz-opencode-agents-20261022-evidence",
+  "native_versions": [
+    "1.19.0"
+  ],
+  "runtime": {
+    "entry": "/opt/harnesses/opencode/node_modules/opencode-ai/bin/opencode.exe",
+    "sha256": "135ac3f86c43f2a22328a3554fec5f0bc57d71576077902661bc38dac34871fd",
+    "container_image": "plugnz-hook-cleanroom-harnesses:20261012",
+    "upstream_source_pin": "733b2c627e5aec39cb33cc22373bdce33053ef2c"
+  },
+  "install_result": {
+    "result": "converged",
+    "terminalPhase": "complete",
+    "mutationStarted": true,
+    "changed": true,
+    "failureCategory": null,
+    "reason": null,
+    "recoveryId": null,
+    "readbackId": null
+  },
+  "probe": {
+    "script": "test/native-agent-probe-opencode.py",
+    "script_sha256": "522c3dc3e7ef6a2f3c6feace302bb113a6f17fa2cbc5b74fa075c98fdb6389a9",
+    "run": "run-06",
+    "result": {
+      "status": "passed",
+      "elapsed_seconds": 5.571,
+      "exit_code": 0,
+      "model_request_count": 14,
+      "fake_model_usage_only": true,
+      "paid_requests": 0,
+      "allocated_growth_bytes": 4730880,
+      "setup_allocated_bytes": 66625536,
+      "child_maxrss_kib": 644928,
+      "checks": {
+        "discover:explicit": true,
+        "discover:user-alias": true,
+        "discover:package-alias": true,
+        "discover:omitted": true,
+        "discover:unavailable": true,
+        "child:explicit": true,
+        "child:user-alias": true,
+        "child:package-alias": true,
+        "child:omitted": true,
+        "child-unavailable:unavailable": true,
+        "provider_budget": true,
+        "overall_deadline": true,
+        "no_fallback_for_unavailable": true
+      },
+      "cleanup": {
+        "native_process_exited": true,
+        "native_process_group_absent": true,
+        "native_listener_closed": true,
+        "provider_listener_closed": true,
+        "provider_thread_stopped": true
+      }
+    },
+    "artifacts": {
+      "summary.json": {
+        "sha256": "ea663023d440fe69f6723669cf06e9bca00d24fe66bc1a36dec15563b5b36885"
+      },
+      "checks.json": {
+        "sha256": "f4cd656f601bb69374de703d8082d814446cdd843322f1b7d57adfc34912f576"
+      },
+      "requests.jsonl": {
+        "sha256": "4e1cddf26a70c3c77a453eed4669763b22b8be33bace8c65843f87199e552386"
+      },
+      "install.stdout": {
+        "sha256": "aa14453c7d735663d4ec8aea14976074e4b6c84650123fce01a52e008a5b7a55"
+      },
+      "agents.json": {
+        "sha256": "012b9725f7073b4f33719b49c1c1222e23f9fc157859ccaba885d53c08d30449"
+      },
+      "child-explicit-body.json": {
+        "sha256": "e38a12656b515a2dcf9b716debdb763157b78ce6707a2c84a47e29bf768fe90a"
+      },
+      "child-user-alias-body.json": {
+        "sha256": "4a5cbbdf5f0b9952f887def568c4f9dfe6af036dbf5c7df9c915fde1af9e3f03"
+      },
+      "child-package-alias-body.json": {
+        "sha256": "58b663781953b02020fc9893707fdf724362ef7a36b3d3df8b1ad88886fa6435"
+      },
+      "child-omitted-body.json": {
+        "sha256": "e5ec5aefcff44bef9a0e078e60cb9f4845248c89dfd4d396152dafc41bfb2e4b"
+      },
+      "messages-unavailable.json": {
+        "sha256": "fa1a37784c42dc5ce14dd4bdb21d1eaeffd96245c27aaedb21130161e0d7d4da"
+      }
+    },
+    "failure_exercise": {
+      "description": "Scratch copy with one deliberately wrong expected child model; proves nonzero exit after evidence is saved",
+      "exit_code": 1,
+      "evidence_retained": true,
+      "path": "failure-exercise"
+    }
+  },
+  "discovery": {
+    "portable-review:explicit": {
+      "mode": "subagent",
+      "native": false,
+      "model": {
+        "modelID": "explicit-model",
+        "providerID": "boundary-probe"
+      },
+      "prompt_sha256": "6460b7f99f7b378937b91c0be695b74008539c55fd0a3bd9206ed9d91fe2bb12"
+    },
+    "portable-review:omitted": {
+      "mode": "subagent",
+      "native": false,
+      "model": null,
+      "prompt_sha256": "0547a7dc119d2fd318b16b7f37784c95a979efa15ba89a932e916cd983272d03"
+    },
+    "portable-review:package-alias": {
+      "mode": "subagent",
+      "native": false,
+      "model": {
+        "modelID": "pkg-only-model",
+        "providerID": "boundary-probe"
+      },
+      "prompt_sha256": "1aa1ce007b281c673092b9af6f0497cff50a1c8fe86f6bd8e2739e8cfa6c34b6"
+    },
+    "portable-review:unavailable": {
+      "mode": "subagent",
+      "native": false,
+      "model": {
+        "modelID": "nonexistent-model",
+        "providerID": "boundary-probe"
+      },
+      "prompt_sha256": "43a6045b2cf18677931b7ca76387cacab2118a8f6dcabc65cc97ada5b48b3990"
+    },
+    "portable-review:user-alias": {
+      "mode": "subagent",
+      "native": false,
+      "model": {
+        "modelID": "user-alias-model",
+        "providerID": "boundary-probe"
+      },
+      "prompt_sha256": "4bd2fa4a68d9b08319c98cc3774c28ea02b46d56d9b39441535ac39d4b13550c"
+    }
+  },
+  "child_requests": {
+    "explicit": {
+      "model": "explicit-model",
+      "parent_session_header": "ses_e9b6dff16ffeCkczxKb5vFtDQV",
+      "tools": [
+        "bash",
+        "edit",
+        "glob",
+        "grep",
+        "read",
+        "skill",
+        "webfetch",
+        "write"
+      ],
+      "system_exact_prefix": true
+    },
+    "user-alias": {
+      "model": "user-alias-model",
+      "parent_session_header": "ses_e9b6df8c4ffejmbEw3wVGUfR9N",
+      "tools": [
+        "bash",
+        "edit",
+        "glob",
+        "grep",
+        "read",
+        "skill",
+        "webfetch",
+        "write"
+      ],
+      "system_exact_prefix": true
+    },
+    "package-alias": {
+      "model": "pkg-only-model",
+      "parent_session_header": "ses_e9b6df79affeOsGok7y3ASBQBs",
+      "tools": [
+        "bash",
+        "edit",
+        "glob",
+        "grep",
+        "read",
+        "skill",
+        "webfetch",
+        "write"
+      ],
+      "system_exact_prefix": true
+    },
+    "omitted": {
+      "model": "parent-model",
+      "parent_session_header": "ses_e9b6df690ffeQN9KJuLNgtCl0X",
+      "tools": [
+        "bash",
+        "edit",
+        "glob",
+        "grep",
+        "read",
+        "skill",
+        "webfetch",
+        "write"
+      ],
+      "system_exact_prefix": true
+    }
+  },
+  "unavailable_model": {
+    "role": "portable-review:unavailable",
+    "mapped": "boundary-probe/nonexistent-model",
+    "native_error": "Model not found: boundary-probe/nonexistent-model",
+    "child_requests": 0,
+    "fallback_requests": 0
+  },
+  "implementation": {
+    "src/hosts/opencode-agents.ts": "96b7136e0bca306ea453b976f4a27a801077cc7e8f29872434b577e763337c66",
+    "src/native-hook-store.ts": "47e80c318f3c295a6cd4b991812329f11ea81c7693fd2400d4b82d020af5a61f",
+    "src/native-hook-writer.ts": "d8d6f28202a3d824816ae034d37f4f0ff429d2de842fc5390560e271cadb503c",
+    "src/hosts/opencode-hook-writer.ts": "698d1b75c564278069eeba8dfdef77827f8bf5f076d4535b99b25287ef825024",
+    "test/opencode-portable-agents.test.ts": "7af0802e58628626c0af96fbef73ff6749f3a7ff3f1e41653a142764fdbf49b4"
+  }
+}
