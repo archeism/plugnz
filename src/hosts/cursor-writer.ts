@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { createCapabilityEvidenceProfile } from '../capability-evidence';
 import { discoverCommands } from '../conversion';
 import { fingerprintTree } from '../fingerprint';
+import { resolveLegacyV1MarkerScopeId } from '../legacy-claim-ownership';
 import { recordedPriorSource } from '../prior-source-proof';
 import type { AddOptions, HostWriter, InstalledPlugin, PinOptions, PinOutcome } from '../host';
 import type {
@@ -648,13 +649,13 @@ function inventoryLocalStore(target: LifecycleTargetIdentity): TargetInventoryDa
     } catch {
       continue;
     }
-    const installation = readLocalInstallation(entry, dir);
+    const installation = readLocalInstallation(target.instance, entry, dir);
     if (installation !== undefined) installations.push(installation);
   }
   return { target, installations };
 }
 
-function readLocalInstallation(entry: string, dir: string): TargetInventoryData['installations'][number] | undefined {
+function readLocalInstallation(instance: string, entry: string, dir: string): TargetInventoryData['installations'][number] | undefined {
   const manifestPath = join(dir, '.cursor-plugin', 'plugin.json');
   if (!existsSync(manifestPath)) return undefined;
   let manifest: { name: string; version?: string } | undefined;
@@ -692,7 +693,7 @@ function readLocalInstallation(entry: string, dir: string): TargetInventoryData[
       contentRoots: [{ label: 'local', path: resolve(dir), fingerprint: digest }],
     };
   }
-  const ownership = ownershipOf(entry, marker);
+  const ownership = ownershipOf(instance, entry, marker, digest);
   return {
     nativeId: entry,
     packageName: manifest.name,
@@ -715,14 +716,16 @@ function unreadableFingerprint(nativeId: string): string {
   return hash.digest('hex');
 }
 
-function ownershipOf(nativeId: string, marker: Ownership | null): TargetOwnershipObservation {
-  if (marker === null || marker.scopeId === undefined) return { kind: 'unmanaged' };
+function ownershipOf(instance: string, nativeId: string, marker: Ownership | null, installedFingerprint: string): TargetOwnershipObservation {
+  if (marker === null) return { kind: 'unmanaged' };
   if (!ownsNativeDirectory(marker.pluginId, nativeId)) return { kind: 'ambiguous', proofIds: [`cursor-marker-${nativeId}`] };
+  const scopeId = marker.scopeId ?? resolveLegacyV1MarkerScopeId({ target: { kind: 'cursor', instance }, nativeId, marker, installedFingerprint, matchesPluginId: ownsNativeDirectory });
+  if (scopeId === undefined) return { kind: 'unmanaged' };
   return {
     kind: 'owned',
     proof: marker.proof === 'adopted' ? 'adopted' : 'created',
-    scopeId: marker.scopeId,
-    proofId: `cursor-${nativeId}-${marker.scopeId}`,
+    scopeId,
+    proofId: `cursor-${nativeId}-${scopeId}`,
   };
 }
 
@@ -888,8 +891,10 @@ function refuseForeignScope(target: string, scopeId: string, nativeId: string): 
   if (marker === null || !ownsNativeDirectory(marker.pluginId, nativeId)) {
     throw new Error(`Cursor local plugin ${nativeId} is not owned by deployment scope ${scopeId}`);
   }
-  // A scope-less plgnz marker is the pre-lifecycle collection record. Applying
-  // replaces it with the scoped marker. A different scope stays foreign.
+  // A scope-less plgnz marker is the pre-lifecycle collection record. Planning
+  // preflight and revalidateTargetPrecondition gate scope-less markers through
+  // ownershipOf -> resolveLegacyV1MarkerScopeId before apply/retire runs.
+  // Applying replaces it with the scoped marker; a different scope stays foreign.
   if (marker.scopeId !== undefined && marker.scopeId !== scopeId) {
     throw new Error(`Cursor local plugin ${nativeId} is not owned by deployment scope ${scopeId}`);
   }

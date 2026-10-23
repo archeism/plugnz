@@ -19,6 +19,7 @@ import { readCodexAgents } from './codex-agents';
 import { planCodexAgentConfig, type CodexAgentConfigRef } from './codex-agent-config';
 import { fingerprintTree } from '../fingerprint';
 import { codexMarketplaceMetadataFile, codexMarketplaceSourceFingerprint } from './codex-marketplace-proof';
+import { legacyV1MarkerMatchesScope, resolveLegacyV1MarkerScopeId } from '../legacy-claim-ownership';
 import { capturePriorSourceRepair, priorSourceRepairAllows, recordedPriorSource, releasePriorSourceRepair, type PriorSourceProof } from '../prior-source-proof';
 import type { AddOptions, HostWriter, InstalledPlugin, PinOptions, PinOutcome } from '../host';
 import type {
@@ -515,7 +516,8 @@ function assertNoWinningForeignVersion(slot: string, requested: string, id: stri
     const marker = readOwnership(candidate);
     if (wins(version, requested) && (marker?.pluginId !== id || marker.source !== source)
       && !(handle !== undefined && marker !== null && fingerprintTree(candidate) === handle.prior.installedFingerprint
-        && priorSourceRepairAllows(handle, proof => historicalGitMarker(marker, proof)))) {
+        && (priorSourceRepairAllows(handle, proof => historicalGitMarker(marker, proof))
+          || legacyV1MarkerMatchesScope({ target: handle.target, scopeId: handle.scopeId, nativeId: id, marker, installedFingerprint: handle.prior.installedFingerprint })))) {
       throw new Error(`foreign Codex cache version ${version} would remain active over ${requested}`);
     }
   }
@@ -531,7 +533,8 @@ function cleanupOwnedVersions(slot: string, active: string, id: string, source: 
     if (handle !== undefined && !handle.prior.contentRoots.some(root => root.path === candidate && root.fingerprint === fingerprintTree(candidate))) continue;
     if (marker?.pluginId === id && (marker.source === source || (handle !== undefined
       && fingerprintTree(candidate) === handle.prior.installedFingerprint
-      && priorSourceRepairAllows(handle, proof => historicalGitMarker(marker, proof))))) rmSync(candidate, { recursive: true, force: true });
+      && (priorSourceRepairAllows(handle, proof => historicalGitMarker(marker, proof))
+        || legacyV1MarkerMatchesScope({ target: handle.target, scopeId: handle.scopeId, nativeId: id, marker, installedFingerprint: handle.prior.installedFingerprint }))))) rmSync(candidate, { recursive: true, force: true });
   }
 }
 
@@ -811,7 +814,8 @@ function applyManagedCodexActivation(prepared: PreparedActivationMutation): Muta
   assertNoWinningForeignVersion(slot, version, handle.nativeId, source, handle);
   const marker = readOwnership(targetDir);
   if (marker !== null && (marker.source !== source || marker.pluginId !== handle.nativeId)
-    && !(fingerprintTree(targetDir) === handle.prior.installedFingerprint && priorSourceRepairAllows(handle, proof => historicalGitMarker(marker, proof)))) {
+    && !(fingerprintTree(targetDir) === handle.prior.installedFingerprint && (priorSourceRepairAllows(handle, proof => historicalGitMarker(marker, proof))
+      || legacyV1MarkerMatchesScope({ target: handle.target, scopeId: handle.scopeId, nativeId: handle.nativeId, marker, installedFingerprint: handle.prior.installedFingerprint })))) {
     throw new Error(`codex cache slot ${targetDir} has a different owned source identity; refusing to replace it`);
   }
   const before = cacheFingerprint(handle.nativeId);
@@ -1571,10 +1575,10 @@ function installationRecord(plugin: InstalledPlugin): TargetInstallationData {
   // never its target's bytes or ownership marker. Managed paths still reject
   // links before preparation/mutation; this is not adoption or content proof.
   const owned = plugin.path === undefined || linked ? null : readOwnership(plugin.path);
-  const ownership = owned?.pluginId === plugin.id
-    ? { kind: 'owned' as const, proof: 'created' as const, scopeId: owned.scopeId ?? `codex:${plugin.id}`, proofId: `marker:${plugin.id}` }
-    : { kind: 'unmanaged' as const };
   if (plugin.path === undefined) {
+    const ownership = owned?.pluginId === plugin.id
+      ? { kind: 'owned' as const, proof: 'created' as const, scopeId: owned.scopeId ?? `codex:${plugin.id}`, proofId: `marker:${plugin.id}` }
+      : { kind: 'unmanaged' as const };
     return {
       nativeId: plugin.id,
       packageName: plugin.name,
@@ -1591,6 +1595,12 @@ function installationRecord(plugin: InstalledPlugin): TargetInstallationData {
   const installedFingerprint = linked
     ? new CryptoHasher('sha256').update(`codex-unmanaged-symlink\0${readlinkSync(plugin.path)}`).digest('hex')
     : fingerprintTree(plugin.path);
+  const resolvedScopeId = owned?.pluginId === plugin.id
+    ? (owned.scopeId ?? resolveLegacyV1MarkerScopeId({ target: { kind: 'codex', instance: 'default' }, nativeId: plugin.id, marker: owned, installedFingerprint }))
+    : undefined;
+  const ownership = owned?.pluginId === plugin.id
+    ? { kind: 'owned' as const, proof: 'created' as const, scopeId: resolvedScopeId ?? `codex:${plugin.id}`, proofId: `marker:${plugin.id}` }
+    : { kind: 'unmanaged' as const };
   return {
     nativeId: plugin.id,
     packageName: plugin.name,
