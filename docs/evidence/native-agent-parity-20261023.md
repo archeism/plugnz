@@ -130,3 +130,19 @@ writes, recovery/adoption reports, command-global refusals, attempt identities,
 native-manifest validation, and native-only Kimi MCP retention. Failed test and
 smoke attempts were retained; regressions cover those boundaries. Skills remain
 unchanged: no skill-improvement or model-quality claim.
+
+Final merged checkpoint `ad5d40b` includes the validation repairs and upstream
+OMP capability fixes. Packed replay passed again (15.916 seconds for mixed
+cases), using pre-release package version 0.0.35:
+
+| Final artifact | SHA-256 |
+| --- | --- |
+| `cursor-kimi-final-skip/summary.json` | `98a580118ed9bb3784b87e3a92ca4fd4a30d9b7b99d31112138459a3ba82da71` |
+| `cursor-kimi-final-mixed/summary.json` | `efa17da15c5092baaf882303bbc1e97f8b4ecb07e86a638b4a07be9bb4dea2b0` |
+| Final installed `dist/plugnz.mjs` | `6c2ada8423fd5bf5d2b70ceefd5f9313dedf907ed8d3c5d198e2fbfcd37cecdc` |
+
+Final merged regression gate: **1,411 passed, seven existing opt-in skips,
+zero failures**, 11,059 assertions across 127 files (328.49 seconds).
+`bun run check` and `bun run build` passed; bundle 1,664 KiB.
+The earlier pre-final run exceeded its 300-second command deadline and is not
+counted as a successful gate; the final run used a 600-second deadline.
