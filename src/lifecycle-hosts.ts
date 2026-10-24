@@ -17,12 +17,14 @@ function plannerHost(
   adapter: LifecycleHostAdapter,
   plannedNativeId: (plugin: PluginSource) => string,
   announceDryRun?: PlannerHost['announceDryRun'],
+  addDisposition?: PlannerHost['addDisposition'],
 ): PlannerHost {
   return {
     kinds: [kind],
     adapter,
     plannedNativeId,
     ...(announceDryRun === undefined ? {} : { announceDryRun }),
+    ...(addDisposition === undefined ? {} : { addDisposition }),
   };
 }
 
@@ -44,8 +46,8 @@ export function createLifecyclePlannerHosts(): readonly PlannerHost[] {
     plannerHost('claude-code', createClaudeCodeLifecycleHost(), claudeCodeWriter.plannedNativeId),
     plannerHost('codex', codexLifecycle, codexWriter.plannedNativeId),
     plannerHost('dcode', dcodeLifecycle, dcodeWriter.plannedNativeId),
-    { ...plannerHost('kimi', createLifecycleHostAdapter(kimiLifecycle), kimiWriter.plannedNativeId), samePhysicalNativeIdentity: samePhysicalKimiNativeIdentity },
-    { ...plannerHost('cursor', cursorManagedLifecycle, cursorWriter.plannedNativeId, announceCursorDryRun), proveLegacyAdoption: proveCursorSelectedLegacyAdoption },
+    { ...plannerHost('kimi', createLifecycleHostAdapter(kimiLifecycle), kimiWriter.plannedNativeId, undefined, kimiWriter.addDisposition), samePhysicalNativeIdentity: samePhysicalKimiNativeIdentity },
+    { ...plannerHost('cursor', cursorManagedLifecycle, cursorWriter.plannedNativeId, announceCursorDryRun, cursorWriter.addDisposition), proveLegacyAdoption: proveCursorSelectedLegacyAdoption },
     plannerHost('omp', ompLifecycle, ompWriter.plannedNativeId),
     plannerHost('hermes', hermesLifecycle, hermesWriter.plannedNativeId),
     plannerHost('grok', createGrokLifecycleAdapter(), grokWriter.plannedNativeId),

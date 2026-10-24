@@ -8,7 +8,7 @@ import type { HookAdapter } from './hooks';
 import { readHookConfig } from './hooks';
 import { buildHooks } from './hook-build';
 import { preflightPortableHooks } from './hook-install';
-import { inventoryPackageSemantics, requiredSemanticsForOperation, type PackageSemanticInventory } from './semantic-inventory';
+import { inventoryPackageSemantics, inventoryWithoutIgnoredComponents, requiredSemanticsForOperation, type PackageSemanticInventory } from './semantic-inventory';
 import { createLifecycleReason } from './lifecycle-report';
 import { admitPackageSemanticsFromProfiles, PackageCapabilityError, type CapabilityEvidenceProfile, type PackageAdmission } from './capability-evidence';
 import { portableHookProfile } from './portable-hook-policy';
@@ -100,7 +100,7 @@ export function createNativeHookWriter(options: NativeHookWriterOptions): HostWr
       throw new CompatibilityError(store.id, 'hooks', 'unsupported', 'docs/portable-agents.md',
         store.id + ' does not combine portable hooks and portable agents in one package; split the package or remove one behavior');
     }
-    const delivery = withoutIgnoredComponents(inventoryPackageSemantics(plugin), ignored);
+    const delivery = inventoryWithoutIgnoredComponents(inventoryPackageSemantics(plugin), ignored.map(item => item.component));
     const skip = !hooks && agents === null;
     if (skip) {
       // Nothing is deliverable, so no route version gate applies; unsupported
@@ -243,26 +243,6 @@ function ownerMarker(
         agents: agents.map(agent => `${plugin.name}:${agent.name}`),
       };
   return JSON.stringify(value) + '\n';
-}
-
-/** Admission view of only what this host actually delivers; ignored semantics never enter it. */
-function withoutIgnoredComponents(inventory: PackageSemanticInventory, ignored: readonly IgnoredAddComponent[]): PackageSemanticInventory {
-  const components = new Set(ignored.map(item => item.component));
-  if (components.size === 0) return inventory;
-  const stripped: PackageSemanticInventory = {
-    ...inventory,
-    components: {
-      ...inventory.components,
-      agents: components.has('agents') ? [] : inventory.components.agents,
-    },
-    componentDefinitions: components.has('agents')
-      ? inventory.componentDefinitions.filter(definition => definition.kind !== 'agent')
-      : inventory.componentDefinitions,
-    requiredSemantics: inventory.requiredSemantics.filter(semantic => !components.has(semantic)),
-  };
-  if (!components.has('agents')) return stripped;
-  const { portableAgents: _ignoredAgents, ...rest } = stripped;
-  return rest;
 }
 
 /**

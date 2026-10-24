@@ -17,7 +17,7 @@ import { ownedActivation, retirementTombstone } from './owned-activation';
 import { bindRecordedPriorSource } from './prior-source-proof';
 import { lifecycleAttemptIdForPlannedScopes, type LifecyclePlan, type PlannerHost } from './planner';
 import { fingerprintTree } from './fingerprint';
-import { inventoryPackageSemantics, SemanticInventoryError, type PackageSemanticInventory } from './semantic-inventory';
+import { inventoryPackageSemantics, inventoryWithoutIgnoredComponents, SemanticInventoryError, type PackageSemanticInventory } from './semantic-inventory';
 import { CryptoHasher } from './runtime';
 import type { FrozenSource, PluginSource } from './source';
 import { readLifecycleState, type ActivationRecord, type DeploymentScopeRecord, type JournalAction, type JournalEntryRecord, type JournalState, type LifecycleAttemptRecord, type LifecycleStateV2 } from './state';
@@ -95,10 +95,12 @@ async function executeFrozen(
   let stopped: LifecycleReason | null = null;
   for (const row of plan.operations) {
     if (stopped !== null) {
-      outcomes.push(notAttempted(row.operation, stopped));
+      outcomes.push(row.operation.action === 'skip' ? plannedOutcome(plan, row.operation) : notAttempted(row.operation, stopped));
       continue;
     }
-    if (row.operation.action === 'retain-prior' || row.operation.action === 'not-attempted') {
+    // A skip is complete at planning: no journal, staging, or native write may
+    // follow from it, so its planned outcome is already the terminal truth.
+    if (row.operation.action === 'retain-prior' || row.operation.action === 'not-attempted' || row.operation.action === 'skip') {
       const planned = plan.report.outcomes.find((outcome) => outcome.operationId === row.operation.operationId);
       if (planned !== undefined) {
         outcomes.push(planned);
@@ -132,7 +134,7 @@ async function readbackCompletedRetirement(plan: FrozenPlan, operation: Lifecycl
     if (live !== undefined && (live.presence !== 'absent' || live.activation !== 'inactive')) {
       throw new Error(`retired native identity '${operation.nativeId}' reappeared or its absence is unverified; refusing foreign mutation`);
     }
-    const step = succeeded(operation, false);
+    const step = succeeded(plan, operation, false);
     return { ...step, outcome: { ...step.outcome, resourceState: 'absent', activationState: 'inactive' } };
   } catch (error) { return stop(operation, createLifecycleReason('runtime', 'runtime.operation-failed', unknownErrorDiagnostic(error))); }
 }
@@ -152,7 +154,7 @@ async function runOperation(
       return runActivation(plan, operation, hosts, ledger, 'route-migrate');
     case 'unchanged':
       ledger.clearPending(operation);
-      return succeeded(operation, false);
+      return succeeded(plan, operation, false);
     case 'retire-orphan':
       return runRetire(plan, operation, hosts, ledger);
     case 'disable-nonconforming':
@@ -179,7 +181,7 @@ async function runActivation(
   ledger: Ledger,
   action: 'install' | 'update' | 'route-migrate',
 ): Promise<OperationStep> {
-  if (ledger.journalState(plan.attemptId, operation.operationId) === 'completed') return succeeded(operation, false);
+  if (ledger.journalState(plan.attemptId, operation.operationId) === 'completed') return succeeded(plan, operation, false);
   const nativeId = operation.nativeId;
   if (nativeId === null) {
     return stop(operation, createLifecycleReason('internal', 'internal.invariant', `${action} '${operation.operationId}' has no native identity`));
@@ -312,7 +314,7 @@ async function runActivation(
     return pendingCleanup(operation);
   }
   ledger.markCompleted(plan, operation);
-  return succeeded(operation, receipt.changed, prepared.notices);
+  return succeeded(plan, operation, receipt.changed, prepared.notices);
 }
 
 async function prepareActivation(
@@ -376,12 +378,18 @@ async function prepareActivation(
     return refused(createLifecycleReason('internal', 'internal.invariant', `${action} '${operation.package}' retained snapshot changed during target observation`));
   }
   const inventory = inventoryPackageSemantics(plugin);
+  // Apply re-runs admission on the frozen bytes; ignored components must not
+  // gate the route here either, exactly as at planning time.
+  const ignored = host.addDisposition?.(plugin)?.ignored ?? [];
+  const admissionInventory = ignored.length === 0
+    ? inventory
+    : inventoryWithoutIgnoredComponents(inventory, ignored.map((component) => component.component));
   const resolvedPins = resolveRecordedPinExecutables(plugin.dir, recordedPins);
   if (resolvedPins.kind === 'refused') return refused(resolvedPins.reason);
   const pins = createResolvedLifecyclePins(resolvedPins.pins);
   const pinNames = resolvedPins.pins.map((pin) => pin.server);
   const notices = resolvedPins.dropped.map((server) => `dropped pin '${server}'`);
-  const snapshot = sealActivationSnapshot(operation, plan.attemptId, nativeId, frozen, plugin, packageFingerprint, inventory, observation.target, action);
+  const snapshot = sealActivationSnapshot(operation, plan.attemptId, nativeId, frozen, plugin, packageFingerprint, admissionInventory, observation.target, action);
   const observedInstallation = observation.installations.find(row => row.nativeId === nativeId);
   if (operation.scope.source.kind === 'git' && observedInstallation?.source?.locator != null
     && observedInstallation.source.locator !== operation.scope.source.locator) {
@@ -725,14 +733,16 @@ class Ledger {
       command: plan.report.command.name,
       phase: 'accepted',
       mutationStarted: existing?.mutationStarted === true || journal.some((row) => mutationBegan(row.state)),
-      scopeIds: plan.scopes.map((scope) => scope.scope.id),
+      // Skip-only scopes settle at planning; persisting them would create empty
+      // Desired records or churn a prior scoped record that nothing touched.
+      scopeIds: [...new Set([...(existing?.scopeIds ?? []), ...persistedScopes(plan).map((scope) => scope.scope.id)])],
       journal,
       startedAt: existing?.startedAt ?? this.now,
       updatedAt: this.now,
     };
     this.state = {
       ...this.state,
-      scopes: this.mergedScopes(plan, plan.attemptId),
+      scopes: this.mergedScopes(persistedScopes(plan), plan.attemptId),
       attempts: existing === undefined
         ? [...this.state.attempts, attempt]
         : this.state.attempts.map((row) => row.id === attempt.id ? attempt : row),
@@ -962,9 +972,9 @@ class Ledger {
     };
   }
 
-  private mergedScopes(plan: FrozenPlan, attemptId: string): DeploymentScopeRecord[] {
+  private mergedScopes(plannedScopes: readonly FrozenPlan['scopes'][number][], attemptId: string): DeploymentScopeRecord[] {
     const replacements = new Map<string, DeploymentScopeRecord>();
-    for (const planned of plan.scopes) {
+    for (const planned of plannedScopes) {
       const next = this.recordedScope(planned, attemptId);
       if (next !== null) replacements.set(planned.scope.id, next);
     }
@@ -979,7 +989,7 @@ class Ledger {
       merged.push(next);
       replaced.add(existing.id);
     }
-    for (const planned of plan.scopes) {
+    for (const planned of plannedScopes) {
       if (replaced.has(planned.scope.id)) continue;
       const created = replacements.get(planned.scope.id);
       if (created !== undefined) merged.push(created);
@@ -1145,7 +1155,13 @@ function mutationBegan(state: JournalState): boolean {
   }
 }
 
-function succeeded(operation: LifecyclePlanOperation, changed: boolean, notices: readonly string[] = []): OperationStep {
+function succeeded(
+  plan: FrozenPlan,
+  operation: LifecyclePlanOperation,
+  changed: boolean,
+  notices: readonly string[] = [],
+): OperationStep {
+  const ignoredComponents = plan.operations.find(row => row.operation.operationId === operation.operationId)?.ignoredComponents;
   return {
     stop: false,
     reason: null,
@@ -1157,6 +1173,7 @@ function succeeded(operation: LifecyclePlanOperation, changed: boolean, notices:
       changed,
       reason: null,
       ...(notices.length === 0 ? {} : { notices: [...notices] }),
+      ...(ignoredComponents === undefined || ignoredComponents.length === 0 ? {} : { ignoredComponents: [...ignoredComponents] }),
     },
   };
 }
@@ -1331,7 +1348,7 @@ function refusalReport(plan: FrozenPlan, reason: LifecycleReason, globalNotAttem
   const normalized = (operation: LifecyclePlanOperation): LifecyclePlanOperation => globalNotAttempted && operation.action === 'retain-prior'
     ? { ...operation, action: 'not-attempted', route: 'none' } : operation;
   const operations = plan.operations.map(row => ({ ...row, operation: normalized(row.operation) }));
-  const [first, ...rest] = operations;
+  const first = operations[0];
   if (first === undefined) {
     return finish(parseLifecycleReport({
       schemaVersion: 1,
@@ -1350,15 +1367,43 @@ function refusalReport(plan: FrozenPlan, reason: LifecycleReason, globalNotAttem
       },
     }));
   }
-  const outcomes = globalNotAttempted ? operations.map(row => notAttempted(row.operation, reason))
-    : [stop(first.operation, reason).outcome, ...rest.map((row) => notAttempted(row.operation, reason))];
+  const outcomes = globalNotAttempted
+    ? operations.map(row => row.operation.action === 'skip' ? plannedOutcome(plan, row.operation) : notAttempted(row.operation, reason))
+    : operations.map((row, index) => row.operation.action === 'skip' ? plannedOutcome(plan, row.operation)
+      : index === 0 ? stop(row.operation, reason).outcome : notAttempted(row.operation, reason));
   return finish(parseLifecycleReport({
     schemaVersion: 1,
     command: plan.report.command,
     plan: plan.report.plan.map(normalized),
     outcomes,
-    summary: { ...summaryFor(outcomes), ...(globalNotAttempted ? { reason, failureCategory: reason.category } : {}) },
+    // A command-global refusal is never converged, even when every outcome is
+    // a settled skip: keep the skipped pairs but fail the command summary.
+    summary: {
+      ...summaryFor(outcomes),
+      result: 'incomplete',
+      terminalPhase: globalNotAttempted ? 'preflight' : 'apply',
+      reason,
+      failureCategory: reason.category,
+    },
   }));
+}
+
+/**
+ * Scopes that still warrant durable records: a skip-only scope settles at
+ * planning with no journal, so it must neither appear as attempt membership
+ * nor persist an empty/churned Desired record. Intentional empty-set
+ * reconciliation (retire-only scopes) keeps its non-skip operations.
+ */
+function persistedScopes(plan: FrozenPlan): readonly FrozenPlan['scopes'][number][] {
+  return plan.scopes.filter((scope) => plan.operations.some((row) =>
+    row.operation.scope.id === scope.scope.id && row.operation.action !== 'skip'));
+}
+
+/** A skip is terminal at planning; refusals elsewhere must not rewrite its settled outcome. */
+function plannedOutcome(plan: FrozenPlan, operation: LifecyclePlanOperation): LifecycleOperationOutcome {
+  const planned = plan.report.outcomes.find((outcome) => outcome.operationId === operation.operationId);
+  if (planned !== undefined) return planned;
+  return stop(operation, createLifecycleReason('internal', 'internal.invariant', `skip '${operation.operationId}' has no planned outcome`)).outcome;
 }
 
 function summaryFor(outcomes: readonly LifecycleOperationOutcome[]): LifecycleReport['summary'] {

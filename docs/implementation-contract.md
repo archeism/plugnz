@@ -20,11 +20,20 @@ capability reason. Skip does not claim delivered or active-conforming content,
 but may contribute to an exit-0 converged command. Optional
 `ignoredComponents` on outcomes and installation-verification rows identifies
 what was excluded; mixed packages may succeed for their remaining components.
-Pi portable agents use this contract. An agent-only update retains any prior
-hook installation and ledger without writing a pending intent. A malformed
-native store or unrelated unsupported component still fails. Public behavior is
-covered in `test/pi-portable-agents-public.test.ts`; report validation checks
-non-delivery and contradictory skip states rather than duplicating enum lists.
+Pi portable agents and Cursor/Kimi agent components use this contract. An
+agent-only update retains any prior installation and its ledger without writing
+a pending intent. Skipped-only scopes stay out of new attempts and scope
+persistence even when another pair in the same batch mutates. A malformed native
+store, unrelated unsupported component or command-global failure still fails;
+settled skip outcomes remain truthful in the failing report. Public behavior is
+covered in `test/pi-portable-agents-public.test.ts`,
+`test/cursor-kimi-agent-skip.test.ts` and
+`test/cursor-kimi-agent-skip-executor.test.ts`.
+
+Frozen plans retain the original requested package identities separately from
+delivered Desired packages, so exclusions cannot invalidate the attempt hash.
+Read-only native-manifest validation precedes skipping; Kimi native-only MCP
+remains deliverable rather than being mistaken for an agent-only package.
 
 Migration preflight also requires an independently observed prior route. The
 writer SPI's optional `TargetInstallationData.observedRoute` comes from the

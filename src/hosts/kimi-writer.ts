@@ -22,6 +22,7 @@ import type { CapabilityOperation, PackageSemantic } from '../semantic-inventory
 import type { PlannerHost } from '../planner';
 import { normalizeCommandSources } from '../conversion';
 import { kimi, mcpCandidates, pluginsDir } from './kimi';
+import { announceAgentExclusion, agentExclusionDisposition, pruneExcludedAgents, refuseAgentOnlyPackage, type AgentExclusionSurface } from './agent-exclusion';
 import { pinPluginMcpFiles } from '../mcp-write';
 
 import { yamlParse, yamlStringify } from '../yaml';
@@ -69,10 +70,15 @@ export const kimiWriter: HostWriter = {
   legacyNativeIds: (plugin) => plugin.marketplace === undefined ? [] : [plugin.name],
   persistedNativeIdMayAlias: (persisted, requested) =>
     !persisted.includes('@') && (requested === persisted || requested.startsWith(`${persisted}@`)),
+  async preflightAdd(plugin: PluginSource): Promise<void> {
+    await announceAgentExclusion(kimiAgentSurface, plugin);
+  },
+  addDisposition: (plugin: PluginSource) => agentExclusionDisposition(kimiAgentSurface, plugin),
   async add(plugin: PluginSource, resolved: ResolvedSource, opts?: AddOptions): Promise<void | 'unchanged'> {
     const id = plugin.name;
     const ownedId = plugin.marketplace === undefined ? id : `${id}@${plugin.marketplace}`;
     assertId(id);
+    refuseAgentOnlyPackage(kimiAgentSurface, plugin);
     const root = pluginsDir();
     const managedRoot = join(root, 'managed');
     const target = join(managedRoot, id);
@@ -199,22 +205,17 @@ function stagePlugin(source: string, stage: string, expectedName: string): void 
   projectStagedKimi(stage, expectedName);
 }
 function projectStagedKimi(stage: string, expectedName: string): void {
+  pruneExcludedAgents(stage);
   normalizeCommandSources(stage);
   const manifest = readSourceManifest(stage);
-  if (manifest.name !== expectedName) throw new Error(`Kimi manifest identity does not match ${expectedName}`);
-  for (const key of ['hooks', 'agents', 'agent', 'executables']) if (manifest[key] !== undefined) throw new Error(`Kimi root manifest ${key} is unsupported without an explicit native declaration`);
+  validateKimiRootManifest(manifest, expectedName);
   const skills = join(stage, 'skills'); if (existsSync(skills) && !statSync(skills).isDirectory()) throw new Error(`Kimi skills path is not a directory: ${skills}`);
   if (existsSync(skills)) assertKimiSkillPolicies(skills);
   const native = join(stage, 'kimi.plugin.json');
   let supplied: Record<string, unknown> = {};
   if (existsSync(native)) {
     supplied = parseJson(native, 'Kimi native manifest');
-    if (supplied.name !== undefined && supplied.name !== expectedName) throw new Error(`Kimi native manifest name conflicts with ${expectedName}`);
-    if (supplied.version !== undefined && supplied.version !== manifest.version) throw new Error('Kimi native manifest version conflicts with Agent Plugins manifest');
-    if (supplied.skills !== undefined && supplied.skills !== './skills/' && supplied.skills !== './skills') throw new Error(`unsupported Kimi native skills pointer: ${String(supplied.skills)}`);
-    if (supplied.commands !== undefined && !['./commands/', './commands', './.claude/commands/', './.claude/commands'].includes(String(supplied.commands))) throw new Error(`unsupported Kimi native commands pointer: ${String(supplied.commands)}`);
-    for (const key of Object.keys(supplied)) if (!['name', 'version', 'description', 'skills', 'commands', 'mcpServers'].includes(key)) throw new Error(`unsupported Kimi native manifest field: ${key}`);
-    if (supplied.mcpServers !== undefined && !isObject(supplied.mcpServers)) throw new Error('Kimi native manifest mcpServers must be an object');
+    validateSuppliedKimiManifest(supplied, manifest, expectedName);
   }
   const commands = prepareCommands(stage, typeof supplied.commands === 'string' ? supplied.commands : undefined);
   const mcpServers = collectMcpServers(stage, manifest, supplied);
@@ -384,25 +385,66 @@ const kimiUpdateProfile = {
   evidence: ['docs/hosts/kimi.md'],
 } as const;
 
+const kimiInstallProfile = createCapabilityEvidenceProfile({
+  host: 'kimi',
+  detectedVersion: KIMI_GATED_VERSION,
+  sourceTypes: ['local', 'git'],
+  operations: ['install'],
+  route: 'native',
+  operationStatus: 'supported',
+  semantics: kimiSemantics(KIMI_INSTALL_SEMANTICS),
+  evidence: [
+    'docs/evidence/kimi-native-loader-20260922.json',
+    'docs/evidence/kimi-public-lifecycle-20260922.json',
+    'docs/hosts/kimi.md',
+  ],
+});
+
+/** Kimi has no native agent projection: agent definitions are a loud owner-approved exclusion, never native support. */
+const kimiAgentSurface: AgentExclusionSurface = {
+  host: 'kimi',
+  nativeId: (plugin) => plugin.marketplace === undefined ? plugin.name : `${plugin.name}@${plugin.marketplace}`,
+  installProfile: kimiInstallProfile,
+  nativeManifests: (plugin) => [join(plugin.dir, 'kimi.plugin.json'), join(plugin.dir, '.kimi-plugin', 'plugin.json')],
+  inspectNativeManifest: inspectKimiNativeManifest,
+};
+
+/** Read-only Kimi native-manifest validation; mirrors staging rules without staging anything. */
+function inspectKimiNativeManifest(plugin: PluginSource): boolean {
+  const manifest = readSourceManifest(plugin.dir);
+  validateKimiRootManifest(manifest, plugin.name);
+  const native = join(plugin.dir, 'kimi.plugin.json');
+  let supplied: Record<string, unknown> = {};
+  if (existsSync(native)) {
+    supplied = parseJson(native, 'Kimi native manifest');
+    validateSuppliedKimiManifest(supplied, manifest, plugin.name);
+    if (typeof supplied.commands === 'string' && !existsSync(join(plugin.dir, supplied.commands))) {
+      throw new Error(`Kimi native commands pointer has no directory: ${supplied.commands}`);
+    }
+  }
+  return collectMcpServers(plugin.dir, manifest, supplied) !== undefined;
+}
+
+function validateKimiRootManifest(manifest: Record<string, unknown>, expectedName: string): void {
+  if (manifest.name !== expectedName) throw new Error(`Kimi manifest identity does not match ${expectedName}`);
+  for (const key of ['hooks', 'agents', 'agent', 'executables']) if (manifest[key] !== undefined) throw new Error(`Kimi root manifest ${key} is unsupported without an explicit native declaration`);
+}
+
+function validateSuppliedKimiManifest(supplied: Record<string, unknown>, manifest: Record<string, unknown>, expectedName: string): void {
+  if (supplied.name !== undefined && supplied.name !== expectedName) throw new Error(`Kimi native manifest name conflicts with ${expectedName}`);
+  if (supplied.version !== undefined && supplied.version !== manifest.version) throw new Error('Kimi native manifest version conflicts with Agent Plugins manifest');
+  if (supplied.skills !== undefined && supplied.skills !== './skills/' && supplied.skills !== './skills') throw new Error(`unsupported Kimi native skills pointer: ${String(supplied.skills)}`);
+  if (supplied.commands !== undefined && !['./commands/', './commands', './.claude/commands/', './.claude/commands'].includes(String(supplied.commands))) throw new Error(`unsupported Kimi native commands pointer: ${String(supplied.commands)}`);
+  for (const key of Object.keys(supplied)) if (!['name', 'version', 'description', 'skills', 'commands', 'mcpServers'].includes(key)) throw new Error(`unsupported Kimi native manifest field: ${key}`);
+  if (supplied.mcpServers !== undefined && !isObject(supplied.mcpServers)) throw new Error('Kimi native manifest mcpServers must be an object');
+}
+
 export const kimiLifecycle: LifecycleHostDefinition = {
   id: 'kimi',
   evidenceProfiles: [
     createCapabilityEvidenceProfile({ ...kimiUpdateProfile, route: 'native' }),
     createCapabilityEvidenceProfile({ ...kimiUpdateProfile, route: 'managed' }),
-    createCapabilityEvidenceProfile({
-      host: 'kimi',
-      detectedVersion: KIMI_GATED_VERSION,
-      sourceTypes: ['local', 'git'],
-      operations: ['install'],
-      route: 'native',
-      operationStatus: 'supported',
-      semantics: kimiSemantics(KIMI_INSTALL_SEMANTICS),
-      evidence: [
-        'docs/evidence/kimi-native-loader-20260922.json',
-        'docs/evidence/kimi-public-lifecycle-20260922.json',
-        'docs/hosts/kimi.md',
-      ],
-    }),
+    kimiInstallProfile,
     createCapabilityEvidenceProfile({
       host: 'kimi',
       detectedVersion: KIMI_GATED_VERSION,

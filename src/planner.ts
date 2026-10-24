@@ -27,10 +27,12 @@ import {
 } from './lifecycle-runtime';
 import { ownedActivation } from './owned-activation';
 import { bindRecordedPriorSource } from './prior-source-proof';
+import type { AddDisposition } from './host';
 import { sameSourceBinding } from './scope-inventory';
 import { CryptoHasher } from './runtime';
 import {
   inventoryPackageSemantics,
+  inventoryWithoutIgnoredComponents,
   requiredSemanticsForOperation,
   SemanticInventoryError,
   type PackageSemanticInventory,
@@ -85,6 +87,8 @@ export type LifecyclePlan =
         readonly target?: LifecycleTargetIdentity;
         readonly selectorMode: 'all' | 'explicit' | 'retired';
         readonly desired: DesiredGenerationRecord | null;
+        /** Original selection authenticates the attempt even when skipped packages leave Desired. */
+        readonly requestedPackageIds?: readonly string[];
         readonly prune: 'planned' | 'blocked';
         /** Manual package removal leaves the recorded Source authority unchanged. */
         readonly retirementPackages?: readonly { readonly packageId: string; readonly nativeId: string }[];
@@ -94,6 +98,10 @@ export type LifecyclePlan =
         readonly reason: LifecycleReason | null;
       /** Exact retained ownership proof for a current retirement already committed by recovery. */
       readonly completedRetirement?: import('./state').TombstoneRecord;
+      /** Skip evidence: ignored components and whether a prior install stays retained. */
+      readonly skipped?: { readonly ignoredComponents: readonly string[]; readonly retained: boolean };
+      /** Delivered-but-ignored components; reported on every successful outcome. */
+      readonly ignoredComponents?: readonly string[];
         readonly journal:
           | { readonly kind: 'none' }
           | {
@@ -114,6 +122,13 @@ export interface PlannerHost {
   /** Private, read-only physical identity correlation; never grants Source ownership. */
   readonly samePhysicalNativeIdentity?: (plugin: PluginSource, prior: ActivationRecord, observation: TargetInventoryObservation) => SamePhysicalNativeIdentityEvidence | null;
   readonly announceDryRun?: (operation: LifecyclePlanOperation) => void;
+  /**
+   * Adapter-owned component disposition, evaluated before any journal or
+   * native write. Skipped pairs report a non-mutating skip with their ignored
+   * components; ignored components stay out of an otherwise delivered package
+   * and out of its Desired capability record.
+   */
+  readonly addDisposition?: (plugin: PluginSource) => AddDisposition | undefined;
 }
 
 export interface SamePhysicalNativeIdentityEvidence {
@@ -264,7 +279,9 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
 
   for (const item of prepared) {
     if (item.kind !== 'sync') continue;
-    const expected = item.selected.find(selected => selected.expectedAdoption !== undefined && !item.admissions?.has(selected.plugin.name));
+    // A skipped package retains its prior instead of adopting it, so it composes no admission.
+    const expected = item.selected.find(selected => selected.expectedAdoption !== undefined
+      && item.host?.addDisposition?.(selected.plugin)?.skip !== true && !item.admissions?.has(selected.plugin.name));
     if (expected !== undefined) return zeroWrite(command, input.dryRun, createLifecycleReason('internal', 'internal.invariant',
       `expected adoption admission for '${expected.plugin.name}' has no independently proven matching legacy operation`));
   }
@@ -326,7 +343,8 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
     scopes.push(item.kind === 'sync' && transitionalDesired.length > 0 ? {
       ...planned.scope,
       desired: desiredGeneration(loaded.state.scopes.find(row => row.id === item.scope.id), item.frozen.snapshot.revision, item.frozen.snapshot.fingerprint,
-        item.selected.map(selected => [...planned.scope.desired!.packages, ...transitionalDesired].find(row => row.packageId === selected.plugin.name)!), input.validatedAt),
+        // A skipped package keeps no Desired row; only planned packages merge here.
+        item.selected.flatMap(selected => [...planned.scope.desired!.packages, ...transitionalDesired].filter(row => row.packageId === selected.plugin.name)), input.validatedAt),
     } : planned.scope);
     operations.push(...planned.operations, ...transitional);
   }
@@ -346,8 +364,13 @@ export async function planLifecycle(input: PlanLifecycleInput): Promise<Lifecycl
     return operation.action === 'retain-prior' ? { ...operation, action: 'not-attempted' as const, route: 'none' as const } : operation;
   });
   return { kind: 'zero-write-failure', report: parseLifecycleReport({ ...plan.report, plan: current,
-    outcomes: current.map(operation => ({ ...operation, result: 'not-attempted',
-      ...(input.dryRun ? observedStates(operation, prepared, loaded.state) : { resourceState: 'unknown', activationState: 'unknown' }), changed: false, reason })),
+    outcomes: current.map(operation => operation.action === 'skip'
+      // A settled skip keeps its planned outcome; the adoption refusal is
+      // about the sibling that expected a mutation fence, not this pair.
+      ? plan.report.outcomes.find(outcome => outcome.operationId === operation.operationId)
+        ?? { ...operation, result: 'skipped', resourceState: 'absent', activationState: 'inactive', changed: false, reason }
+      : { ...operation, result: 'not-attempted',
+        ...(input.dryRun ? observedStates(operation, prepared, loaded.state) : { resourceState: 'unknown', activationState: 'unknown' }), changed: false, reason }),
     summary: { result: 'incomplete', terminalPhase: 'preflight', mutationStarted: false, changed: false,
       failureCategory: 'internal', reason, recoveryId: null, readbackId: null } }) };
 }
@@ -367,6 +390,8 @@ async function composeLegacyAdmissions(
       record.phase === 'committed' && record.legacy.original.attemptId === proof.original.attemptId
       && record.legacy.original.operationId === proof.original.operationId));
     for (const selected of item.selected) {
+      // A skipped package mutates nothing, so it neither needs nor proves an adoption.
+      if (item.host?.addDisposition?.(selected.plugin)?.skip === true) continue;
       if (!selected.adoptionRequested || proofs.length === 0) continue;
       if (item.host?.proveLegacyAdoption === undefined || item.observation === null) {
         return defect(createLifecycleReason('capability', 'capability.unverified', 'target has no evidenced legacy adoption projection', 'legacy-adoption-projection'));
@@ -642,14 +667,28 @@ async function planSync(
       continue;
     }
     const nativeId = item.host === null ? selected.plugin.name : item.host.plannedNativeId(selected.plugin);
-    packages.push({
-      packageId: selected.plugin.name,
-      nativeId,
-      sourceRelativeDir: selected.plugin.relativeDir && selected.plugin.relativeDir.length > 0 ? selected.plugin.relativeDir : '.',
-      requiredCapabilities: [...requiredSemanticsForOperation(inventory, 'install')].sort(),
-      adoptionRequested: selected.adoptionRequested,
-    });
-    const row = await classifyDesired(item, selected, inventory, nativeId, attemptId, state, command === 'update');
+    let disposition: AddDisposition | undefined;
+    try {
+      disposition = item.host?.addDisposition?.(selected.plugin);
+    } catch (error) {
+      if (error instanceof SemanticInventoryError) return defect(error.reason);
+      return defect(createLifecycleReason('internal', 'internal.defect', unknownErrorDiagnostic(error)));
+    }
+    if (disposition?.skip !== true) {
+      // Ignored components leave the Desired record too: it must never claim
+      // delivery of a capability this host deliberately did not project.
+      const delivered = disposition === undefined || disposition.ignored.length === 0
+        ? inventory
+        : inventoryWithoutIgnoredComponents(inventory, disposition.ignored.map((component) => component.component));
+      packages.push({
+        packageId: selected.plugin.name,
+        nativeId,
+        sourceRelativeDir: selected.plugin.relativeDir && selected.plugin.relativeDir.length > 0 ? selected.plugin.relativeDir : '.',
+        requiredCapabilities: [...requiredSemanticsForOperation(delivered, 'install')].sort(),
+        adoptionRequested: selected.adoptionRequested,
+      });
+    }
+    const row = await classifyDesired(item, selected, inventory, nativeId, attemptId, state, command === 'update', disposition);
     if (row.kind === 'defect') return row;
     classified.push(row);
   }
@@ -663,6 +702,7 @@ async function planSync(
       target: item.observation?.target ?? item.entry.target,
       selectorMode: item.entry.selectors === undefined ? 'all' : 'explicit',
       desired: desiredGeneration(existing, item.frozen.snapshot.revision, item.frozen.snapshot.fingerprint, packages, validatedAt),
+      requestedPackageIds: item.selected.map((selected) => selected.plugin.name),
       prune: blocks || retirements.operations.some((row) => row.operation.action !== 'retire-orphan') ? 'blocked' : 'planned',
     },
     operations: [...classified.map((row) => row.operation), ...retirements.operations],
@@ -677,6 +717,7 @@ async function classifyDesired(
   attemptId: string,
   state: LifecycleStateV2,
   reapplyMatchingUpdate: boolean,
+  disposition: AddDisposition | undefined,
 ): Promise<Classified | Defect> {
   const operationId = operationIdentity('desired-pair', item.scope.id, selected.plugin.name, nativeId, `${item.frozen.snapshot.fingerprint}\0${attemptId}`);
   const snapshotId = sourceSnapshotId(item.frozen);
@@ -708,6 +749,31 @@ async function classifyDesired(
     && installation.source.locator !== item.scope.source.locator) {
     return defect(createLifecycleReason('internal', 'internal.ambiguous-ownership', 'owned native Git origin differs from the recorded deployment Source'));
   }
+  if (disposition?.skip === true) {
+    // Ownership guards above already ran; a skip needs no native route, so no
+    // host version gates it. Nothing is delivered and any prior install stays.
+    for (const ignored of disposition.ignored) console.error(ignored.warning);
+    const retained = installation?.presence === 'present';
+    return classified(
+      operationId,
+      'desired-pair',
+      item.scope,
+      snapshotId,
+      selected.plugin.name,
+      nativeId,
+      'skip',
+      'none',
+      createLifecycleReason(
+        'capability',
+        'capability.unsupported',
+        `target '${item.entry.target.kind}' deliberately skipped delivery: no component of '${selected.plugin.name}' was installed here (ignored: ${disposition.ignored.map((component) => component.component).join(', ')})`,
+        disposition.ignored[0]?.component ?? 'install',
+      ),
+      { ignoredComponents: disposition.ignored.map((component) => component.component), retained },
+    );
+  }
+  // A delivered package still discloses every component it did not deliver.
+  const ignoredComponents = disposition?.ignored.map((component) => component.component);
   const capabilityOperation = replacing ? 'update' : 'install';
   let version: TargetVersionObservation;
   try {
@@ -733,7 +799,8 @@ async function classifyDesired(
       const unchanged = await selectPairRoute(item, selected.plugin, inventory, nativeId, operationId, attemptId, 'install', version, state.scopes.find(row => row.id === item.scope.id), activation, true);
       if (unchanged.kind === 'defect') return unchanged;
       if (unchanged.kind === 'selected' && unchanged.route === recordedRoute && !unchanged.provenanceRepair) {
-        return classified(operationId, 'desired-pair', item.scope, snapshotId, selected.plugin.name, nativeId, 'unchanged', recordedRoute, null);
+        if (ignoredComponents !== undefined) for (const item of disposition?.ignored ?? []) console.error(item.warning);
+        return classified(operationId, 'desired-pair', item.scope, snapshotId, selected.plugin.name, nativeId, 'unchanged', recordedRoute, null, undefined, ignoredComponents);
       }
     }
     const prior = priorKind(activation);
@@ -749,6 +816,7 @@ async function classifyDesired(
     }
     return classified(operationId, 'desired-pair', item.scope, snapshotId, selected.plugin.name, nativeId, 'not-attempted', 'none', decision.reason);
   }
+  if (ignoredComponents !== undefined) for (const item of disposition?.ignored ?? []) console.error(item.warning);
   if (recordedRoute !== null && recordedRoute !== decision.route && installation?.observedRoute === undefined) {
     return classified(operationId, 'desired-pair', item.scope, snapshotId, selected.plugin.name, nativeId, 'retain-prior', recordedRoute,
       createLifecycleReason('capability', 'capability.unverified', 'route migration has no independently observed prior route', 'migration-prior-route'));
@@ -756,7 +824,7 @@ async function classifyDesired(
   const matchingBytes = !decision.provenanceRepair && sameBytes(activation, installation, selected.plugin)
     && installation?.activation === 'active' && installation.enablement === 'enabled';
   const action = chosenAction(replacing, recordedRoute, decision.route, matchingBytes, reapplyMatchingUpdate);
-  return classified(operationId, 'desired-pair', item.scope, snapshotId, selected.plugin.name, nativeId, action, decision.route, null);
+  return classified(operationId, 'desired-pair', item.scope, snapshotId, selected.plugin.name, nativeId, action, decision.route, null, undefined, ignoredComponents);
 }
 
 async function planOmissions(
@@ -852,6 +920,12 @@ async function selectPairRoute(
     return defect(createLifecycleReason('internal', 'internal.invariant', `package '${plugin.name}' has no content fingerprint`));
   }
   try {
+    // Admission sees only what this host delivers; ignored components never
+    // gate the route. Malformed Source already failed in the caller's inventory.
+    const ignored = item.host.addDisposition?.(plugin)?.ignored ?? [];
+    const admissionInventory = ignored.length === 0
+      ? inventory
+      : inventoryWithoutIgnoredComponents(inventory, ignored.map((component) => component.component));
     const pins = createResolvedLifecyclePins([]);
     const snapshot = createFrozenPackageSnapshot({
       operationId,
@@ -869,7 +943,7 @@ async function selectPairRoute(
       relativePackagePath: plugin.relativeDir && plugin.relativeDir.length > 0 ? plugin.relativeDir : '.',
       snapshotFingerprint: item.frozen.snapshot.fingerprint,
       packageFingerprint: plugin.contentFingerprint,
-      inventory,
+      inventory: admissionInventory,
     });
     const provenanceRepair = bindRecordedPriorSource(snapshot, item.scope, recordedScope, activation, item.observation.installations.find(row => row.nativeId === nativeId));
     const installed = item.observation.installations.find(row => row.nativeId === nativeId);
@@ -1067,9 +1141,10 @@ function frozenPlan(
   }
   const outcomes = operations.map((row) => {
     const outcome = outcomeFor(row);
-    return input.dryRun ? { ...outcome, ...observedStates(row.operation, prepared, state) } : outcome;
+    // A skip already reports its own truthful retained/absent state.
+    return input.dryRun && row.operation.action !== 'skip' ? { ...outcome, ...observedStates(row.operation, prepared, state) } : outcome;
   });
-  const failed = outcomes.filter((outcome) => outcome.result !== 'succeeded');
+  const failed = outcomes.filter((outcome) => outcome.result !== 'succeeded' && outcome.result !== 'skipped');
   const converged = failed.length === 0;
   const failureCategory = converged ? null : failed[0]?.reason?.category ?? 'internal';
   const report = parseLifecycleReport({
@@ -1139,13 +1214,34 @@ function outcomeFor(row: FrozenOperation): LifecycleReport['outcomes'][number] {
       };
     case 'retire-orphan':
       return { ...operation, result: 'succeeded', resourceState: 'absent', activationState: 'inactive', changed: false, reason: null };
-    case 'skip':
-      return { ...operation, result: 'skipped', resourceState: 'absent', activationState: 'inactive', changed: false, reason: row.reason };
+    case 'skip': {
+      const skipped = row.skipped;
+      const retained = skipped?.retained === true;
+      return {
+        ...operation,
+        result: 'skipped',
+        resourceState: retained ? 'retained' : 'absent',
+        activationState: retained ? 'retained-prior' : 'inactive',
+        changed: false,
+        reason: row.reason,
+        ...(skipped === undefined || skipped.ignoredComponents.length === 0 ? {} : { ignoredComponents: skipped.ignoredComponents }),
+      };
+    }
     case 'install':
     case 'update':
     case 'unchanged':
-    case 'route-migrate':
-      return { ...operation, result: 'succeeded', resourceState: 'present', activationState: 'active-conforming', changed: false, reason: null };
+    case 'route-migrate': {
+      const ignoredComponents = row.ignoredComponents;
+      return {
+        ...operation,
+        result: 'succeeded',
+        resourceState: 'present',
+        activationState: 'active-conforming',
+        changed: false,
+        reason: null,
+        ...(ignoredComponents === undefined || ignoredComponents.length === 0 ? {} : { ignoredComponents }),
+      };
+    }
     default: {
       const unreachable: never = operation.action;
       throw new Error(`unknown plan action ${String(unreachable)}`);
@@ -1186,6 +1282,8 @@ function classified(
   action: LifecyclePlanAction,
   route: LifecycleRoute,
   reason: LifecycleReason | null,
+  skipped?: { readonly ignoredComponents: readonly string[]; readonly retained: boolean },
+  ignoredComponents?: readonly string[],
 ): Classified {
   return {
     kind: 'classified',
@@ -1193,6 +1291,8 @@ function classified(
     operation: {
       operation: planOperation(operationId, coverage, scope, sourceSnapshotId, packageName, nativeId, action, route),
       reason,
+      ...(skipped === undefined ? {} : { skipped }),
+      ...(ignoredComponents === undefined || ignoredComponents.length === 0 ? {} : { ignoredComponents }),
       journal: journalFor(action),
     },
   };
@@ -1487,7 +1587,7 @@ export function lifecycleAttemptIdForPlannedScopes(
     : plannedAttemptIdentity(
     planned.scope.id,
     planned.desired?.sourceFingerprint,
-    planned.desired?.packages.map((pkg) => pkg.packageId),
+    planned.requestedPackageIds ?? planned.desired?.packages.map((pkg) => pkg.packageId),
     planned.selectorMode === 'retired' || planned.desired === null,
   )));
 }
@@ -1496,6 +1596,7 @@ type PlannedAttemptScope = {
   readonly scope: { readonly id: string };
   readonly selectorMode: 'all' | 'explicit' | 'retired';
   readonly desired: { readonly sourceFingerprint: string; readonly packages: readonly { readonly packageId: string }[] } | null;
+  readonly requestedPackageIds?: readonly string[];
   readonly retirementPackages?: readonly { readonly packageId: string; readonly nativeId: string }[];
 };
 

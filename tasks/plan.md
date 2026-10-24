@@ -7,7 +7,7 @@ The previous [distributor plan](archive/distributor/plan.md) and [issue index](a
 
 ## Outcome and fixed contract
 
-This increment extends portable agent definitions and deterministic model selection to OMP, OpenCode and Grok Build. Pi is an explicit owner-approved exception: loudly warn and ignore portable agents without failing, not a native parity claim ([decision](https://github.com/archeism/plugnz/issues/101#issuecomment-6346092250)). Charles subsequently deferred Cursor, Kimi, Hermes and DCode; their open delivery issues remain TODOs, not support claims. Preserve the qualified Claude Code, Codex and ZCode CLI baseline at `bda34a0390667ed3ca32635f29d0bd35256eb5a9` (released as 0.0.31).
+The first release extends portable agent definitions and deterministic model selection to OMP, OpenCode and Grok Build, plus Pi's owner-approved warning/skip behavior. Charles subsequently chose the same exclusion policy for Cursor and Kimi ([Cursor decision](https://github.com/archeism/plugnz/issues/96#issuecomment-6382409313), [Kimi decision](https://github.com/archeism/plugnz/issues/97#issuecomment-6382409586)). Those three do not claim native agent execution; Hermes and DCode remain deferred. Preserve the qualified Claude Code, Codex and ZCode CLI baseline at `bda34a0390667ed3ca32635f29d0bd35256eb5a9` (released as 0.0.31).
 
 Use the [existing authoring contract](../docs/portable-agents.md): one name, description and prose body; optional alias and explicit destination mapping. Explicit mapping wins over user alias, then package alias; absent mapping omits the native model field. `fast` and `smart` are naming conventions, not automatic provider guesses. Native tools remain the harness's responsibility. Do not add tool/permission preferences, a daemon, ACP execution or another agent runtime.
 
@@ -18,19 +18,19 @@ A native agent is a definition the harness can discover and execute as a child. 
 ```mermaid
 flowchart TD
   A[OMP and Cursor route decision] --> O[OMP delivery]
-  A --> C[Cursor delivery]
+  A --> C[Cursor warning/skip]
   M[Native model fallback policy decision] --> O
   M --> C
-  B[Kimi / Hermes / Grok / DCode route decision] --> K[Kimi delivery]
+  B[Kimi / Hermes / Grok / DCode route decision] --> K[Kimi warning/skip]
   B --> H[Hermes delivery]
   B --> G[Grok delivery]
   B --> D[DCode delivery]
   E[Pi and OpenCode route decision] --> P[Pi delivery]
   E --> OC[OpenCode delivery]
   O --> F[Combined acceptance and publication]
-  C -. deferred .-> TODO[Future native integrations]
-  K -. deferred .-> TODO
-  H -. deferred .-> TODO
+  C --> F
+  K --> F
+  H -. deferred .-> TODO[Future native integrations]
   G --> F
   D -. deferred .-> TODO
   P --> F
@@ -61,16 +61,16 @@ Charles chose [preserve native model policy](https://github.com/archeism/plugnz/
 
 1. [Portable agents: deliver native OMP integration](https://github.com/archeism/plugnz/issues/95)
 
-Cursor (#96/#105) is explicitly deferred without adapter changes. Its plugin loader strips agent model fields; the separate P-stack convention supplies a model in the parent's runtime Task call rather than preserving install-time mappings.
+Cursor (#96/#105) uses loud warning/skip rather than native agent installation. Its plugin loader strips model fields; the separate P-stack convention supplies a model in the parent's runtime Task call and is not adopted.
 
 ### Remaining plugin adapters
 
-1. [Portable agents: deliver native Kimi integration](https://github.com/archeism/plugnz/issues/97)
+1. [Portable agents: warn and skip Kimi without failing](https://github.com/archeism/plugnz/issues/97)
 2. [Portable agents: deliver native Hermes integration](https://github.com/archeism/plugnz/issues/98)
 3. [Portable agents: deliver native Grok Build integration](https://github.com/archeism/plugnz/issues/99)
 4. [Portable agents: deliver native DCode integration](https://github.com/archeism/plugnz/issues/100)
 
-Grok Build proceeds through its native plugin-agent loader. Kimi, Hermes and DCode were explicitly deferred after source/native investigation: Kimi Code 2.1.1 discovers plugin agents but has no agent-file model field; Hermes has no named-agent registrar or per-agent model selector; DCode excludes agents from plugin discovery and its separate user agent store is assistant-scoped. Keep these TODOs open and their adapters unchanged.
+Grok Build proceeds through its native plugin-agent loader. Kimi Code 2.1.1 discovers plugin agents but has no agent-file model field; its approved delivery is now explicit warning/skip. Hermes has no named-agent registrar or per-agent model selector; DCode excludes agents from plugin discovery and its separate user agent store is assistant-scoped. Keep the Hermes/DCode TODOs open and their adapters unchanged.
 
 ### Extension scope checkpoint
 
@@ -83,7 +83,7 @@ OpenCode uses its native plugin configuration hook and existing owned package li
 
 [Accept portable-agent parity and publish the support matrix](https://github.com/archeism/plugnz/issues/103)
 
-Current acceptance covers three native integrations (OMP, OpenCode, Grok Build) and Pi's owner-approved warning/skip behavior. Cursor, Kimi, Hermes and DCode remain open deferred TODOs outside this increment. Do not claim the original eight-target parity milestone is complete. Publish verified work via existing exact-SHA CI gates; fleet rollout is separate.
+The first acceptance covers three native integrations (OMP, OpenCode, Grok Build) and Pi's warning/skip behavior. The follow-up adds Cursor/Kimi warning/skip under #96/#97; Hermes and DCode remain open deferred TODOs. Do not claim the original eight-target parity milestone is complete. Publish verified work via existing exact-SHA CI gates; fleet rollout is separate.
 
 ## Per-delivery verification
 

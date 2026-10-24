@@ -87,3 +87,46 @@ scope and source discovery. Reviews and native requests, not copied definitions
 or successful launcher exits, supplied acceptance. Skills unchanged; no skill
 revision, skill A/B improvement or model-quality claim. Product protections live
 in behavior regressions and executable native probes.
+
+## Cursor/Kimi warning-and-skip follow-up
+
+The owner subsequently replaced Cursor/Kimi native-agent delivery with the
+same non-failing exclusion policy as Pi
+([Cursor #96](https://github.com/archeism/plugnz/issues/96),
+[Kimi #97](https://github.com/archeism/plugnz/issues/97)).
+The matrix above records the earlier increment; Cursor and Kimi are no longer
+deferred under the amended scope. Hermes and DCode remain deferred.
+
+Agent-only packages warn on stderr and report `skipped` with
+`ignoredComponents: ["agents"]`, without native or ledger mutation. Mixed
+packages retain supported components and omit both agent roots and the portable
+agent sidecar. Updates to agent-only sources retain the previous installation.
+Malformed source/native declarations and command-global failures still fail.
+This is not native agent registration or execution support.
+
+Packed Node CLI smoke exercised both hosts: preview/install/repeat, mixed skill
+delivery, update preview/update/sync retention, and malformed-source refusal.
+Kimi used its real npm runtime 2.0.1 in an isolated network namespace; Cursor
+used its existing directory-managed adapter. Sources and unrelated user bytes
+survived. Mixed smoke completed in 15.207 seconds. No paid model inference;
+token/cache counters and peak memory were not measured.
+
+Raw candidate evidence remains under
+`/root/.local/state/plugnz-native-parity/` on `charles-netcup`:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `cursor-kimi-candidate-skip/summary.json` | `75f4415fd7afa911e6677f4b0a1d1d9bd86f35d994b09949ada1e6d641c56663` |
+| `cursor-kimi-candidate-mixed/summary.json` | `54e9815cc4a5211d67ffb28f9d40ad1b309700eea418abcb81c2d5eec4f67138` |
+| Candidate installed `dist/plugnz.mjs` | `044aceb009b0bb024d12ba9f74a74b1eee83cadba889eb4f99dd1fd79e742dd8` |
+
+That candidate carries pre-release version 0.0.34, not a registry feature
+claim. Subsequent validation-only repairs reject canonical Kimi `executables`
+and missing native commands directories; final release receipts and published
+artifact replay belong to #96/#97.
+
+Independent Sol6.1 reviews found and approved fixes for skipped-scope ledger
+writes, recovery/adoption reports, command-global refusals, attempt identities,
+native-manifest validation, and native-only Kimi MCP retention. Failed test and
+smoke attempts were retained; regressions cover those boundaries. Skills remain
+unchanged: no skill-improvement or model-quality claim.

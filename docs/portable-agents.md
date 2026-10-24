@@ -3,10 +3,10 @@
 Author one agent definition and install it through a harness's native plugin loader.
 Qualified targets are Claude Code 2.1.285/2.1.296, Codex 0.161.0/0.162.0,
 ZCode CLI 0.16.9, OMP 18.8.7, OpenCode 1.19.0 and Grok Build 1.0.46.
-Pi deliberately warns and skips portable agents without failing; it is not
-qualified for execution. Cursor, Kimi, Hermes and DCode remain unchanged and
+Cursor, Kimi and Pi deliberately warn and skip agents without failing; this does
+not qualify them for execution. Hermes and DCode remain unchanged and
 explicitly deferred as [owner follow-ups](../tasks/todo.md#owner-deferred-follow-ups).
-These targets refuse this format until their native agent projection is qualified.
+Those two targets refuse this format until their native projection is qualified.
 Codex also projects plain canonical `agents/*.md` with only `name` and
 `description`, without a sidecar. Other native packages keep their existing behavior.
 
@@ -181,6 +181,34 @@ to agent-only skips the update and retains its previous hooks and ledger unchang
 reported as `retained-prior`; explicitly remove that installation to retire its hooks. This is the
 [owner-approved deferral](https://github.com/archeism/plugnz/issues/101#issuecomment-6346092250),
 not a claim of Pi parity.
+
+## Cursor and Kimi: explicit non-failing skip
+
+The owner chose the same warning/skip policy as Pi rather than a runtime model
+workaround ([Cursor decision](https://github.com/archeism/plugnz/issues/96#issuecomment-6382409313),
+[Kimi decision](https://github.com/archeism/plugnz/issues/97#issuecomment-6382409586)).
+Canonical `agents/` and `.claude/agents/` definitions are excluded, with or without
+the portable sidecar. No child agent is installed or registered.
+
+- Agent-only `add`, `install`, `update` and `sync`, including previews, warn on
+  stderr and report `action: "skip"`, `result: "skipped"` and
+  `ignoredComponents: ["agents"]`. A skipped pair creates no installation record
+  and does not advance its desired scope. Incidental README files do not turn it
+  into an installation.
+- Mixed packages still use the existing native lifecycle and capability gates.
+  Supported components are installed; staged agent roots and `plugnz.agents.json`
+  are removed, while original and frozen source bytes remain intact. Outcomes
+  and install/add verification rows explicitly disclose the ignored agents.
+- An agent-only update or sync retains the previous working installation and its
+  recorded ownership. Explicit removal is required to retire that installation.
+- Malformed definitions/manifests, unsupported other components, ownership
+  conflicts and native failures remain errors. Explicit native manifest
+  `agent`/`agents` declarations remain unsupported and are refused rather than
+  leaving dangling references or inferring custom agent paths.
+
+Native agent execution remains unqualified on both targets; version restrictions
+for their other components are unchanged.
+
 
 ## Codex native roles
 

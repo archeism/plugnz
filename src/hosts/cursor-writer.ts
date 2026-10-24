@@ -23,6 +23,7 @@ import type { LifecyclePlanOperation } from '../lifecycle-report';
 import { createLifecycleHostAdapter, createTargetInventoryObservation } from '../lifecycle-runtime';
 import { pinPluginMcpFiles } from '../mcp-write';
 import { cursorRoot, homeRoot } from '../paths';
+import { announceAgentExclusion, agentExclusionDisposition, assertNoAgentManifestDeclarations, pruneExcludedAgents, refuseAgentOnlyPackage, type AgentExclusionSurface } from './agent-exclusion';
 import { CryptoHasher, spawnSync } from '../runtime';
 import type { SourceType } from '../semantic-inventory';
 import type { PluginSource, ResolvedSource } from '../source';
@@ -66,10 +67,15 @@ export const cursorWriter: HostWriter = {
     const name = persisted.split('@', 1)[0] ?? persisted;
     return requested !== persisted && (requested === name || requested.startsWith(`${name}@`));
   },
+  async preflightAdd(plugin: PluginSource): Promise<void> {
+    await announceAgentExclusion(cursorAgentSurface, plugin);
+  },
+  addDisposition: (plugin: PluginSource) => agentExclusionDisposition(cursorAgentSurface, plugin),
   async add(plugin: PluginSource, resolved: ResolvedSource, opts?: AddOptions): Promise<void | 'unchanged'> {
     const id = plugin.name;
-    const ownershipId = plugin.marketplace === undefined ? id : `${id}@${plugin.marketplace}`;
+    refuseAgentOnlyPackage(cursorAgentSurface, plugin);
     assertSafeIdentity(id);
+    const ownershipId = plugin.marketplace === undefined ? id : `${id}@${plugin.marketplace}`;
     const root = localDir();
     const target = join(root, id);
     assertManagedDirectory(root, target);
@@ -127,6 +133,7 @@ export const cursorWriter: HostWriter = {
 function stagePlugin(source: string, stage: string, expectedName: string): void {
   assertNoSymlinks(source);
   cpSync(source, stage, { recursive: true });
+  pruneExcludedAgents(stage);
   projectCommandsToSkills(stage);
   ensureCursorManifest(stage, expectedName);
   validateStage(stage, expectedName);
@@ -177,16 +184,10 @@ function ensureCursorManifest(stage: string, expectedName: string): void {
 function validateStage(stage: string, expectedName: string): void {
   assertNoSymlinks(stage);
   const native = parseManifest(join(stage, '.cursor-plugin', 'plugin.json'));
-  if (native.name !== expectedName) throw new Error(`Cursor manifest identity does not match ${expectedName}`);
-  const canonicalPath = manifestCandidates(stage).find(existsSync);
-  if (canonicalPath !== undefined) {
-    const canonical = parseManifest(canonicalPath);
-    if (native.name !== canonical.name || (canonical.version !== undefined && native.version !== canonical.version)) {
-      throw new Error('Cursor native manifest identity does not match the canonical manifest');
-    }
-  }
+  assertCursorManifestIdentity(stage, native, expectedName);
   const skills = join(stage, 'skills');
   if (existsSync(skills) && !statSync(skills).isDirectory()) throw new Error('Cursor stage skills path is not a directory');
+  assertNoAgentManifestDeclarations('Cursor', [join(stage, '.cursor-plugin', 'plugin.json'), ...manifestCandidates(stage)]);
 }
 
 function manifestCandidates(root: string): string[] {
@@ -198,7 +199,9 @@ function sourceVersion(root: string): string | undefined {
   return manifest === undefined ? undefined : parseManifest(manifest).version;
 }
 
-function parseManifest(path: string): { name: string; version?: string } {
+interface CursorPluginManifest { name: string; version?: string }
+
+function parseManifest(path: string): CursorPluginManifest {
   let value: unknown;
   try { value = JSON.parse(readFileSync(path, 'utf8')); }
   catch (error) { throw new Error(`invalid Cursor plugin manifest: ${path} (${(error as Error).message})`); }
@@ -389,6 +392,32 @@ const cursorManagedProfile = createCapabilityEvidenceProfile({
     'docs/research/native-plugin-update-capabilities-2026-10-09.md',
   ],
 });
+
+/** Cursor has no native agent projection: agent definitions are a loud owner-approved exclusion, never native support. */
+const cursorAgentSurface: AgentExclusionSurface = {
+  host: 'cursor',
+  nativeId: (plugin) => plugin.name,
+  installProfile: cursorManagedProfile,
+  nativeManifests: (plugin) => [join(plugin.dir, '.cursor-plugin', 'plugin.json')],
+  inspectNativeManifest: inspectCursorNativeManifest,
+};
+
+/** Read-only Cursor native-manifest identity check; a skip never stages, so validate without mutating. */
+function inspectCursorNativeManifest(plugin: PluginSource): boolean {
+  const file = join(plugin.dir, '.cursor-plugin', 'plugin.json');
+  if (existsSync(file)) assertCursorManifestIdentity(plugin.dir, parseManifest(file), plugin.name);
+  return false;
+}
+
+function assertCursorManifestIdentity(root: string, native: CursorPluginManifest, expectedName: string): void {
+  if (native.name !== expectedName) throw new Error(`Cursor manifest identity does not match ${expectedName}`);
+  const canonicalPath = manifestCandidates(root).find(existsSync);
+  if (canonicalPath === undefined) return;
+  const canonical = parseManifest(canonicalPath);
+  if (native.name !== canonical.name || (canonical.version !== undefined && native.version !== canonical.version)) {
+    throw new Error('Cursor native manifest identity does not match the canonical manifest');
+  }
+}
 
 const cursorDirectoryProfile = createCapabilityEvidenceProfile({
   host: 'cursor',

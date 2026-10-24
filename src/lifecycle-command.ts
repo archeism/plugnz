@@ -46,7 +46,12 @@ export async function runFrozenLifecycle(command: FrozenLifecycleCommand): Promi
       const operations = plan.report.plan
         // Retain-prior claims verified containment, which recovery has not executed.
         .map(row => row.action === 'retain-prior' ? { ...row, action: 'not-attempted' as const, route: 'none' as const } : row);
-      const outcomes = operations.map(row => ({ ...row, result: 'not-attempted' as const, resourceState: 'unknown' as const, activationState: 'unknown' as const, changed: false, reason: blocked }));
+      // A settled skip stays skipped; rewriting it as not-attempted would
+      // contradict its plan action and claim uncertainty about settled state.
+      const outcomes = operations.map(row => row.action === 'skip'
+        ? plan.report.outcomes.find(outcome => outcome.operationId === row.operationId)
+          ?? { ...row, result: 'skipped' as const, resourceState: 'absent' as const, activationState: 'inactive' as const, changed: false, reason: blocked }
+        : { ...row, result: 'not-attempted' as const, resourceState: 'unknown' as const, activationState: 'unknown' as const, changed: false, reason: blocked });
       const pending = recoveryReceipts.find(row => row.status === 'pending');
       const report = parseLifecycleReport({ ...plan.report, plan: operations, outcomes,
         recovery: { schemaVersion: 1, receipts: recoveryReceipts },
@@ -88,7 +93,10 @@ export async function runFrozenLifecycle(command: FrozenLifecycleCommand): Promi
   if (preExecutionDefect !== null) {
     const operations = plan.report.plan.map(row => row.action === 'retain-prior' ? { ...row, action: 'not-attempted' as const, route: 'none' as const } : row);
     const report = parseLifecycleReport({ ...plan.report, plan: operations,
-      outcomes: operations.map(row => ({ ...row, result: 'not-attempted', resourceState: 'unknown', activationState: 'unknown', changed: false, reason: preExecutionDefect })),
+      outcomes: operations.map(row => row.action === 'skip'
+        ? plan.report.outcomes.find(outcome => outcome.operationId === row.operationId)
+          ?? { ...row, result: 'skipped' as const, resourceState: 'absent' as const, activationState: 'inactive' as const, changed: false, reason: preExecutionDefect }
+        : { ...row, result: 'not-attempted', resourceState: 'unknown', activationState: 'unknown', changed: false, reason: preExecutionDefect }),
       recovery: { schemaVersion: 1, receipts: recoveryReceipts },
       summary: { result: 'incomplete', terminalPhase: 'finalize', mutationStarted: recoveryReceipts.some(row => row.mutationStarted),
         changed: recoveryReceipts.some(row => row.changed), failureCategory: preExecutionDefect.category, reason: preExecutionDefect, recoveryId: null, readbackId: null },

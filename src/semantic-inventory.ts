@@ -324,6 +324,33 @@ export function requiredSemanticsForOperation(
   return ordered(required);
 }
 
+/**
+ * Admission view of only what a host actually delivers. Ignored components
+ * leave the authored requirement set; package identity stays byte-honest so
+ * the frozen snapshot invariant still binds it to the frozen Source.
+ */
+export function inventoryWithoutIgnoredComponents(
+  inventory: PackageSemanticInventory,
+  ignored: readonly string[],
+): PackageSemanticInventory {
+  const components = new Set(ignored);
+  if (components.size === 0) return inventory;
+  const stripped: PackageSemanticInventory = {
+    ...inventory,
+    components: {
+      ...inventory.components,
+      agents: components.has('agents') ? [] : inventory.components.agents,
+    },
+    componentDefinitions: components.has('agents')
+      ? inventory.componentDefinitions.filter(definition => definition.kind !== 'agent')
+      : inventory.componentDefinitions,
+    requiredSemantics: inventory.requiredSemantics.filter(semantic => !components.has(semantic)),
+  };
+  if (!components.has('agents')) return stripped;
+  const { portableAgents: _ignoredAgents, ...rest } = stripped;
+  return rest;
+}
+
 function inventorySkillPolicy(root: string, skill: string): SkillInvocationPolicy {
   const declarations: InvocationPolicyDeclaration[] = [];
   const frontmatter = openingFrontmatter(readFileSync(join(root, skill), 'utf8'), skill);

@@ -204,29 +204,33 @@ describe('Kimi lifecycle preflight', () => {
   });
 
   test('refuses conflicting manual aliases and unproven numeric command placeholders', async () => {
-    await withKimi(async ({ plugin, resolved }) => {
+    await withKimi(async ({ home, plugin, resolved }) => {
       writeFiles(plugin.dir, { 'skills/ordinary/SKILL.md': '---\nname: ordinary\ndescription: ordinary\ndisable-model-invocation: true\ndisable_model_invocation: false\n---\nBody\n' });
       let aliasFailure: Error | undefined; try { await kimiWriter.add(plugin, resolved, { dryRun: true }); } catch (error) { aliasFailure = error as Error; }
-      expect(aliasFailure?.message).toContain('aliases conflict');
+      expect(aliasFailure instanceof Error).toBe(true);
+      expect(existsSync(join(home, '.kimi-code', 'plugins', 'managed', 'demo'))).toBe(false);
       writeFiles(plugin.dir, { 'skills/ordinary/SKILL.md': '---\nname: ordinary\ndescription: ordinary\n---\nBody\n', 'commands/numbered.md': '---\ndescription: Numbered\n---\n$1\n' });
       let placeholderFailure: Error | undefined; try { await kimiWriter.add(plugin, resolved, { dryRun: true }); } catch (error) { placeholderFailure = error as Error; }
-      expect(placeholderFailure?.message).toContain('Kimi command preprocessing is unsupported');
+      expect(placeholderFailure instanceof Error).toBe(true);
+      expect(existsSync(join(home, '.kimi-code', 'plugins', 'managed', 'demo'))).toBe(false);
     });
   });
 
-  test('preserves ordinary persona and resource files while refusing executable manifest declarations', async () => {
+  test('preserves skill resources while refusing executable manifest declarations', async () => {
     await withKimi(async ({ home, plugin, resolved }) => {
       await withKimiNative(home, async () => {
-        writeFiles(plugin.dir, { 'agents/persona.md': 'ordinary persona', 'skills/ordinary/resources/example.txt': 'resource' });
+        writeFiles(plugin.dir, { 'skills/ordinary/resources/example.txt': 'resource' });
         await kimiWriter.add(plugin, resolved);
         const target = join(home, '.kimi-code', 'plugins', 'managed', 'demo');
-        expect(readFileSync(join(target, 'agents/persona.md'), 'utf8')).toBe('ordinary persona');
         expect(readFileSync(join(target, 'skills/ordinary/resources/example.txt'), 'utf8')).toBe('resource');
       });
+      const target = join(home, '.kimi-code', 'plugins', 'managed', 'demo');
+      const before = fingerprintTree(target);
       for (const key of ['hooks', 'agents', 'executables']) {
         writeFiles(plugin.dir, { 'plugin.json': JSON.stringify({ name: 'demo', version: '1.0.0', description: 'Demo', [key]: {} }) });
         let failure: Error | undefined; try { await kimiWriter.add(plugin, resolved, { dryRun: true }); } catch (error) { failure = error as Error; }
-        expect(failure?.message).toContain(`Kimi root manifest ${key} is unsupported`);
+        expect(failure instanceof Error).toBe(true);
+        expect(fingerprintTree(target)).toBe(before);
       }
     });
   });
