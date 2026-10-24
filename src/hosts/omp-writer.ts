@@ -365,8 +365,8 @@ const supportedSemantics = new Set<PackageSemantic>([
   'retirement', 'retention-safety', 'readback', 'rollback', 'activation-reload', 'reversible-disable',
 ]);
 const ohMyAiInstallSemantics = new Set<PackageSemantic>([
-  'ordinary-skills', 'mcp', 'resources', 'auto-update-control', 'readback', 'rollback', 'activation-reload',
-  'retirement', 'retention-safety',
+  'ordinary-skills', 'mcp', 'commands', 'model-invocation-control', 'resources', 'auto-update-control',
+  'readback', 'rollback', 'activation-reload', 'retirement', 'retention-safety',
 ]);
 export const ompManagedProfiles = ['18.1.4', '18.8.7', '18.10.3'].map(detectedVersion => createCapabilityEvidenceProfile({
   host: 'omp',
@@ -380,11 +380,14 @@ export const ompManagedProfiles = ['18.1.4', '18.8.7', '18.10.3'].map(detectedVe
     (detectedVersion === '18.8.7' ? ohMyAiInstallSemantics : supportedSemantics).has(semantic) ? 'supported' : 'unsupported',
   ])) as Record<PackageSemantic, CapabilityStatus>,
   evidence: [
-    detectedVersion === '18.10.3'
-      ? 'docs/evidence/omp-native-extension-package-20261013.json'
+    ...(detectedVersion === '18.10.3'
+      ? ['docs/evidence/omp-native-extension-package-20261013.json']
       : detectedVersion === '18.8.7'
-        ? 'docs/evidence/oh-my-ai-native-host-compat-20261015.json'
-        : 'docs/evidence/omp-native-extension-package-20260923.json',
+        ? [
+          'docs/evidence/omp-native-extension-package-18.8.7-20261023.json',
+          'docs/evidence/oh-my-ai-native-host-compat-20261015.json',
+        ]
+        : ['docs/evidence/omp-native-extension-package-20260923.json']),
     'docs/hosts/omp.md',
     'docs/research/native-plugin-update-capabilities-2026-10-09.md',
   ],
@@ -411,7 +414,11 @@ export function ompPortableAgentProfile(version: string): CapabilityEvidenceProf
       semantic === 'agents' || ohMyAiInstallSemantics.has(semantic) ? 'supported' : 'unsupported',
     ])) as Record<PackageSemantic, CapabilityStatus>,
     hookPolicy: null,
-    evidence: ['docs/evidence/omp-portable-agents-20261022.md', 'docs/portable-agents.md'],
+    evidence: [
+      'docs/evidence/omp-portable-agents-20261022.md',
+      'docs/evidence/omp-native-extension-package-18.8.7-20261023.json',
+      'docs/portable-agents.md',
+    ],
   });
 }
 

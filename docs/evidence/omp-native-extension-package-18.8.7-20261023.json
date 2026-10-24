@@ -1,0 +1,47 @@
+{
+  "date": "2026-10-23",
+  "host": {
+    "binary": "/root/.bun/bin/omp",
+    "resolvedBinary": "/root/.bun/install/global/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js",
+    "binarySha256": "2a1f0be0d536031830c2de5abc1a0f7f06948e7c3fdcb77542ef70cba3497481",
+    "packageJsonSha256": "a683d52fb3f17780cd3285638a23d53dd7f986eaf5c0c550fedfa30ed5d19334",
+    "version": "18.8.7",
+    "source": "/root/.bun/install/global/node_modules/@oh-my-pi/pi-coding-agent/src",
+    "loaderFilesSha256": {
+      "src/extensibility/skills.ts": "50892b528c20ab1fc901dad90e3900f05433d64767710e288d1821c96f50ea85",
+      "src/extensibility/slash-commands.ts": "5cfb455ad897b3957c7cf9d25f8fbf0c63e990996f750af6e607b07b0fd40861"
+    }
+  },
+  "question": "Does exact installed OMP 18.8.7 preserve the managed native extension-package loader for ordinary skills, manual/sidecar skill exclusion from loadSkills (model-invocation-control), namespaced slash commands (commands), argument expansion, private resource root, refresh, refusal preservation, and retirement?",
+  "native_loader": {
+    "command": "OMP_NATIVE_LOADER=1 OMP_NATIVE_DIRECT_WRITER=1 OMP_BIN=/root/.bun/bin/omp OMP_SOURCE=/root/.bun/install/global/node_modules/@oh-my-pi/pi-coding-agent/src bun test test/omp-native-loader.test.ts",
+    "result": "1 pass, 21 assertions, 2.64s",
+    "mode": "isolated direct managed writer plus installed real native OMP 18.8.7 loadSkills, loadSlashCommands, and expandSlashCommand APIs; no model request; temporary HOME and empty cwd; temporary probe removed",
+    "scopeBoundary": "Proves installed OMP 18.8.7 native loader and command-expansion APIs (loadSkills, loadSlashCommands, expandSlashCommand) in an auth-free local environment, distinct from a full interactive model session. Reversible disable remains outside this 18.8.7 profile.",
+    "observed": [
+      "ordinary skills discovered",
+      "manual-only (disable-model-invocation: true) and sidecar-only (allow_implicit_invocation: false) skills excluded from automatic loadSkills discovery",
+      "manual-only, sidecar-only, and source Markdown commands discovered as namespaced slash commands",
+      "native $1 and $ARGUMENTS expansion and private .plgnz/source resource root preserved",
+      "unchanged re-add",
+      "same-version resource refresh",
+      "failed unsupported user-invocable:false projection preserves active native command discovery",
+      "retirement removes skills and commands"
+    ]
+  },
+  "public_cli": {
+    "command": "OMP_NATIVE_LOADER=1 OMP_BIN=/root/.bun/bin/omp OMP_SOURCE=/root/.bun/install/global/node_modules/@oh-my-pi/pi-coding-agent/src bun test test/omp-native-loader.test.ts",
+    "result": "1 pass, 21 assertions, 11.38s",
+    "mode": "actual public CLI add/readd/refresh/refusal/remove paired with actual installed native OMP 18.8.7 loader APIs in isolated HOME"
+  },
+  "writer_and_agent_regression": {
+    "command": "OMP_TEST_VERSION=18.8.7 bun test test/omp-lifecycle-adapter.test.ts test/omp-lifecycle.test.ts test/oh-my-ai-native-host-compat.test.ts test/omp-portable-agents.test.ts test/claude-code-lifecycle-route.test.ts",
+    "result": "51 pass, 1 skip, 384 assertions"
+  },
+  "admission": "exact 18.8.7 managed and portable-agents profiles extended to include commands and model-invocation-control for install, update, and retire; disable and reversible-disable remain excluded; no neighboring release or interval compatibility inferred",
+  "measurements": {
+    "model_tokens": "not applicable; 0 model calls",
+    "cpu": "unavailable",
+    "memory": "unavailable"
+  }
+}

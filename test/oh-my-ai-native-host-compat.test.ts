@@ -43,9 +43,10 @@ describe('oh-my-ai exact native host compatibility', () => {
 
       for (const semantic of ['commands', 'model-invocation-control'] as const) {
         const result = admit(host.version, 'install', [...artifactSemantics, semantic]);
-        // Codex 0.161.0 gained separate Addy native evidence after this baseline.
-        expect(result.status).toBe(host.host === 'codex' ? 'admitted' : 'refused');
-        if (host.host !== 'codex') expect(result.gaps.map((gap) => gap.capabilityId)).toContain(semantic);
+        // Codex 0.161.0 and OMP 18.8.7 gained separate native loader evidence after this baseline.
+        const admittedBySeparateEvidence = host.host === 'codex' || host.host === 'omp';
+        expect(result.status).toBe(admittedBySeparateEvidence ? 'admitted' : 'refused');
+        if (!admittedBySeparateEvidence) expect(result.gaps.map((gap) => gap.capabilityId)).toContain(semantic);
       }
 
       expect(admit(host.version, 'update', artifactSemantics).status).toBe('admitted');
