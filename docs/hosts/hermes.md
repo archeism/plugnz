@@ -148,3 +148,13 @@ fingerprint, and a fresh read-only public update reports `active-conforming`
 with `changed: false`. Privilege that can still write the cache fails closed.
 This does not modify launchers or global Python settings; old bytecode requires
 separate backed-up operator recovery.
+
+
+The [published Node boundary receipt](../evidence/node-python-bytecode-copy-20261116.json)
+qualifies cache protection through publication and rollback copies. Node's
+recursive copy creates empty directories with its default mode, so each copied
+protected cache is checked and restored to mode `0555` before activation.
+Existing destinations must already satisfy the guard. Rollback checks both its
+backup and live companion before deleting either live root; foreign cache
+contents remain intact on refusal. The exact Personal consumer gate and native
+Hermes public CLI checks passed against the same packed Node artifact.

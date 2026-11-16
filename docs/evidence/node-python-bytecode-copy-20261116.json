@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-16",
+  "baselineCheckpoint": "e9e8650",
+  "baselineConsumerLog": "/home/charlesfengyc/.local/state/personal-plugin-recovery-20261116/personal-qualified-producer-gate.log",
+  "observedMiss": "Bun fs.cpSync preserved mode0555 on empty cache directories, while Node22.23.1 copied them as0775. Source qualification passed but the Node consumer failed first skill-only Hermes deployment at readback.",
+  "counterexample": {
+    "sourceCacheMode": "0555",
+    "defaultNodeCopyMode": "0775",
+    "defaultBunCopyMode": "0555"
+  },
+  "fix": {
+    "sharedCopyContract": "Require a valid protected source; validate any existing caller-owned destination before copying; copy, verify real empty destination cache, restore mode0555 on the owned copy and require effective write denial. Never repair an untrusted preexisting cache.",
+    "hermesCallers": [
+      "publication copy",
+      "rollback backup copy",
+      "rollback restoration copy"
+    ],
+    "dcodeCallers": [
+      "rollback backup copy",
+      "rollback restoration copy"
+    ],
+    "rollbackPreflight": "Hermes validates backup and current companion caches before removing either live root. Invalid backup modes and foreign live bytecode preserve current package bytes and the foreign cache."
+  },
+  "qualifiedArtifact": {
+    "path": "/home/charlesfengyc/.local/state/personal-plugin-recovery-20261116/producer-candidate-node-cache-final/plugnz.mjs",
+    "sha256": "0f0517f6c83b0b4da838c2a87efab1836fbd02403973203ec4cac4737479bf24",
+    "honestVersion": "0.0.36",
+    "sourceDigest": "8ad8a8600fff8832b2a588c93a8ceb839c447a8c749df243e4a701d7457230bb"
+  },
+  "verification": {
+    "focused": {
+      "tests": 13,
+      "assertions": 68,
+      "typecheck": "passed",
+      "diffCheck": "passed"
+    },
+    "actualNodeCopyRegression": {
+      "node": "22.23.1",
+      "tests": 1,
+      "assertions": 4,
+      "freshBackupCacheMode": "0555",
+      "existingOwnedRollbackCacheMode": "0555",
+      "foreignCacheAndPayloadUntouchedOnRefusal": true
+    },
+    "hermesNative": {
+      "publicCliRuntime": "Node22.23.1 packed artifact",
+      "nativeRevision": "d923a5eb487a17c0a68801bba9ef0f56c81040a8",
+      "nativePython": "3.14.7",
+      "bytecodeSuppression": "unset; native sys.dont_write_bytecode=False",
+      "tests": 2,
+      "assertions": 48,
+      "wallSeconds": 16.66,
+      "postImportFingerprintUnchanged": true,
+      "postImportCacheMode": "0555",
+      "postImportCacheEntries": [],
+      "freshReadonlyActivationState": "active-conforming",
+      "freshReadonlyChanged": false,
+      "badBackupModeRefusedBeforeDeletion": true,
+      "foreignLiveBytecodeRefusedAndRetained": true,
+      "normalRollbackAfterRemovingOnlyTestFaults": "passed",
+      "scopeNote": "Public CLI install/update/dry-run/retire run under the packed Node artifact; direct lifecycle rollback fault controls run through the source adapter in the test harness. The shared copy primitive has a separate actual Node regression."
+    },
+    "personalConsumer": {
+      "command": "check:plugin-lifecycle-producer",
+      "attempt": 3,
+      "tests": 5,
+      "assertions": 78,
+      "wallSeconds": 20.46,
+      "result": "passed",
+      "genuineSupplierDigestUnchanged": true,
+      "reportedBy": "root completed exact consumer gate"
+    },
+    "independentReview": {
+      "reviewer": "ASTRA",
+      "result": "closed after independent negative controls",
+      "reportedBy": "root"
+    }
+  },
+  "sourceSha256": {
+    "src/python-bytecode-cache.ts": "d031431ad3b82a546dc213d94b896268d824485b2fe78cc9f317b071426552de",
+    "src/hosts/hermes-writer.ts": "ffc70ea9ed636b7094b88d0f8c725147cd19669f845b8b753df0f37db87e6ba2",
+    "src/hosts/dcode-writer.ts": "f981fe0dcbe68d329b3a296872c5579b3b3d6fa5d909154afd39c27a3383e59f",
+    "test/python-bytecode-cache.test.ts": "15ff3a0b48fed6bf84ce9ebb5e0d9c94f8043358801d8f412f6b15ce8c212e3b",
+    "test/hermes-native-7dbbb0f.test.ts": "1b86d7f76918541085e8aef6c6bc19e0c11ac53f1fb4a28461a4ecdd65c936bb"
+  },
+  "rawEvidence": {
+    "directory": "/tmp/hermes-native-d923-proof",
+    "sha256": {
+      "node-final-native-lifecycle-result.json": "c79c70fc3267b4c79085d50558608c447398f1ba99153bdf964f8f305a3ff351",
+      "node-final-native-lifecycle-result.json.post-import.json": "c9e21a56ac757e05ffbc50d9ba9812aa4bb8d9c5a8050138f2f0afe18a9265aa",
+      "node-final-native-lifecycle-result.json.rollback-cache-guards.json": "2260c1ce5456f1fccc84dff88a3b394f72f73379a2c898913a660ec59efdbf12",
+      "node-final-native-lifecycle-result.json.personas.json": "570ca2af39fa83d77942c4bf6f33036f3891d4dabfbeb0aca602d9c7a241a57d"
+    }
+  },
+  "cost": {
+    "modelCallsByNativeProbes": 0,
+    "nativeModelTokens": 0,
+    "agentAndIndependentReviewTokens": "not independently measured"
+  },
+  "limits": [
+    "Source provenance and native runtime claims remain exact-version qualified.",
+    "Effective write protection is required; privileged runtimes that can bypass mode0555 fail closed.",
+    "No actual native plugin stores were mutated by this fix lane."
+  ],
+  "skillDecision": "unchanged; native qualification now explicitly covers the published Node boundary instead of relying on Bun-only filesystem behavior."
+}

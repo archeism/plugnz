@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { hermesNativeBootstrap, hermesNativeBootstrap7dbbb0f } from '../src/hosts/hermes-launcher-templates';
@@ -168,6 +168,34 @@ print(json.dumps(evidence))
       await hermesLifecycle.apply(prepared);
       expect(hermesLifecycle.verify(prepared.handle, await hermesLifecycle.readback(prepared.handle)).phase).toBe('verified');
       expect(probe(true).mcp.text).toBe('rollback-candidate:native-round-trip');
+      const activePackage = join(home, 'plugins/native-proof');
+      const activeCompanion = join(home, 'plugins/native-proof.plgnz-commands');
+      const backupCache = join(prepared.handle.rollbackReference, 'commands/__pycache__');
+      const liveCache = join(activeCompanion, '__pycache__');
+      const packageBeforeFault = fingerprintTree(activePackage);
+      const companionBeforeFault = fingerprintTree(activeCompanion);
+      chmodSync(backupCache, 0o755);
+      let badBackupRefused = false;
+      try { await hermesLifecycle.rollback(prepared.handle); } catch (error) {
+        badBackupRefused = true; expect((error as Error).message).toContain('__pycache__');
+      }
+      expect(badBackupRefused).toBe(true);
+      expect(fingerprintTree(activePackage)).toBe(packageBeforeFault);
+      expect(fingerprintTree(activeCompanion)).toBe(companionBeforeFault);
+      chmodSync(backupCache, 0o555);
+      chmodSync(liveCache, 0o755);
+      writeFileSync(join(liveCache, 'foreign.pyc'), 'foreign cache bytes');
+      chmodSync(liveCache, 0o555);
+      let badLiveCacheRefused = false;
+      try { await hermesLifecycle.rollback(prepared.handle); } catch (error) {
+        badLiveCacheRefused = true; expect((error as Error).message).toContain('__pycache__');
+      }
+      expect(badLiveCacheRefused).toBe(true);
+      expect(fingerprintTree(activePackage)).toBe(packageBeforeFault);
+      expect(readFileSync(join(liveCache, 'foreign.pyc'), 'utf8')).toBe('foreign cache bytes');
+      if (process.env.HERMES_7DB_EVIDENCE) writeFileSync(`${process.env.HERMES_7DB_EVIDENCE}.rollback-cache-guards.json`, JSON.stringify({ badBackupRefused, badLiveCacheRefused, packageBeforeFault, packageAfterFault: fingerprintTree(activePackage), foreignCacheRetained: readFileSync(join(liveCache, 'foreign.pyc'), 'utf8') }, null, 2));
+      // Remove only this isolated test's injected fault, then verify ordinary rollback.
+      chmodSync(liveCache, 0o755); rmSync(join(liveCache, 'foreign.pyc')); chmodSync(liveCache, 0o555);
       await hermesLifecycle.rollback(prepared.handle);
       expect(hermesLifecycle.verifyRollback(prepared.handle, await hermesLifecycle.readback(prepared.handle)).phase).toBe('rollback-verified');
       rolledBack = probe(true);

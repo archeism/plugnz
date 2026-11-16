@@ -13,6 +13,7 @@ import { assertDcodeManualSkillsCache, dcodeManualSkillsEnabled, dcodeManualSkil
 import { inventoryPackageSemantics } from '../semantic-inventory';
 import { capabilityEvidenceProfiles, createCapabilityEvidenceProfile } from '../capability-evidence';
 import { fingerprintTree } from '../fingerprint';
+import { copyPythonBytecodeProtectedTree } from '../python-bytecode-cache';
 import { recordedPriorSource } from '../prior-source-proof';
 import { createLifecycleHostAdapter, createTargetInventoryObservation } from '../lifecycle-runtime';
 import type { DurableLifecycleOperation, LifecycleHostDefinition, LifecycleReadbackData, LifecycleTargetIdentity, NativeProjectionRequest, TargetInstallationData } from '../lifecycle-host';
@@ -147,6 +148,14 @@ function dcodeLifecycleReadback(binding: DcodeBinding): LifecycleReadbackData {
   };
 }
 
+/** Copy only proven managed extensions through the bytecode-mode boundary. */
+function copyDcodeOwnedProjection(source: string, destination: string, nativeId: string): void {
+  const marker = ownership(source);
+  if (marker?.kind === 'current' && marker.pluginId === nativeId && existsSync(join(source, '.plgnz-manual-skills.py'))) {
+    copyPythonBytecodeProtectedTree(source, destination, 'Dcode managed extension');
+  } else cpSync(source, destination, { recursive: true });
+}
+
 function captureDcodeRollback(binding: DcodeBinding, attemptId: string, operationId: string): string {
   const dir = join(lifecycleDirectory(attemptId, operationId), 'rollback');
   mkdirSync(dir, { recursive: true });
@@ -157,7 +166,7 @@ function captureDcodeRollback(binding: DcodeBinding, attemptId: string, operatio
   writeFileSync(join(dir, 'state.json'), JSON.stringify(state));
   for (const [index, item] of rowsFor(row).entries()) {
     const path = rowInstall(item, binding.nativeId); assertCachePath(path); assertNoSymlinks(path);
-    if (existsSync(path)) cpSync(path, join(dir, `content-${index}`), { recursive: true });
+    if (existsSync(path)) copyDcodeOwnedProjection(path, join(dir, `content-${index}`), binding.nativeId);
   }
   return dir;
 }
@@ -356,7 +365,7 @@ const dcodeDefinition: LifecycleHostDefinition = {
     for (const [index, row] of rowsFor(state.row).entries()) {
       const path = rowInstall(row, handle.nativeId); assertCachePath(path);
       const backup = join(handle.rollbackReference, `content-${index}`);
-      if (existsSync(backup)) { mkdirSync(dirname(path), { recursive: true }); cpSync(backup, path, { recursive: true }); }
+      if (existsSync(backup)) { mkdirSync(dirname(path), { recursive: true }); copyDcodeOwnedProjection(backup, path, handle.nativeId); }
     }
     setDcodeRow(handle.nativeId, state.row ?? null, typeof state.enabled === 'boolean' ? state.enabled : null);
     if (state.registryExisted === false && Object.keys(object(readRegistry(dcodeRegistryFile()).plugins, 'registry plugins')).length === 0) rmSync(dcodeRegistryFile());

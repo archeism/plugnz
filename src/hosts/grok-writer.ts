@@ -416,7 +416,7 @@ function lstatExists(path: string): boolean { try { lstatSync(path); return true
 function assertExistingNativeOwnership(id: string, name: string, root: string): void { const matches = grok.listInstalled().filter(plugin => plugin.name === name); if (matches.length === 0) return; if (matches.length !== 1 || matches[0]?.id !== id || matches[0].path === undefined) throw new Error(`Grok ${name}: an existing native install is not plgnz-owned; refusing to replace it`); const repo = repos().find(([, candidate]) => candidate.path === matches[0]!.path)?.[1]; if (repo === undefined) throw new Error(`Grok ${name}: an existing native install has no registry record`); const provenance = provenanceOf(repo); if (provenance === null || canonical(provenance.root) !== canonical(root) || canonical(localSourceOf(repo) ?? '') !== canonical(join(root, 'plugins', name)) || provenance.subdir !== `plugins/${name}` || namesOf(repo).length !== 1) throw new Error(`Grok ${name}: an existing native install has foreign provenance; refusing to replace it`); }
 function assertOwnedRoot(root: string): void { const base = canonical(marketplacesRoot()); if (base === undefined || root === base || !root.startsWith(`${base}/`)) throw new Error(`Grok marketplace root escapes plgnz storage: ${root}`); const relative = root.slice(base.length + 1).split('/'); let current = base; for (const part of relative) { current = join(current, part); const stat = lstatSync(current); if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error(`Grok marketplace root is not a safe owned directory: ${current}`); } }
 
-const GROK_PROVEN_VERSIONS = ['1.0.24', '1.0.41'] as const;
+const GROK_PROVEN_VERSIONS = ['1.0.24', '1.0.41', '1.0.46'] as const;
 const RELOAD_EFFECTIVE = { requirement: 'reload', status: 'effective' } as const;
 const IDLE_EFFECTIVE = { requirement: 'none', status: 'effective' } as const;
 const ABSENT_RETENTION = {
@@ -511,6 +511,7 @@ function grokEvidenceProfiles(): readonly CapabilityEvidenceProfile[] {
       evidence: [
         'docs/hosts/grok.md',
         'docs/research/native-plugin-update-capabilities-2026-10-09.md',
+        'docs/evidence/grok-plain-1046-20261116.json',
       ],
     })),
     ...GROK_PORTABLE_AGENT_VERSIONS.map((detectedVersion) => grokPortableAgentProfile(detectedVersion)),

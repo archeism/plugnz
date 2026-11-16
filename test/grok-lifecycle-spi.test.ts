@@ -249,6 +249,23 @@ async function failure(run: Promise<unknown>): Promise<unknown> {
 }
 
 describe('Grok lifecycle SPI', () => {
+  test('the qualified 1.0.46 native profile installs ordinary packages without agent declarations', async () => {
+    await isolated(async (_home, root) => {
+      process.env.GROK_FAKE_VERSION = '1.0.46';
+      const adapter = createGrokLifecycleAdapter();
+      const installed = await prepare(adapter, snapshot(root, {
+        operationId: 'plain-1046-install',
+        attemptId: 'plain-1046-attempt',
+        action: 'install',
+        bytes: 'ordinary package\n',
+      }));
+      expect(installed.handle.detectedVersion).toBe('1.0.46');
+      expect(installed.handle.route).toBe('native');
+      await adapter.apply(installed);
+      adapter.verify(installed.handle, await adapter.readback(installed.handle));
+    });
+  });
+
   test('reads the grok binary version and rolls a failed native update back without another route', async () => {
     await isolated(async (home, root) => {
       const adapter = createGrokLifecycleAdapter();

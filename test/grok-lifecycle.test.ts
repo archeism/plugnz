@@ -2,13 +2,21 @@ import { describe, expect, test } from 'bun:test';
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { grok } from '../src/hosts/grok';
+import { grok, parseGrokVersionOutput } from '../src/hosts/grok';
 import { grokWriter } from '../src/hosts/grok-writer';
 import { resolveSource, type PluginSource, type ResolvedSource } from '../src/source';
 import { main } from '../src/cli';
 import { writeFiles } from './util';
 
 type Fixture = { root: string; home: string; source: string; plugin: PluginSource; resolved: ResolvedSource };
+
+test('Grok parses the actual alpha release version without accepting arbitrary suffixes', () => {
+  const expected = { kind: 'detected', version: '1.0.46', probeId: 'grok:1.0.46:2765805b9442' };
+  expect(parseGrokVersionOutput('grok 1.0.46 (2765805b9442) [alpha]\n', 0)).toEqual(expected);
+  expect(parseGrokVersionOutput('grok 1.0.46 (2765805b9442)\n', 0)).toEqual(expected);
+  expect(parseGrokVersionOutput('grok 1.0.46 (2765805b9442) [other]\n', 0)).toEqual({ kind: 'unparseable' });
+  expect(parseGrokVersionOutput('grok 1.0.46 (2765805b9442) [alpha]\n', 1)).toEqual({ kind: 'unknown' });
+});
 
 function fixture(): Fixture {
   const root = mkdtempSync(join(tmpdir(), 'plgnz-grok-lifecycle-'));

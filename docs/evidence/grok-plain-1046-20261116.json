@@ -1,0 +1,32 @@
+{
+  "supplier": "grok 1.0.46 (2765805b9442) [alpha]",
+  "date": "2026-11-16",
+  "route": "isolated actual Grok native writer",
+  "wallMs": 4143.531972999999,
+  "checks": [
+    "ordinary and manual skills",
+    "TOML command",
+    "MCP native registration",
+    "resource update",
+    "unchanged re-add",
+    "native removal"
+  ],
+  "rawEvidence": "/home/charlesfengyc/.local/state/personal-plugin-recovery-20261116/grok-1046-plain-native/proof.json",
+  "rawEvidenceSha256": "02c2d88ebfa56f5d6a89b13ddc1dea3cd8cba9522b903ab13f3a9b36904763eb",
+  "probeScriptSha256": "4d3a3574e436957823bc81779cb06784a535841d2940509cc6a80753ff2be2a2",
+  "firstNativePlugin": {
+    "name": "demo",
+    "scope": "user",
+    "path": "/tmp/grok-1046-plain-rQZEtg/home/.grok/plugins/demo",
+    "enabled": true,
+    "provides": {
+      "skills": 2,
+      "agents": 0,
+      "hooks": false,
+      "mcpServers": 1
+    }
+  },
+  "afterRemovalDemoPresent": false,
+  "limits": "Exact1.0.46 plain packages only; no hooks, arbitrary agents, disable, or other versions newly admitted. No model calls.",
+  "probeScript": "/home/charlesfengyc/.local/state/personal-plugin-recovery-20261116/grok-1046-plain-native/probe.ts"
+}

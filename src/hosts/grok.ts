@@ -26,7 +26,7 @@ export type GrokOwnership = {
 export function parseGrokVersionOutput(output: string, status: number | null): TargetVersionObservation {
   if (status === null) return { kind: 'unknown' };
   const line = output.split(/\r?\n/u).map((entry) => entry.trim()).find((entry) => entry.startsWith('grok '));
-  const match = line === undefined ? null : /^grok (\d+\.\d+\.\d+)(?: \(([0-9A-Za-z]+)\))?$/u.exec(line);
+  const match = line === undefined ? null : /^grok (\d+\.\d+\.\d+)(?: \(([0-9A-Za-z]+)\))?(?: \[alpha\])?$/u.exec(line);
   if (match === null || status !== 0) return status === 0 ? { kind: 'unparseable' } : { kind: 'unknown' };
   const version = match[1];
   if (version === undefined) return { kind: 'unparseable' };

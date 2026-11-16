@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { createCapabilityEvidenceProfile } from '../capability-evidence';
 import { projectPluginForHermes } from '../conversion';
 import { assertHermesCompanionCache } from './hermes-companion-cache';
+import { copyPythonBytecodeProtectedTree } from '../python-bytecode-cache';
 import { fingerprintTree } from '../fingerprint';
 import { capturePriorSourceRepair, priorSourceRepairAllows, recordedPriorSource, releasePriorSourceRepair, type PriorSourceProof } from '../prior-source-proof';
 import type { AddOptions, HostWriter, InstalledPlugin, PinOptions, PinOutcome } from '../host';
@@ -628,10 +629,11 @@ function historicalGitMarker(marker: Marker, proof: Readonly<PriorSourceProof>):
     && marker.sourceRevision === proof.revision && marker.sourceLocator == null;
 }
 
-function copyReplace(stage: string, target: string, root: string): Change {
+function copyReplace(stage: string, target: string, root: string, companion = false): Change {
   const scratch = mkdtempSync(join(root, '.plgnz-hermes-copy-'));
   const copy = join(scratch, 'copy');
-  cpSync(stage, copy, { recursive: true });
+  if (companion) copyPythonBytecodeProtectedTree(stage, copy, 'Hermes managed companion', 'Hermes companion');
+  else cpSync(stage, copy, { recursive: true });
   const swapped = replaceTarget(copy, target, root);
   return {
     commit() { swapped.commit(); rmSync(scratch, { recursive: true, force: true }); },
@@ -806,15 +808,17 @@ function saveRollback(store: HermesStore, reference: string, packageName: string
   const companionId = hermesCommandCompanionId(packageName);
   writeFileSync(join(reference, 'config-slice.json'), JSON.stringify(captureConfigSlice(store.configPath, packageName, companionId)));
   if (existsSync(packageDir)) cpSync(packageDir, join(reference, 'package'), { recursive: true });
-  if (existsSync(companionDir)) cpSync(companionDir, join(reference, 'commands'), { recursive: true });
+  if (existsSync(companionDir)) copyPythonBytecodeProtectedTree(companionDir, join(reference, 'commands'), 'Hermes managed companion', 'Hermes companion');
 }
 
 function restoreRollback(store: HermesStore, reference: string, packageDir: string, companionDir: string): void {
   const slice = JSON.parse(readFileSync(join(reference, 'config-slice.json'), 'utf8')) as ConfigSlice;
+  if (existsSync(join(reference, 'commands'))) assertHermesCompanionCache(join(reference, 'commands'));
+  if (existsSync(companionDir)) assertHermesCompanionCache(companionDir);
   rmSync(packageDir, { recursive: true, force: true });
   rmSync(companionDir, { recursive: true, force: true });
   if (existsSync(join(reference, 'package'))) cpSync(join(reference, 'package'), packageDir, { recursive: true });
-  if (existsSync(join(reference, 'commands'))) cpSync(join(reference, 'commands'), companionDir, { recursive: true });
+  if (existsSync(join(reference, 'commands'))) copyPythonBytecodeProtectedTree(join(reference, 'commands'), companionDir, 'Hermes managed companion', 'Hermes companion');
   restoreConfigSlice(store.configPath, slice);
 }
 
@@ -1026,7 +1030,7 @@ const hermesLifecycleDefinition: LifecycleHostDefinition = {
     const changes: Change[] = [];
     try {
       changes.push(copyReplace(stagedPackage, paths.packageDir, store.pluginsDir));
-      if (hasCompanion) changes.push(copyReplace(stagedCompanion, paths.companionDir, store.pluginsDir));
+      if (hasCompanion) changes.push(copyReplace(stagedCompanion, paths.companionDir, store.pluginsDir, true));
       else if (existsSync(paths.companionDir)) changes.push(removeTarget(paths.companionDir, store.pluginsDir));
       updatePluginConfig(store.configPath, [prepared.handle.packageName, ...(hasCompanion ? [paths.companionId] : [])], hasCompanion ? [] : [paths.companionId]);
       for (const change of changes) change.commit();

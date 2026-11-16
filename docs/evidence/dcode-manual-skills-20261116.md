@@ -101,3 +101,31 @@ A separate actual `sudo` probe against the protected fixture recorded
 `effectiveUid=0, privilegedWriteRefused=true`; it did not import the native Python
 extension as root. Focused Dcode/Hermes guard and lifecycle tests: 42 passed,
 268 assertions, 0.728 seconds. Typecheck passed.
+
+## Node backup and rollback copy qualification
+
+Node **22.23.1** `fs.cpSync` recreates an empty mode-0555 directory with writable
+mode 0775; Bun had preserved its source mode. Dcode initially generates the guard
+after its source copy and publishes by rename, so first activation stays safe.
+Its lifecycle backup and rollback copies now use the shared
+`copyPythonBytecodeProtectedTree` for proven managed generated extensions.
+
+That helper validates the protected source and any existing destination cache
+before copying. It then restores mode 0555 on the caller-owned copied empty cache
+and rechecks effective write denial. A foreign/nonempty or already-unprotected
+existing cache refuses before copy; it is never silently repaired. Ordinary
+unmanaged prior content retains the existing copy behavior.
+
+`test/dcode-node-bytecode-native-probe.ts` executes a Node-targeted bundle under
+actual Node 22.23.1, real Dcode 0.1.83, and its real native Python/file lock. It
+installs an isolated copy of actual Addy, runs the unsuppressed native graph,
+confirms a fresh unchanged/conforming public report, then injects changed bytes
+into the newly published fixture to force readback rollback. The restored prior
+cache remains empty mode 0555, and a fresh public report is unchanged/conforming.
+No version output is simulated. A second fault adds foreign bytecode to the prior
+cache after sealed backup; rollback refuses, retains the bytes and mode, and
+records a recovery-required attempt instead of repairing the cache.
+
+Focused Dcode lifecycle/rollback and cache tests: 14 passed, 118 assertions,
+12.90 seconds. Typecheck passed. Raw Node fixtures are retained under
+`/tmp/dcode-node-bytecode-native-*`; production plugin stores were not modified.
