@@ -69,7 +69,7 @@ export const consumerProfiles: readonly ConsumerProfile[] = [
   profile('omp', 'OMP native npm/link extension-package loader', 'docs/evidence/omp-native-extension-package-20260923.json', '18.1.4', active),
   profile('dcode', 'deepagents-code plugin loader', 'docs/evidence/dcode-native-update-0.1.83-20261009.json', '0.1.83', active),
   profile('hermes', 'Hermes portable + native directory plugin loaders', 'docs/hosts/hermes.md', 'c0d7294', active),
-  pending('openclaw', 'OpenClaw plugin route', 'SPEC.md § Compatibility and lifecycle requirements'),
+  profile('openclaw', 'OpenClaw Agent Plugins bundle loader (skills and MCP)', 'docs/hosts/openclaw.md', '2026.9.1', active),
   profile('grok', 'Grok Build native marketplace loader', 'docs/hosts/grok.md (isolated native lifecycle probe, 2026-09-23)', '1.0.41', active),
   profile('kimi', 'Kimi Code plugin loader', 'docs/hosts/kimi.md (isolated native probe, 2026-09-22)', '2.0.1', active),
   profile('zcode-cli', 'Official Z.ai ZCode CLI plugin loader', 'docs/evidence/zcode-official-cli-872ad960-20260923.json', '0.16.9', active),

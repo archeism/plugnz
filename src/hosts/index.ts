@@ -22,8 +22,9 @@ import { opencode } from './opencode';
 import { grok, grokTargetProfile } from './grok';
 import { zcodeCli, zcodeCliTargetProfile } from './zcode-cli';
 import { hermes, hermesTargetProfile } from './hermes';
+import { openclaw, openclawTargetProfile } from './openclaw';
 
-export const hosts: HostReader[] = [claudeCode, codex, kimi, cursor, omp, hermes, pi, dcode, opencode, grok, zcodeCli];
+export const hosts: HostReader[] = [claudeCode, codex, kimi, cursor, omp, hermes, openclaw, pi, dcode, opencode, grok, zcodeCli];
 
 /** Pure lifecycle target contracts for active native mutation routes. */
 export const targetProfiles = [
@@ -36,4 +37,5 @@ export const targetProfiles = [
   grokTargetProfile,
   zcodeCliTargetProfile,
   hermesTargetProfile,
+  openclawTargetProfile,
 ] as const satisfies readonly TargetProfile[];

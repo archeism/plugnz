@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-16",
+  "host": "openclaw",
+  "version": "2026.9.1",
+  "upstreamCommit": "ad6fe23aecb9b833d68139b0ddc9f239b894d2f1",
+  "publicationRoute": "managed publication into the native Agent Plugins bundle loader",
+  "qualifiedComponents": [
+    "ordinary-skills",
+    "resources",
+    "mcp"
+  ],
+  "notQualified": [
+    "native JavaScript extensions",
+    "commands",
+    "agents",
+    "hooks",
+    "invocation restrictions",
+    "permission preprocessing",
+    "other OpenClaw versions"
+  ],
+  "frozenImplementation": {
+    "readerSha256": "8b67f20174f4f07850939104b62eae66771d78a108f40249aa77034e63eefcb4",
+    "writerSha256": "890904289c362e663b69efb8a20bf50447b9324e6261b84b32e7ea3713182e5f"
+  },
+  "candidate": {
+    "actualVersion": "0.0.37",
+    "sha256": "7b19c1c1c658a9986aaa8362e09ff4a7f2aeb0978a9644b45d614e350300bce1",
+    "status": "explicit qualified development artifact; registry release is a separate checkpoint"
+  },
+  "nativeLifecycle": {
+    "receipt": {
+      "path": "/home/charlesfengyc/.local/state/personal-plugin-recovery-20261116/openclaw-native-qualification/attempt02/result.json",
+      "sha256": "b2003cb8473218fafd0c17a47b10bbcbd32c51a1d5e712d83200a872daf546f5"
+    },
+    "coreArtifactSha256": "c1bc10982e609788734129bc2db37a3e246d3bad6b453bae13a2ea9d7b2d4d1a",
+    "tailArtifactSha256": "7b19c1c1c658a9986aaa8362e09ff4a7f2aeb0978a9644b45d614e350300bce1",
+    "lineage": "Real Node/native install, unchanged, update and SDK calls used02; reader-only executable-discovery fix03 has identicalwriter and finishes fresh-process native rollback readback/recovery/retirement. No full repeated core run claimed.",
+    "checks": [
+      "install",
+      "unchanged",
+      "stable same-path version update",
+      "native SDK MCP catalog and read-only tool execution",
+      "unavailable readback stays pending then recovers",
+      "forced native readback failure restores prior bundle then verifies recovery",
+      "unrelated configuration retained",
+      "native plugin data retained",
+      "recorded-source retirement"
+    ],
+    "modelCalls": 0,
+    "unrelatedConfigAndNativeDataRetained": true
+  },
+  "actualPublishedProduct": {
+    "version": "0.1.84",
+    "publicApply": {
+      "path": "/home/charlesfengyc/.local/state/personal-plugin-recovery-20261116/openclaw-product-apply.json",
+      "sha256": "1d62a04d7e65ab24886d7da6c8366212a50ca5cfeaeb425083e18d2c04b9e9a9"
+    },
+    "publicReadback": {
+      "path": "/home/charlesfengyc/.local/state/personal-plugin-recovery-20261116/openclaw-product-readback.json",
+      "sha256": "1448917c42989c2601382f987224c6c888f71f181941f8b1ac7ac2bceed74e19"
+    },
+    "nativeMcp": {
+      "path": "/home/charlesfengyc/.local/state/personal-plugin-recovery-20261116/openclaw-installed-native-proof.json",
+      "sha256": "440c2d25e986c8c39dd030b538888db33c842d64c784ce0dc9f90f4299f443ff"
+    },
+    "nativeMcpAccepted": true,
+    "nativeMcpInstalledSourceVerified": true,
+    "nativeMcpWallSeconds": 2.653989769,
+    "nativeMcpOutput": {
+      "kind": "result",
+      "value": "OPENCLAW_PRODUCT_OK"
+    },
+    "nativeSkills": {
+      "path": "/home/charlesfengyc/.local/state/personal-plugin-recovery-20261116/openclaw-installed-skills-local-proof.json",
+      "sha256": "aba1c1b0ffa82ba7e4b631143cef19ff8f279c0fdd5884547c5438aaced0243c"
+    },
+    "skillNames": [
+      "omakase-codemode",
+      "trajectories"
+    ],
+    "skillsEligible": true,
+    "skillOrigin": "Native plugin-skills symlinks resolve to the owned bundle/skills; verified by saved local SDK proof runner",
+    "skillBuilderSha256": "544371c8e8b762045b0e9ea0e1920cb8b252cd845a4913270e77ac5d8eab68d5",
+    "skillWallSeconds": 0.6310887420000001,
+    "gatewayCliLimitation": "Configured gateway endpoint serves an existing keyboard demo. CLI RPC failure retained; same official local SDK builder used against actual cfg/main-agent/workspace. No gateway change or restart."
+  },
+  "regressions": {
+    "contractAndDiscoveryPackedNode": {
+      "tests": 18,
+      "assertions": 101,
+      "receipt": {
+        "path": "/home/charlesfengyc/.local/state/personal-plugin-recovery-20261116/producer-candidate-openclaw-03/packed-node-contracts.log",
+        "sha256": "9499c9c54965e9481acf59b43c6835a45c86479c5de4744b735e22037c0cbd98"
+      }
+    },
+    "gitSourcePackedNode": {
+      "tests": 1,
+      "assertions": 15,
+      "receipt": {
+        "path": "/home/charlesfengyc/.local/state/personal-plugin-recovery-20261116/producer-candidate-openclaw-03/packed-node-git-contract.log",
+        "sha256": "bc2af6da46aff2927707fdbc5460feeb018bac31b99f0b919e906812ba2a6a8c"
+      }
+    },
+    "sourcePermissions": "Shared Source materialization normalizes directory write bits; 0555 copy/backup/rollback control is explicitly after Source capture and before adapter staging. No raw authored-permission guarantee was added.",
+    "foreignCustody": "Original independent capture-then-delete repro now refuses preexisting rollback directories and retains foreign bytes. Empty directories, operation roots and copy destinations also require exclusive creation.",
+    "independentReview": "GPT-6 Astra independently closed custody repro and reviewed final reader-only executable-discovery delta; exact implementation hashes above."
+  },
+  "retainedAttempts": [
+    "producer-candidate-openclaw-01 (unaccepted foreign custody bug)",
+    "openclaw-native-qualification/attempt01 (retirement harness used source instead of scopeId)",
+    "openclaw-native-qualification/attempt02 (core); tail03 completes under unchanged writer with final reader",
+    "openclaw-native-qualification/review-evidence"
+  ],
+  "limits": [
+    "Runtime MCP exercise used stdio and pure local code; zero model requests.",
+    "Existing house Codex-format bundles and unrelated native plugins were not adopted or migrated.",
+    "Resource evidence is in private per-command GNU time logs; aggregate process-tree RSS was not inferred."
+  ],
+  "skillDecision": "Operating skill instructions unchanged; no skill improvement claim"
+}

@@ -15,9 +15,10 @@ import { opencodeHookWriter } from './opencode-hook-writer';
 import { grokWriter } from './grok-writer';
 import { zcodeCliWriter } from './zcode-cli-writer';
 import { hermesWriter } from './hermes-writer';
+import { openclawWriter } from './openclaw-writer';
 
 /** Active mutation routes: native plugin stores only. */
-export const writers: HostWriter[] = [claudeCodeWriter, codexWriter, kimiWriter, cursorWriter, ompWriter, hermesWriter, dcodeWriter, grokWriter, zcodeCliWriter, piHookWriter, opencodeHookWriter];
+export const writers: HostWriter[] = [claudeCodeWriter, codexWriter, kimiWriter, cursorWriter, ompWriter, hermesWriter, openclawWriter, dcodeWriter, grokWriter, zcodeCliWriter, piHookWriter, opencodeHookWriter];
 
 /** The native hook writers delegate removal of historical standalone ownership to the old removers. */
 export const cleanupWriters: HostWriter[] = [...writers];

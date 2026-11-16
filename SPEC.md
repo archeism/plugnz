@@ -104,6 +104,14 @@ completion gate, not their eventual migration requirements. Standalone exclusion
 remain unchanged. Close each shipped issue with its acceptance evidence; close the
 milestone only after the required routes and final acceptance issue pass.
 
+Owner update (2026-11-16): the current product deployment also requires the
+OpenClaw 2026.9.1 Agent Plugins bundle route for ordinary skills, resources and
+MCP. This bounded increment uses the native bundle loader and explicit
+root/config profile identities. It does not migrate Personal's existing native
+house bundle registrations or qualify hooks, agents, invocation restrictions,
+or other OpenClaw versions. Those representations retain their existing route
+until replacement parity is established. See `docs/hosts/openclaw.md`.
+
 Existing plgnz gates: `bun run check` and `bun test`. Personal's full gate: `bun run check`; distinguish pre-existing unrelated failures from regressions.
 
 - Public CLI integration tests use isolated homes, not production agent configuration. Local and Git fixtures traverse the same install pipeline.

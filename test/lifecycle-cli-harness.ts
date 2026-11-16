@@ -20,6 +20,7 @@ export const HOST_STORE_PATHS = {
   hermes: '.hermes',
   kimi: '.kimi-code',
   omp: '.omp',
+  openclaw: '.openclaw',
   opencode: '.config/opencode',
   pi: '.pi/agent',
   'zcode-cli': '.zcode/cli',
@@ -31,6 +32,7 @@ const BINARY_OVERRIDES = [
   'OPEN_PLUGIN_GROK_BIN',
   'OPEN_PLUGIN_KIMI_BIN',
   'OPEN_PLUGIN_ZCODE_CLI_BIN',
+  'OPEN_PLUGIN_OPENCLAW_BIN',
 ] as const;
 
 const LOCKED_ENV = new Set([
@@ -45,6 +47,8 @@ const LOCKED_ENV = new Set([
   'OPEN_PLUGIN_HERMES_ROOT',
   'OPEN_PLUGIN_KIMI_ROOT',
   'OPEN_PLUGIN_OMP_ROOT',
+  'OPEN_PLUGIN_OPENCLAW_ROOT',
+  'OPEN_PLUGIN_OPENCLAW_CONFIG_PATH',
   'OPEN_PLUGIN_OPENCODE_ROOT',
   'OPEN_PLUGIN_PI_ROOT',
   'XDG_CACHE_HOME',
@@ -318,6 +322,8 @@ class LifecycleCliHarnessImpl implements LifecycleCliHarness {
       OPEN_PLUGIN_HERMES_CONFIG_PATH: join(this.storePath('hermes'), 'config.yaml'),
       OPEN_PLUGIN_KIMI_ROOT: this.storePath('kimi'),
       OPEN_PLUGIN_OMP_ROOT: this.storePath('omp'),
+      OPEN_PLUGIN_OPENCLAW_ROOT: this.storePath('openclaw'),
+      OPEN_PLUGIN_OPENCLAW_CONFIG_PATH: join(this.storePath('openclaw'), 'openclaw.json'),
       OPEN_PLUGIN_OPENCODE_ROOT: this.storePath('opencode'),
       OPEN_PLUGIN_PI_ROOT: this.storePath('pi'),
       XDG_CACHE_HOME: join(this.home, '.cache'),

@@ -55,6 +55,9 @@ export function isolatedHostEnv(home: string): Record<string, string> {
     OPEN_PLUGIN_OPENCODE_BIN: join(home, 'missing-opencode'),
     OPEN_PLUGIN_KIMI_BIN: join(home, 'missing-kimi'),
     OPEN_PLUGIN_ZCODE_CLI_BIN: join(home, 'missing-zcode'),
+    OPEN_PLUGIN_OPENCLAW_BIN: join(home, 'missing-openclaw'),
+    OPEN_PLUGIN_OPENCLAW_ROOT: join(home, '.openclaw'),
+    OPEN_PLUGIN_OPENCLAW_CONFIG_PATH: join(home, '.openclaw', 'openclaw.json'),
   };
 }
 

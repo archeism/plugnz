@@ -11,6 +11,7 @@ import { hermesLifecycle, hermesWriter } from './hosts/hermes-writer';
 import { kimiLifecycle, kimiWriter, samePhysicalKimiNativeIdentity } from './hosts/kimi-writer';
 import { ompLifecycle, ompWriter } from './hosts/omp-writer';
 import { zcodeCliLifecycle, zcodeCliWriter } from './hosts/zcode-cli-writer';
+import { openclawLifecycle, openclawWriter } from './hosts/openclaw-writer';
 
 function plannerHost(
   kind: string,
@@ -38,6 +39,7 @@ export const lifecyclePlannerHostKinds = [
   'hermes',
   'grok',
   'zcode-cli',
+  'openclaw',
 ] as const;
 
 /** Fresh adapters for one command. Claude snapshots its CLI at construction. */
@@ -52,5 +54,6 @@ export function createLifecyclePlannerHosts(): readonly PlannerHost[] {
     plannerHost('hermes', hermesLifecycle, hermesWriter.plannedNativeId),
     plannerHost('grok', createGrokLifecycleAdapter(), grokWriter.plannedNativeId),
     plannerHost('zcode-cli', zcodeCliLifecycle, zcodeCliWriter.plannedNativeId),
+    plannerHost('openclaw', openclawLifecycle, openclawWriter.plannedNativeId),
   ];
 }
