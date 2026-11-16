@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { hermesNativeBootstrap7dbbb0f } from '../src/hosts/hermes-launcher-templates';
+import { hermesNativeBootstrap, hermesNativeBootstrap7dbbb0f } from '../src/hosts/hermes-launcher-templates';
 import { hermesLifecycle } from '../src/hosts/hermes-writer';
 import { fingerprintTree } from '../src/fingerprint';
 import { inventoryPackageSemantics } from '../src/semantic-inventory';
@@ -16,22 +16,22 @@ const python = process.env.HERMES_7DB_PYTHON;
 const installedBin = process.env.HERMES_7DB_INSTALLED_BIN;
 const conditionalTest = test as typeof test & { if(condition: boolean): typeof test };
 
-conditionalTest.if(Boolean(sourceRoot && python && installedBin))('Hermes 7dbbb0f native public lifecycle, command queue and MCP round trip', async () => {
+conditionalTest.if(Boolean(sourceRoot && python && installedBin))(`Hermes ${process.env.HERMES_NATIVE_REVISION ?? '7dbbb0f'} native public lifecycle, command queue and MCP round trip`, async () => {
   await withLifecycleCliHarness(async harness => {
     const home = harness.storePath('hermes');
     harness.writeHome({ '.hermes/config.yaml': 'model: preserved\n' });
-    // No inherited provider secrets; existing dependencies are read-only and -B forbids bytecode writes.
+    // No provider secrets or bytecode-suppression flags: exercise native default imports.
     const env = { HOME: harness.home, HERMES_HOME: home, PATH: '/usr/bin:/bin',
       XDG_CONFIG_HOME: harness.home, XDG_DATA_HOME: harness.home, XDG_CACHE_HOME: harness.home,
-      XDG_STATE_HOME: harness.home, XDG_RUNTIME_DIR: harness.home, PYTHONDONTWRITEBYTECODE: '1' };
+      XDG_STATE_HOME: harness.home, XDG_RUNTIME_DIR: harness.home };
     const runPython = (code: string): string => {
-      const result = spawnSync(python!, ['-I', '-B', '-c', `import sys\nsys.path.insert(0, ${JSON.stringify(sourceRoot)})\n${code}`],
+      const result = spawnSync(python!, ['-I', '-c', `import sys\nsys.path.insert(0, ${JSON.stringify(sourceRoot)})\n${code}`],
         { cwd: harness.root, env, encoding: 'utf8', timeout: 30_000 });
       if (result.status !== 0) throw new Error(`Isolated Hermes probe failed: ${result.stderr}`);
       return result.stdout.trim();
     };
     const generated = runPython(`from pathlib import Path\nfrom hermes_cli._launchers import _launcher_script\nprint(_launcher_script('hermes', Path('/__PLUGNZ_HERMES_ROOT__'), None), end='')`);
-    expect(generated).toBe(hermesNativeBootstrap7dbbb0f.trim());
+    expect(generated).toBe((process.env.HERMES_NATIVE_REVISION === 'd923a5e' ? hermesNativeBootstrap : hermesNativeBootstrap7dbbb0f).trim());
     const server = (version: string) => `import json, sys
 for line in sys.stdin:
     message = json.loads(line)
@@ -62,7 +62,9 @@ for line in sys.stdin:
       return report;
     };
     const probe = (active: boolean) => JSON.parse(runPython(`
-import asyncio, json, queue
+import asyncio, json, queue, os, sys
+assert not sys.dont_write_bytecode
+assert 'PYTHONDONTWRITEBYTECODE' not in os.environ
 import hermes_cli.plugins
 from hermes_cli.plugins import PluginManager
 assert hermes_cli.plugins.__file__.startswith(${JSON.stringify(sourceRoot + '/')})
@@ -74,7 +76,11 @@ class CLI:
 manager = PluginManager(${JSON.stringify(home)})
 manager._cli_ref = CLI()
 manager.discover_and_load()
-evidence = {'skills': sorted(manager._plugin_skills), 'commands': sorted(manager._plugin_commands), 'sections': sorted(manager._system_prompt_sections), 'servers': manager.get_portable_mcp_servers(), 'loader': hermes_cli.plugins.__file__}
+cache = __import__('pathlib').Path(${JSON.stringify(home)}) / 'plugins/native-proof.plgnz-commands/__pycache__'
+if ${active ? 'True' : 'False'}:
+    assert not os.access(cache, os.W_OK)
+    assert list(cache.iterdir()) == []
+evidence = {'nativeBytecodeSuppression': sys.dont_write_bytecode, 'nativeCacheWritable': os.access(cache, os.W_OK), 'nativeCacheMode': (cache.stat().st_mode & 0o777) if cache.exists() else None, 'skills': sorted(manager._plugin_skills), 'commands': sorted(manager._plugin_commands), 'sections': sorted(manager._system_prompt_sections), 'servers': manager.get_portable_mcp_servers(), 'loader': hermes_cli.plugins.__file__}
 if ${active ? 'True' : 'False'}:
     evidence['result'] = manager._plugin_commands['native-proof:run']['handler']('"alpha beta" "literal $1"')
     evidence['queued'] = manager._cli_ref._pending_input.get_nowait()
@@ -95,7 +101,16 @@ if ${active ? 'True' : 'False'}:
 print(json.dumps(evidence))
 `));
     const installed = lifecycle(['add', source]);
+    const companion = join(home, 'plugins/native-proof.plgnz-commands');
+    const companionBeforeImport = fingerprintTree(companion);
     const first = probe(true);
+    expect(fingerprintTree(companion)).toBe(companionBeforeImport);
+    expect(readdirSync(join(companion, '__pycache__'))).toEqual([]);
+    expect(statSync(join(companion, '__pycache__')).mode & 0o777).toBe(0o555);
+    const postImport = lifecycle(['update', 'native-proof', '--dry-run']);
+    expect(postImport.outcomes[0]?.changed).toBe(false);
+    expect(postImport.outcomes[0]?.activationState).toBe('active-conforming');
+    if (process.env.HERMES_7DB_EVIDENCE) writeFileSync(`${process.env.HERMES_7DB_EVIDENCE}.post-import.json`, JSON.stringify({ companionBeforeImport, companionAfterImport: fingerprintTree(companion), postImport, cacheEntries: readdirSync(join(companion, '__pycache__')), cacheMode: statSync(join(companion, '__pycache__')).mode & 0o777 }, null, 2));
     expect(first.skills.some((name: string) => name.endsWith(':ordinary'))).toBe(true);
     expect(first.skills.some((name: string) => name.endsWith(':manual'))).toBe(false);
     expect(first.result).toBe(null);
@@ -176,3 +191,48 @@ print(json.dumps(evidence))
       JSON.stringify({ installed, first, updated, second, unchanged, rolledBack, removed, retired }, null, 2));
   });
 }, 120_000);
+
+conditionalTest.if(Boolean(sourceRoot && python && installedBin && process.env.HERMES_NATIVE_REVISION === 'd923a5e'))('Hermes d923a5e generated persona commands admit manual-skill packages with no authored commands', async () => {
+  await withLifecycleCliHarness(async harness => {
+    const home = harness.storePath('hermes');
+    harness.writeHome({ '.hermes/config.yaml': 'model: preserved\n' });
+    const persona = '---\nname: reviewer\ndescription: Strict instruction persona\n---\nPreserve every persona instruction.\n';
+    const source = harness.source('persona-proof', {
+      'plugin.json': '{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"persona-proof","version":"1.0.0"}',
+      'agents/reviewer.md': persona,
+      'skills/manual/SKILL.md': '---\nname: manual\ndescription: Manual skill\ndisable-model-invocation: true\n---\nmanual body\n',
+    });
+    const result = harness.run(['add', source, '--target', 'hermes', '--json'], { env: { OPEN_PLUGIN_HERMES_BIN: installedBin! }, timeoutMs: 30_000 });
+    const report = parseLifecycleReport(JSON.parse(result.stdout));
+    if (result.exitCode !== 0) throw new Error(`Persona lifecycle admission failed: ${result.stdout} ${result.stderr}`);
+    expect({ code: result.exitCode, reason: report.outcomes[0]?.reason }).toEqual({ code: 0, reason: null });
+    expect(readFileSync(join(home, 'plugins/persona-proof/agents/reviewer.md'), 'utf8')).toBe(persona);
+    const code = `import sys, json, queue
+sys.path.insert(0, ${JSON.stringify(sourceRoot)})
+from hermes_cli.plugins import PluginManager
+class CLI:
+    def __init__(self):
+        self._agent_running = False
+        self._pending_input = queue.SimpleQueue()
+        self._interrupt_queue = queue.SimpleQueue()
+manager = PluginManager(${JSON.stringify(home)})
+manager._cli_ref = CLI()
+manager.discover_and_load()
+assert not any(name.endswith(':manual') or name.endswith(':persona-reviewer') for name in manager._plugin_skills)
+assert manager._plugin_commands['persona-proof:persona-reviewer']['handler']('review') is None
+queued = manager._cli_ref._pending_input.get_nowait()
+assert '.plgnz-user-skills/persona-reviewer/SKILL.md' in queued
+assert 'Plugin root: ' in queued
+print(json.dumps({'commands': sorted(manager._plugin_commands), 'queued': queued}))
+`;
+    const native = spawnSync(python!, ['-I', '-c', code], { cwd: harness.root,
+      env: { HOME: harness.home, HERMES_HOME: home, PATH: '/usr/bin:/bin' }, encoding: 'utf8', timeout: 30_000 });
+    expect({ code: native.status, error: native.stderr }).toEqual({ code: 0, error: '' });
+    const evidence = JSON.parse(native.stdout);
+    expect(evidence.commands).toContain('persona-proof:manual');
+    expect(evidence.commands).toContain('persona-proof:persona-reviewer');
+    const wrapper = readFileSync(join(home, 'plugins/persona-proof/.plgnz-user-skills/persona-reviewer/SKILL.md'), 'utf8');
+    expect(wrapper).toContain('Read agents/reviewer.md relative to the plugin root');
+    if (process.env.HERMES_7DB_EVIDENCE) writeFileSync(`${process.env.HERMES_7DB_EVIDENCE}.personas.json`, JSON.stringify(evidence, null, 2));
+  });
+}, 60_000);

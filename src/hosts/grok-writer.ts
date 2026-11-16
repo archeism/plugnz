@@ -33,7 +33,7 @@ import { grok, MARKER, canonical, configFile, localSourceOf, marketplacesRoot, n
 
 import { yamlParse, yamlStringify } from '../yaml';
 import { CryptoHasher } from '../runtime';
-import { PORTABLE_AGENTS_FILE, planPortableAgents, renderPortableAgentMarkdown } from '../portable-agents';
+import { PORTABLE_AGENTS_FILE, planPortableAgents, planPromptResourceAgents, renderPortableAgentMarkdown } from '../portable-agents';
 
 
 type MarketplaceRow = { name?: unknown; kind?: unknown; source?: { path?: unknown } };
@@ -131,6 +131,85 @@ export const grokWriter: HostWriter = {
       if (backup !== undefined) rmSync(backup, { recursive: true, force: true });
     } finally { rmSync(stage, { recursive: true, force: true }); }
   },
+  async observeLegacyInstallAbsence(id, scope) {
+    if (!id || !scope.source || !scope.scopeId) return 'unknown';
+    const packageName = id.split('@', 1)[0]!;
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(packageName)) return 'unknown';
+    try {
+      const entries = (path: string): string[] => {
+        try {
+          const stat = lstatSync(path);
+          if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error('unsafe native directory');
+          return readdirSync(path);
+        } catch (error) {
+          if ((error as { code?: string }).code === 'ENOENT') return [];
+          throw error;
+        }
+      };
+      entries(grokRoot());
+      const cache = join(grokRoot(), 'installed-plugins');
+      const registry = lstatExists(registryFile()) ? readJson(registryFile()) : { version: 1, repos: {} };
+      if (lstatExists(registryFile()) && lstatSync(registryFile()).isSymbolicLink()) return 'unknown';
+      const raw = registry?.['repos'];
+      if (registry?.['version'] !== 1 || raw === null || typeof raw !== 'object' || Array.isArray(raw)) return 'unknown';
+      const nativePaths = new Map<string, string>();
+      for (const value of Object.values(raw)) {
+        if (value === null || typeof value !== 'object' || Array.isArray(value)) return 'unknown';
+        const row = value as Record<string, unknown>;
+        const plugins = row['plugins'];
+        if (plugins === null || typeof plugins !== 'object' || Array.isArray(plugins)) return 'unknown';
+        const names = Object.keys(plugins);
+        // Inspect raw names before paths: a pathless registry row still blocks.
+        if (names.length !== 1 || names[0] === packageName || typeof row['path'] !== 'string') return 'unknown';
+        const path = canonical(row['path']);
+        if (path === undefined || nativePaths.has(names[0]!)) return 'unknown';
+        const manifest = readJson(join(path, 'plugin.json'));
+        if (manifest?.['name'] !== names[0]) return 'unknown';
+        nativePaths.set(names[0]!, path);
+      }
+      for (const name of entries(cache)) {
+        const path = join(cache, name);
+        if (name === 'registry.json' || name === 'registry.lock') {
+          if (lstatSync(path).isSymbolicLink() || !lstatSync(path).isFile()) return 'unknown';
+        } else if (lstatSync(path).isSymbolicLink() || !lstatSync(path).isDirectory()
+          || ![...nativePaths.values()].includes(canonical(path) ?? '')) return 'unknown';
+      }
+      const roots = new Set<string>();
+      for (const name of entries(marketplacesRoot())) {
+        const root = join(marketplacesRoot(), name);
+        if (lstatSync(root).isSymbolicLink() || !lstatSync(root).isDirectory()) return 'unknown';
+        const marker = ownership(root);
+        if (marker === null || marker.pluginId.split('@', 1)[0] === packageName) return 'unknown';
+        const sibling = marker.pluginId.split('@', 1)[0]!;
+        if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(sibling)
+          || entries(join(root, 'plugins')).length !== 1 || entries(join(root, 'plugins'))[0] !== sibling) return 'unknown';
+        const manifest = readJson(join(root, 'plugins', sibling, 'plugin.json'));
+        if (!nativePaths.has(sibling) || manifest?.['name'] !== sibling) return 'unknown';
+        roots.add(canonical(root)!);
+      }
+      for (const name of entries(join(grokRoot(), 'plugins'))) {
+        const link = join(grokRoot(), 'plugins', name);
+        if (name === packageName || !lstatSync(link).isSymbolicLink()
+          || !nativePaths.has(name) || canonical(link) !== nativePaths.get(name)) return 'unknown';
+      }
+      // Failures must not collapse into an empty list, unlike marketplaceSources().
+      const markets: unknown = JSON.parse(run(['plugin', 'marketplace', 'list', '--json']));
+      if (!Array.isArray(markets)) return 'unknown';
+      for (const value of markets) {
+        const row = value as { kind?: unknown; source?: { path?: unknown; url?: unknown } } | null;
+        if (row === null || typeof row !== 'object') return 'unknown';
+        // Catalog-only remote registrations carry no local activation/cache
+        // bytes and cannot be this legacy local managed Source.
+        if (row.kind === 'git' && typeof row.source?.url === 'string' && row.source.path === undefined) {
+          const remote = new URL(row.source.url);
+          if (!['https:', 'http:', 'ssh:', 'git:'].includes(remote.protocol)) return 'unknown';
+          continue;
+        }
+        if (typeof row.source?.path !== 'string' || !roots.has(canonical(row.source.path) ?? '')) return 'unknown';
+      }
+      return 'absent';
+    } catch { return 'unknown'; }
+  },
   async remove(id: string): Promise<void> {
     removeOwnedGrokInstall(id);
   },
@@ -216,7 +295,7 @@ function projectGrokSource(dir: string): void {
   // plugin loader registers each definition as `<plugin>:<agent>`, so the
   // generated native name must stay the bare authored name; no double
   // namespacing here.
-  const agents = planPortableAgents(dir, 'grok');
+  const agents = planPortableAgents(dir, 'grok') ?? planPromptResourceAgents(dir);
   if (agents !== null) {
     for (const agent of agents) {
       // Grok parses `model: ""` and ASCII case-insensitive `inherit` as the
@@ -226,7 +305,7 @@ function projectGrokSource(dir: string): void {
       }
       writeFileSync(join(dir, agent.path), renderPortableAgentMarkdown(agent));
     }
-    rmSync(join(dir, PORTABLE_AGENTS_FILE));
+    rmSync(join(dir, PORTABLE_AGENTS_FILE), { force: true });
   }
   const skills = join(dir, 'skills');
   if (existsSync(skills)) for (const name of readdirSync(skills)) {
@@ -377,6 +456,7 @@ export function grokPortableAgentProfile(version: string): CapabilityEvidencePro
     detectedVersion: version,
     packageFormat: 'portable-agents',
     agentPolicy: 'portable-native',
+    supportsBareAgents: true,
     sourceTypes: ['local'],
     operations: ['install', 'update'],
     route: 'native',
@@ -385,6 +465,7 @@ export function grokPortableAgentProfile(version: string): CapabilityEvidencePro
     hookPolicy: null,
     evidence: [
       'docs/evidence/grok-portable-agents-20261022.md',
+      'docs/evidence/omp-grok-bare-personas-20261116.json',
       'docs/portable-agents.md',
       'docs/hosts/grok.md',
     ],
@@ -410,6 +491,7 @@ export function grokRetireProfile(version: string): CapabilityEvidenceProfile {
     hookPolicy: null,
     evidence: [
       'docs/evidence/grok-portable-agents-20261022.md',
+      'docs/evidence/omp-grok-bare-personas-20261116.json',
       'docs/hosts/grok.md',
     ],
   });

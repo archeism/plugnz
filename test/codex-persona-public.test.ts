@@ -12,7 +12,7 @@ const files = {
   'agents/reviewer.md': persona,
 };
 
-for (const version of ['0.161.0', '0.162.0']) test(`public Codex ${version} lifecycle registers native agents and preserves manual command adaptation through update`, async () => {
+for (const version of ['0.161.0', '0.162.0', '0.169.0']) test(`public Codex ${version} lifecycle registers native agents and preserves manual command adaptation through update`, async () => {
   await withLifecycleCliHarness(h => {
     h.writeHome({ '.codex/.keep': '' });
     const source = h.source('personas', files);

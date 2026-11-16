@@ -168,7 +168,11 @@ The portable-agent profile adds generated namespaced `agents/*.md` to the same
 enabled extension package. It does not use Claude-dialect discovery, which may
 drop model metadata. Public installation and real native task children proved
 explicit, user-alias, package-alias and omitted model behavior, with ordinary
-native tools and authored instructions. No adjacent release is inferred.
+native tools and authored instructions. Strict bare personas with only `name`,
+`description`, and prose use the same namespaced projection and collision guard
+without a sidecar; [the native proof](../evidence/omp-grok-bare-personas-20261116.json)
+checks four actual task children inheriting the parent model. No adjacent release
+is inferred.
 
 The native parser trims outer whitespace, normalizes line endings and removes
 HTML comments. OMP's native credential policy may fall back to the parent model.

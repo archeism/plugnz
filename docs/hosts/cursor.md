@@ -125,3 +125,25 @@ Capture the exact executable release, source revision and converted bytes,
 native invocation/transcript, and expected/observed sentinels. Existing fixture
 CLI successes and directory-reader discovery do not substitute for that runtime
 evidence. Any failure must be diagnosed before extending the capability claim.
+
+
+## Cursor Agent CLI on a headless host (2026-11-16)
+
+The exact native Agent build `2026.10.01-e373342` has its own managed
+profile only when its resolved versioned `cursor-agent` executable has the
+qualified `6136.index.js` SHA256 from the native receipt. A stock, missing or
+modified bundle fails closed; the version banner alone does not qualify it. It is not Desktop `2.4.0`. An installed official `cursor` shim can
+fail because the Desktop app is absent; version probing then tries the real
+`cursor-agent` executable. Explicit `OPEN_PLUGIN_CURSOR_BIN` remains
+authoritative, and a parseable unknown version still fails closed.
+
+[Native evidence](../evidence/cursor-agent-native-20261116.json) records real
+isolated-home native skill invocation and relative resource reads. Stock ACP
+omits the plugin service in this build; the machine's reversible exact-build
+patch restores native plugin discovery, merged plugin skills and plugin MCP
+loading. The adapter does not install that host patch. Existing sessions keep
+their loaded runtime; no services were restarted. The combined fixture used the real adapter to project a command into a native
+skill, invoked that skill over ACP, read a relative plugin resource using
+native Shell, called a tool from plugin `mcp.json`, and completed with
+`end_turn`. The runner answered only fixture read/MCP permission requests.
+Hooks, native agents and permissions preprocessing remain unverified.

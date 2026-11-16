@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-16",
+  "revision": "d923a5eb487a17c0a68801bba9ef0f56c81040a8",
+  "nativeSource": "/home/charlesfengyc/.hermes/hermes-agent",
+  "sourceTrackedStatus": "clean",
+  "nativeLauncher": "/home/charlesfengyc/.local/bin/hermes",
+  "nativePython": "/home/charlesfengyc/.hermes/installs/59a37e88f6074153/environments/d6c55693168d41dfa723a2b5e8f4e981/venv/bin/python",
+  "launcherBinding": "Exact existing hermesNativeBootstrap body after literal root substitution; native launcher observed without executing bootstrap",
+  "importClosure": "Root venv dependency data is skipped only when a real directory contains pyvenv.cfg and lacks __init__.py; root module collision checks and Python source-tree checks remain",
+  "profile": {
+    "agentPolicy": "prompt-commands",
+    "agents": "strict canonical Markdown personas with name and description only; generated explicit native commands load original instruction resources; no native agent registration or model alias mapping",
+    "manualSkills": "private package storage and explicit native companion commands; excluded from ordinary native skill discovery"
+  },
+  "checks": {
+    "nativeOrdinarySkillDiscovery": true,
+    "manualSkillsExcludedFromOrdinaryCatalog": true,
+    "manualNativeCommandQueuesPrivateSkill": true,
+    "personaOriginalBytesPreserved": true,
+    "personaNativeCommandQueuesGeneratedPrivateSkill": true,
+    "strictMetadataRefusedBeforeReplacingInstalledSource": true,
+    "noAuthoredCommandsPublicAdmission": true,
+    "realMcpRoundTripInstallUpdateRollbackRetire": true,
+    "publicNativeLifecycle": [
+      "install",
+      "update",
+      "same-version-unchanged",
+      "rollback",
+      "retire"
+    ],
+    "disableReenable": "unverified; exact profile excludes disable"
+  },
+  "cost": {
+    "modelCalls": 0,
+    "modelTokens": 0,
+    "fullNativeAndHermesFocusedWallSeconds": 13.39,
+    "fullNativeAndHermesFocusedTests": 11,
+    "fullNativeAndHermesFocusedAssertions": 83,
+    "noAuthoredCommandsNativeWallSeconds": 1.93,
+    "noAuthoredCommandsNativeAssertions": 6,
+    "rawEvidenceAllocatedKiB": 212,
+    "sourceOrDependencyCopies": 0,
+    "agentTokens": "not independently measured",
+    "finalNativeWallSeconds": 15.29,
+    "finalNativeTests": 2,
+    "finalNativeAssertions": 34
+  },
+  "reproduce": {
+    "test": "test/hermes-native-7dbbb0f.test.ts",
+    "environment": {
+      "HERMES_NATIVE_REVISION": "d923a5e",
+      "HERMES_7DB_SOURCE_ROOT": "/home/charlesfengyc/.hermes/hermes-agent",
+      "HERMES_7DB_PYTHON": "/home/charlesfengyc/.hermes/installs/59a37e88f6074153/environments/d6c55693168d41dfa723a2b5e8f4e981/venv/bin/python",
+      "HERMES_7DB_INSTALLED_BIN": "/home/charlesfengyc/.local/bin/hermes",
+      "HERMES_7DB_EVIDENCE": "/tmp/hermes-native-d923-proof/native-lifecycle-result.json"
+    }
+  },
+  "rawEvidence": {
+    "directory": "/tmp/hermes-native-d923-proof",
+    "sha256": {
+      "native-result.json": "eac3dac770d223991ae882561dd7fdf250494a74acee427b053ce12a49dd678a",
+      "native-lifecycle-result.json": "b832b170d830bf1fbf7bf49e5bdfc0f227c630417d6501b1a080e67195228e27",
+      "native-lifecycle-result.json.personas.json": "f7af4f1a7140259589f1077280c20f58a18e85ef7b7397bca1a129058465dee1"
+    }
+  },
+  "retainedNullAttempts": [
+    {
+      "stage": "isolated persona fixture setup",
+      "result": "writer refused missing Agent Plugins schema before activation; fixture corrected"
+    },
+    {
+      "stage": "public persona fixture setup",
+      "result": "usage.invalid-selection because fixture omitted .hermes/config.yaml; no mutation; corrected fixture config then native public admission passed"
+    },
+    {
+      "stage": "extra public disable probe",
+      "result": "standalone disable is not a public CLI verb; runner JSON parse failed before a disable mutation; exact profile narrowed to install/update/retire"
+    }
+  ],
+  "limits": [
+    "No provider/model turn was performed; native command queue and lossless instruction-resource linkage were exercised directly",
+    "Existing live plugins and services were not mutated or restarted",
+    "The original qualification used bytecode suppression; ordinary import stability is superseded by the protected-cache follow-up with suppression unset."
+  ],
+  "skillDecision": "unchanged; runtime/version qualification and adapter packaging fix only",
+  "sourceSha256": {
+    "test/hermes-native-7dbbb0f.test.ts": "7a88d3f558f20c464212f80ed5cea487160f609833b1c5a92c4dbc871c05a6fb",
+    "src/conversion.ts": "36ca54a769ed0206b09ce202277ca0679a555b76e0b22fa5d0a7685648d415a5",
+    "src/hosts/hermes.ts": "17c2bea941dd5484609ce430d204b0c2d21e31372309c17722ff3c0c74c16f85",
+    "src/hosts/hermes-writer.ts": "779626c05015118ee0470b2e58ef4840d814dabedd4ecf512dd04079787c63a7"
+  },
+  "supportedOperations": [
+    "install",
+    "update",
+    "retire"
+  ],
+  "unverifiedOperations": [
+    "disable"
+  ],
+  "followup": "docs/evidence/hermes-companion-cache-20261116.json"
+}

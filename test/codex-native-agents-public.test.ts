@@ -34,7 +34,7 @@ function prepare(h: LifecycleCliHarness, version = '0.162.0') {
   return { OPEN_PLUGIN_CODEX_BIN: native.path };
 }
 
-for (const version of ['0.161.0', '0.162.0']) test(`Codex ${version} public native roles project mappings, update aliases/version, and retire only owned refs`, async () => {
+for (const version of ['0.161.0', '0.162.0', '0.169.0']) test(`Codex ${version} public native roles project mappings, update aliases/version, and retire only owned refs`, async () => {
   await withLifecycleCliHarness(h => {
     const env = prepare(h, version);
     const source = h.source('portable-review', fixture);

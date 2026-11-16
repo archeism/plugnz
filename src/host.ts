@@ -154,6 +154,12 @@ export interface HostWriter extends HostReader {
    */
   addDisposition?(plugin: PluginSource): AddDisposition | undefined;
   add(plugin: PluginSource, resolved: ResolvedSource, opts?: AddOptions): Promise<void | 'unchanged'>;
+  /**
+   * Fail-closed, adapter-owned proof that a legacy pending install has no native
+   * registry, cache, managed-source, or activation artifacts. An empty
+   * listInstalled() is insufficient. No native mutation is permitted here.
+   */
+  observeLegacyInstallAbsence?(id: string, scope: { source: string; scopeId: string }): Promise<'absent' | 'unknown'>;
   remove(id: string, opts?: RemoveOptions): Promise<void>;
   /**
    * Rewrite every *bare* stdio `command` in this plugin's installed copy to the

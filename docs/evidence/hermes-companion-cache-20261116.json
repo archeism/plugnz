@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-16",
+  "question": "Does an ordinary native Hermes import preserve the managed immutable companion and a fresh read-only no-op?",
+  "baselineMiss": "Earlier probes forced -B/PYTHONDONTWRITEBYTECODE and masked native __pycache__ creation; actual public Addy import changed the installed fingerprint.",
+  "change": "Create an empty __pycache__ directory with mode 0555 before fingerprinting. Validate real-directory shape, exact mode, emptiness and effective write denial during staging, unchanged checks and managed readback. Never ignore bytecode or foreign cache contents.",
+  "nativeRuntime": {
+    "revision": "d923a5eb487a17c0a68801bba9ef0f56c81040a8",
+    "uid": 1005,
+    "python": "/home/charlesfengyc/.hermes/installs/59a37e88f6074153/environments/d6c55693168d41dfa723a2b5e8f4e981/venv/bin/python",
+    "dontWriteBytecode": false,
+    "PYTHONDONTWRITEBYTECODE": "unset",
+    "flags": [
+      "-I"
+    ],
+    "cacheWritableByNativePython": false
+  },
+  "acceptance": {
+    "publicInstall": true,
+    "actualNativeImportAndCommands": true,
+    "companionFingerprintUnchanged": true,
+    "cacheEntries": [],
+    "cacheMode": "0555",
+    "freshReadonlyPublicUpdate": {
+      "activationState": "active-conforming",
+      "changed": false
+    },
+    "realMcpUpdateRollbackRetire": true,
+    "modeDriftFailsReadbackEvenWhenFingerprintMatches": true,
+    "foreignPycRefusedAndRetained": true,
+    "effectivePrivilegeBypassFailsClosed": true
+  },
+  "verification": {
+    "focusedCacheTests": 2,
+    "focusedCacheAssertions": 9,
+    "nativePublicTests": 1,
+    "nativePublicAssertions": 34,
+    "nativeWallSeconds": 13.82,
+    "otherDefaultImportRun": {
+      "tests": 2,
+      "assertions": 40,
+      "wallSeconds": 17.92
+    },
+    "typecheck": "bun run check passed",
+    "modelCalls": 0,
+    "modelTokens": 0,
+    "agentTokens": "not independently measured"
+  },
+  "sourceSha256": {
+    "src/hosts/hermes-companion-cache.ts": "f569b04c0ee2abf7dfd0da7d6160863ce03fc234fde18eda8360a29d9fb0fa6e",
+    "src/conversion.ts": "36ca54a769ed0206b09ce202277ca0679a555b76e0b22fa5d0a7685648d415a5",
+    "src/hosts/hermes-writer.ts": "779626c05015118ee0470b2e58ef4840d814dabedd4ecf512dd04079787c63a7",
+    "test/hermes-companion-cache.test.ts": "0c9616f7102e840edaabbfe9922a5642963fd197a98081055982a14796dd8f7d",
+    "test/hermes-native-7dbbb0f.test.ts": "7a88d3f558f20c464212f80ed5cea487160f609833b1c5a92c4dbc871c05a6fb"
+  },
+  "rawEvidence": {
+    "directory": "/tmp/hermes-native-d923-proof/cache-fix-20261116",
+    "sha256": {
+      "native-lifecycle-result.json.post-import.json": "4fffb6abb23cfe7e9a1b339bc313d7ddb88ab96798afd04d1124413657fc28a9",
+      "native-lifecycle-result.json": "b832b170d830bf1fbf7bf49e5bdfc0f227c630417d6501b1a080e67195228e27",
+      "native-lifecycle-result.json.personas.json": "f7af4f1a7140259589f1077280c20f58a18e85ef7b7397bca1a129058465dee1"
+    }
+  },
+  "retainedFailedAttempts": [
+    {
+      "stage": "cache regression cleanup",
+      "result": "Test deliberately retained a foreign file in readonly cache, so fixture cleanup failed; test cleanup now restores write permission only on its own isolated fixture after assertions."
+    },
+    {
+      "stage": "explicit native cache probe",
+      "result": "An assertion incorrectly required cache existence after successful retirement. Restricted cache assertions to active installations, then native install/update/rollback/retirement rerun passed."
+    }
+  ],
+  "limits": [
+    "The write-denial proof is for the effective unprivileged runtime on this host. Root or capabilities that can write mode-0555 directories fail admission; no portable privilege guarantee is claimed.",
+    "Existing legacy bytecode is neither ignored nor deleted. Operator backup and proven fresh installation remain separate from this producer fix.",
+    "No live plugin store, native launcher environment or running service was changed by this fix."
+  ],
+  "skillDecision": "unchanged; the demonstrated test-harness suppression miss was fixed in the native qualification itself.",
+  "sharedGuardExtraction": {
+    "reason": "Dcode native Python extensions exposed the same bytecode drift; reuse the existing guard without changing Hermes behavior or error strings.",
+    "sourceSha256": {
+      "src/python-bytecode-cache.ts": "b6ac7149710eab8b3a78830d291c94c98c5c2fe6dc2552cae435b4a85951e586",
+      "src/hosts/hermes-companion-cache.ts": "b1b34239654d9965d14744ffa7e49beaadd7582876022052cfa52cbe2386f589"
+    },
+    "verification": {
+      "focusedHermesCacheTests": 2,
+      "focusedDcodeCacheTests": 2,
+      "combinedDcodeHermesTests": 42,
+      "assertions": 268,
+      "wallSeconds": 0.728,
+      "typecheck": "passed",
+      "nativeHermesReplay": "not rerun; the earlier native acceptance remains bound to the original sourceSha256 above"
+    }
+  }
+}

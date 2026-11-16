@@ -405,6 +405,7 @@ export function ompPortableAgentProfile(version: string): CapabilityEvidenceProf
     detectedVersion: version,
     packageFormat: 'portable-agents',
     agentPolicy: 'portable-native',
+    supportsBareAgents: true,
     sourceTypes: ['local', 'git'],
     operations: ['install', 'update', 'retire'],
     route: 'managed',
@@ -416,6 +417,7 @@ export function ompPortableAgentProfile(version: string): CapabilityEvidenceProf
     hookPolicy: null,
     evidence: [
       'docs/evidence/omp-portable-agents-20261022.md',
+      'docs/evidence/omp-grok-bare-personas-20261116.json',
       'docs/evidence/omp-native-extension-package-18.8.7-20261023.json',
       'docs/portable-agents.md',
     ],
@@ -623,7 +625,7 @@ function installationOf(plugin: InstalledPlugin): TargetInstallationData {
   const digest = fingerprintTree(path);
   const enabled = plugin.enabled !== false;
   const resolvedScopeId = owner?.pluginId === plugin.id
-    ? (owner.scopeId ?? resolveLegacyV1MarkerScopeId({ target: { kind: 'omp', instance: 'default' }, nativeId: plugin.id, marker: owner, installedFingerprint: digest }))
+    ? (owner.scopeId ?? resolveLegacyV1MarkerScopeId({ target: { kind: 'omp', instance: 'default' }, nativeId: plugin.id, marker: owner, installedFingerprint: digest, installedRoot: path }))
     : undefined;
   return {
     nativeId: plugin.id,

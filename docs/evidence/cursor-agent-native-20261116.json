@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-16",
+  "nativeVersion": "2026.10.01-e373342",
+  "nativeBinary": "/home/charlesfengyc/.local/share/cursor-agent/versions/2026.10.01-e373342/cursor-agent",
+  "desktopInstalled": false,
+  "reapplySource": "archeism/personal:memory/patches/cursor-acp-plugins.mjs",
+  "bundle": {
+    "path": "6136.index.js",
+    "beforeSha256": "1fd63a6a85df08cd65f82b11d8831fee053d282563f4b7727729c6d90abeecd3",
+    "afterSha256": "caee83093c76b54b5f0b5e57be488ef3108ed4f193073521139049f596c673c6"
+  },
+  "checks": {
+    "stockAcpPluginDiscovered": false,
+    "patchedAcpPluginDiscovered": true,
+    "nativePrintSkillMarkerReturned": true,
+    "nativeSlashSkillRelativeResourceRead": true,
+    "commandProjectionDiscovery": true,
+    "nativePluginMcpInitializedAndToolsListed": true,
+    "combinedRuntimeAttempt1": {
+      "accepted": false,
+      "wallSeconds": 65.23,
+      "reason": "runner did not answer native ACP fixture cat permission; preserved as null attempt"
+    },
+    "combinedRuntimeAttempt2": {
+      "accepted": true,
+      "wallSeconds": 14.87,
+      "nativeCommandProjectionDiscovered": true,
+      "nativeShellRelativeResourceRead": true,
+      "nativePluginMcpToolsCall": true,
+      "stopReason": "end_turn",
+      "permissionHandling": "allow-once for fixture cat or native_probe only; deny all others"
+    },
+    "reapplyIdempotent": true,
+    "syntaxChecks": [
+      "node --check reapply-source.mjs",
+      "node --check patched6136.index.js"
+    ],
+    "admissionBindsQualifiedRuntimeSha256": true,
+    "stockMissingMutatedRuntimeRefused": true,
+    "actualRuntimeProbeAfterHashGate": {
+      "kind": "detected",
+      "version": "2026.10.01-e373342"
+    },
+    "runtimeBindingRegressions": {
+      "tests": 7,
+      "assertions": 85,
+      "command": "bun test test/cursor-runtime-artifact.test.ts test/cursor-managed-lifecycle.test.ts"
+    }
+  },
+  "rawEvidence": {
+    "directory": "/tmp/cursor-native-prereq-lxqn_94t",
+    "files": {
+      "protocol.json": "85c7379215fb9885e44266d84b065c4562accebc6e745a09eb1b6f3e6749aaed",
+      "patched.protocol.json": "889439d9f8639b21a6da9edc5864c440e05164097378cbf9fdae0711160b6b39",
+      "print.stdout.json": "93a59fed982724e1f1a5496f8ba75d6d7087176a3a0cb37e9647d3cc44b2e1d7",
+      "resource.stdout.json": "800c611eb66969a9ef5c32716236483118eb06933f149dcb76dd2ad9a77b39fc",
+      "combined.protocol.json": "e12d491eccbc15237b6c78eef68e9ac47429c825221d6bd35ccfe88b34b5a7c4",
+      "combined.attempt2.protocol.json": "d274b190a289945e33621e02b7d876cecabc160b5b5b20b80925be178efd117d"
+    }
+  },
+  "usage": {
+    "printSkill": {
+      "wallSeconds": 27.14,
+      "apiMilliseconds": 12026,
+      "inputTokens": 19541,
+      "outputTokens": 374,
+      "cacheReadTokens": 34944,
+      "cacheWriteTokens": 0
+    },
+    "relativeResource": {
+      "wallSeconds": 12.74,
+      "apiMilliseconds": 8203,
+      "inputTokens": 7958,
+      "outputTokens": 232,
+      "cacheReadTokens": 14208,
+      "cacheWriteTokens": 0
+    }
+  },
+  "limits": {
+    "model": "native default; not independently recorded",
+    "commandProjectionRuntime": "verified command-to-native-skill fixture; unsupported user-invocable:false is refused by the adapter",
+    "mcpToolInvocation": "verified native plugin mcp.json stdio tool discovery and call",
+    "existingSessionsRestarted": false,
+    "skillRevision": "unchanged; native runtime upgrade patch repaired",
+    "combinedAcpTokenUsage": "unknown: ACP did not expose usage in retained updates",
+    "stockAcpSupport": "not admitted: exact native-tested patched6136 SHA256 is mandatory"
+  },
+  "reapplySourceSha256": "54ec1fe989548fce6e50e98fe7aa810317ecd721e36c49bbfcc04c8c0c6ec5de",
+  "reapplyCheckpoint": "archeism/personal@1098f8e6"
+}

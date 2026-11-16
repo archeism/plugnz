@@ -691,6 +691,26 @@ describe('versioned capability evidence', () => {
     expect(result.gaps[0]?.code).toBe('capability.unverified');
   });
 
+  test('bare-agent qualification is explicit, serialized, and bound to the evidence address', () => {
+    const input = {
+      host: 'fixture', detectedVersion: '1.0.0', packageFormat: 'portable-agents' as const,
+      sourceTypes: ['local' as const], operations: ['install' as const], route: 'managed' as const,
+      operationStatus: 'supported' as const, agentPolicy: 'portable-native' as const,
+      semantics: Object.fromEntries(PACKAGE_SEMANTICS.map(semantic => [semantic, 'supported'])) as Record<(typeof PACKAGE_SEMANTICS)[number], 'supported'>,
+      evidence: ['docs/portable-agents.md'],
+    };
+    const ordinary = createCapabilityEvidenceProfile(input);
+    const optedIn = createCapabilityEvidenceProfile({ ...input, supportsBareAgents: true });
+    expect(ordinary.supportsBareAgents).toBeUndefined();
+    expect(optedIn.supportsBareAgents).toBe(true);
+    expect(JSON.parse(JSON.stringify(optedIn)).supportsBareAgents).toBe(true);
+    expect(optedIn.evidenceId === ordinary.evidenceId).toBe(false);
+    const inventory = inventoryPackageSemantics(source('strict-bare-evidence', { 'agents/reviewer.md': '---\nname: reviewer\ndescription: Review\n---\nExact prose.\n' }));
+    const request = { host: 'fixture', detectedVersion: '1.0.0', sourceType: 'local' as const, operation: 'install' as const, route: 'managed' as const, inventory };
+    expect(admitPackageSemanticsFromProfiles(request, [ordinary]).status).toBe('refused');
+    expect(admitPackageSemanticsFromProfiles(request, [optedIn]).status).toBe('admitted');
+  });
+
   test('addresses every evidence profile with a credential-free sha256 id', () => {
     expect(capabilityEvidenceProfiles.length).toBeGreaterThan(0);
     for (const profile of capabilityEvidenceProfiles) {

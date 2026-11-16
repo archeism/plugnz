@@ -108,3 +108,43 @@ isolated HOME/HERMES_HOME/XDG directories and Python `-I -B`; they execute no
 Hermes bootstrap recovery, provider/model call, or live-profile mutation.
 Run `test/hermes-native-7dbbb0f.test.ts` with the source, Python and installed
 launcher paths listed in the receipt to reproduce the native proof.
+
+
+## d923a5e qualification and instruction personas
+
+The exact clean revision `d923a5eb487a17c0a68801bba9ef0f56c81040a8`
+uses the existing verified native launcher template. Its isolated native loader,
+command queue and real MCP lifecycle qualification are recorded in
+[the native receipt](../evidence/hermes-native-loader-d923a5e-20261116.json).
+The exact profile admits install, update and retirement; disable remains
+unverified. A retained root `venv/` is treated as dependency data only when it is a real
+directory containing `pyvenv.cfg` and no package initializer; source-module
+collision checks remain active. The provenance probe executes no Hermes startup.
+
+Strict `agents/*.md` definitions containing only `name` and `description`
+remain byte-for-byte instruction resources. The adapter generates a manual
+`persona-<name>` skill, then the existing companion exposes it as
+`/<plugin>:persona-<name>`. Invocation queues the private skill's full path and
+plugin root, which in turn loads the original persona file. These wrappers and
+other manual skills stay outside ordinary native skill discovery.
+
+The explicit `agentPolicy: prompt-commands` profile admits this adapter-generated
+invocation path even when the source has no authored commands. It rejects
+portable execution configuration and extra persona metadata. The older
+`prompt-resources` policy keeps its authored-command requirement.
+
+
+Native Python imports normally create `__pycache__`, which would change an
+immutable command companion after installation. The generated companion now
+contains an empty mode-`0555` cache directory before its fingerprint is sealed.
+Staging and managed readback require that exact mode, emptiness and effective
+write denial; directory mode changes are checked separately because content
+fingerprints omit directory permissions. Bytecode files remain untrusted
+content and are never ignored.
+
+[Default-import qualification](../evidence/hermes-companion-cache-20261116.json)
+uses actual native Python with bytecode suppression unset: import preserves the
+fingerprint, and a fresh read-only public update reports `active-conforming`
+with `changed: false`. Privilege that can still write the cache fails closed.
+This does not modify launchers or global Python settings; old bytecode requires
+separate backed-up operator recovery.

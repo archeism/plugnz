@@ -37,6 +37,16 @@ activation, rollback, readback, reload, and retained plugin data. The subsequent
 Addy evidence below extends that managed envelope to manual commands and bounded
 native agent roles.
 
+The exact `0.169.0` release is admitted for the same managed install/update/retire
+route after [native qualification on 2026-11-16](../evidence/codex-0169-native-20261116.json).
+Isolated actual app-server probes loaded 34 skills, preserved manual invocation
+policy, discovered plugin MCP, registered four Addy roles and captured a spawned
+child with the exact updated role instructions. Idempotent reinstallation,
+owned-role removal, unrelated configuration preservation and fresh native
+post-removal discovery passed. Responses came from a synthetic localhost provider;
+no model inference was used. This admission does not expand the native
+marketplace-update route beyond `0.162.0`.
+
 Measured 2026-09-16 on this machine (`~/.codex`). Reader: `src/hosts/codex.ts`.
 
 ## Store
@@ -118,7 +128,7 @@ has no existing pointer or default `.mcp.json`; native `mcpServerStatus/list`
 then discovers the local server and its tool. Existing authored pointers stay
 intact. This proves wiring and native discovery, not third-party authentication.
 User-invocation suppression remains unsupported. Native agent registration is
-qualified for 0.161.0 and 0.162.0 as described below. Unsupported agent metadata
+qualified for 0.161.0, 0.162.0 and 0.169.0 as described below. Unsupported agent metadata
 still refuses the whole package before mutation.
 
 Inline manifest `mcpServers` remain unverified and are refused before activation.

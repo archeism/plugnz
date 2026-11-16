@@ -124,7 +124,9 @@ No agent runtime or execution abstraction is added to plugnz.
 ## OMP native task agents
 
 OMP 18.8.7 discovers generated `<plugin>:<agent>` names through the enabled
-native extension package's `agents/*.md`. Explicit `models.omp` and alias
+native extension package's `agents/*.md`. Strict bare personas containing only
+`name`, `description`, and instruction prose use the same projection without a
+portable model sidecar. Explicit `models.omp` and alias
 mappings use native OMP model selectors; no mapping emits no model field.
 Native task children keep their ordinary tools. OMP may fall back to the parent
 model when requested credentials are unavailable. Its parser trims outer
@@ -163,12 +165,13 @@ to the parent model with a warning (native policy, disclosed). A resolved
 model whose value is `inherit` (case-insensitive) is refused because Grok treats
 it as inheritance rather than a concrete model; multiline model IDs are also refused.
 Native children keep their ordinary tools, and the child prompt carries the
-authored body with surrounding whitespace trimmed. Plain native
-`agents/*.md` without the sidecar, and versions other than 1.0.46, fail
-closed. Public `remove` retires the owned marketplace install natively
+authored body with surrounding whitespace trimmed. Strict bare `agents/*.md`
+containing only `name`, `description`, and instruction prose use this projection
+without a sidecar. Other native metadata and versions other than 1.0.46 fail closed. Public `remove` retires the owned marketplace install natively
 (plugin, namespaced types, link, and registry row disappear; unrelated plugins
 and user configuration survive; mid-removal failures roll back). See
-[Grok qualification](evidence/grok-portable-agents-20261022.md).
+[Grok qualification](evidence/grok-portable-agents-20261022.md) and
+[OMP/Grok strict bare-persona native proof](evidence/omp-grok-bare-personas-20261116.json).
 
 ## Pi: explicit non-failing skip
 
@@ -257,3 +260,12 @@ The design follows the existing canonical-source/generated-harness-tree pattern
 used by [Cursor's pstack generator](https://github.com/cursor/plugins/blob/eb4db2b55b2b7dec3d9282754cddf0a56bf4ff10/scripts/generate-pstack-harness-trees.mjs).
 Unlike instructions asking the model to translate a choice, this projection resolves
 explicit mappings during installation. This is packaging; execution belongs to the harness.
+
+
+Instruction-persona adaptation has separate capability policies: `prompt-resources`
+requires an authored command, while `prompt-commands` requires the host adapter
+to generate explicit native invocation wrappers. Both accept only canonical
+Markdown personas with `name`/`description` metadata, preserve their instruction
+resources, and refuse portable execution configuration or model/tool metadata.
+They do not register native executable agents. Hermes's qualified example is
+[documented here](hosts/hermes.md#d923a5e-qualification-and-instruction-personas).

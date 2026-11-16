@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { legacyV1MarkerMatchesScope, resolveLegacyV1MarkerScopeId } from '../src/legacy-claim-ownership';
 import { withLifecycleCliHarness } from './lifecycle-cli-harness';
@@ -7,14 +7,16 @@ import { claudeCodeWriter } from '../src/hosts/claude-code-writer';
 import { cursorWriter } from '../src/hosts/cursor-writer';
 import { codexWriter } from '../src/hosts/codex-writer';
 import { ompWriter } from '../src/hosts/omp-writer';
-import { fingerprintTree } from '../src/fingerprint';
+import { dcodeWriter } from '../src/hosts/dcode-writer';
+import { fakeDcodeLockInterpreter } from './dcode-fake-lock';
+import { fingerprintLegacyV1SourceTree, fingerprintLegacyV1Tree, fingerprintTree } from '../src/fingerprint';
 import { resolveSource } from '../src/source';
 import { createDeploymentScopeIdentity } from '../src/deployment-scope';
 
 async function seedLegacyClaudeV1(
   harness: Parameters<Parameters<typeof withLifecycleCliHarness>[0]>[0],
   sourceDir: string,
-  opts?: { forceWrapper?: boolean; pluginName?: string },
+  opts?: { forceWrapper?: boolean; pluginName?: string; legacyFingerprint?: boolean },
 ) {
   const prevRoot = process.env['OPEN_PLUGIN_CLAUDE_CODE_ROOT'];
   const prevHome = process.env['OPEN_PLUGIN_HOME'];
@@ -27,13 +29,14 @@ async function seedLegacyClaudeV1(
     }
     const targetPluginName = opts?.pluginName ?? 'addy';
     const plugin = resolved.plugins.find(p => p.name === targetPluginName)!;
+    if (opts?.legacyFingerprint) plugin.contentFingerprint = fingerprintLegacyV1SourceTree(plugin.dir);
     await claudeCodeWriter.add(plugin, resolved);
     const nativeId = `${plugin.name}@${plugin.marketplace ?? 'local'}`;
     const registry = JSON.parse(readFileSync(join(harness.storePath('claude-code'), 'plugins/installed_plugins.json'), 'utf8')) as {
       plugins: Record<string, Array<{ installPath: string }>>;
     };
     const installPath = registry.plugins[nativeId]![0]!.installPath;
-    const installedFp = fingerprintTree(installPath);
+    const installedFp = opts?.legacyFingerprint ? fingerprintLegacyV1Tree(installPath) : fingerprintTree(installPath);
     const scope = createDeploymentScopeIdentity({ kind: 'local', locator: sourceDir }, { kind: 'claude-code', instance: 'default' });
     harness.writeHome({
       'state.json': JSON.stringify({
@@ -80,7 +83,7 @@ async function seedLegacyClaudeV1(
 }
 
 describe('legacy v1 ownership migration (Personal issue #63)', () => {
-  test('migrates legacy v1 claude-code install (addy@personal without scopeId) for canonical OpenPlugin marketplace and converges idempotently', async () => {
+  for (const legacyFingerprint of [false, true]) test(`migrates legacy v1 claude-code install with pre-mode fingerprint=${legacyFingerprint} and converges idempotently`, async () => {
     await withLifecycleCliHarness(async harness => {
       harness.fakeNative('claude', [
         { args: ['--version'], stdout: '2.1.296 (Claude Code)\n', exitCode: 0 },
@@ -100,7 +103,7 @@ describe('legacy v1 ownership migration (Personal issue #63)', () => {
         'plugins/addy/skills/code-review/SKILL.md': '# Code Review\n',
       });
 
-      const { installPath, scopeId } = await seedLegacyClaudeV1(harness, sourceDir);
+      const { installPath, scopeId } = await seedLegacyClaudeV1(harness, sourceDir, { legacyFingerprint });
       const markerBefore = JSON.parse(readFileSync(join(installPath, '.plgnz-install.json'), 'utf8')) as Record<string, unknown>;
       expect(markerBefore['scopeId']).toBeUndefined();
 
@@ -127,7 +130,7 @@ describe('legacy v1 ownership migration (Personal issue #63)', () => {
     });
   });
 
-  test('migrates legacy v1 wrapper catalog copy when unmodified and refuses when catalog copy bytes were modified', async () => {
+  for (const legacyFingerprint of [false, true]) test(`migrates unmodified wrapper and rejects edits with pre-mode fingerprint=${legacyFingerprint}`, async () => {
     await withLifecycleCliHarness(async harness => {
       harness.fakeNative('claude', Array.from({ length: 16 }, () => ({ args: ['--version'], stdout: '2.1.296 (Claude Code)\n', exitCode: 0 })));
       const sourceDir = harness.source('personal-wrapper-catalog', {
@@ -140,7 +143,7 @@ describe('legacy v1 ownership migration (Personal issue #63)', () => {
         'plugins/addy/skills/code-review/SKILL.md': '# Wrapper Copy Original\n',
       });
 
-      await seedLegacyClaudeV1(harness, sourceDir, { forceWrapper: true });
+      await seedLegacyClaudeV1(harness, sourceDir, { forceWrapper: true, legacyFingerprint });
       const catalogCopy = join(harness.storePath('claude-code'), 'plugins/marketplaces/.plgnz-personal/plugins/addy');
       const copyMarkerBefore = JSON.parse(readFileSync(join(catalogCopy, '.plgnz-install.json'), 'utf8')) as Record<string, unknown>;
       expect(copyMarkerBefore['scopeId']).toBeUndefined();
@@ -175,7 +178,7 @@ describe('legacy v1 ownership migration (Personal issue #63)', () => {
     });
   });
 
-  test('migrates legacy v1 cursor, codex, and omp installs when imported v2 legacy scopes exist and converges idempotently', async () => {
+  for (const legacyFingerprint of [false, true]) test(`migrates legacy v1 cursor/codex/omp with pre-mode fingerprint=${legacyFingerprint} idempotently`, async () => {
     await withLifecycleCliHarness(async harness => {
       const codex = harness.fakeNative('codex', Array.from({ length: 24 }, () => ({ args: ['--version'], stdout: 'codex-cli 0.162.0\n' })));
       const omp = harness.fakeNative('omp', Array.from({ length: 24 }, () => ({ args: ['--version'], stdout: '18.10.3\n' })));
@@ -205,15 +208,17 @@ describe('legacy v1 ownership migration (Personal issue #63)', () => {
       try {
         const resolved = resolveSource(sourceDir);
         const plugin = resolved.plugins.find(p => p.name === 'addy')!;
+        if (legacyFingerprint) plugin.contentFingerprint = fingerprintLegacyV1SourceTree(plugin.dir);
         await cursorWriter.add(plugin, resolved);
         await codexWriter.add(plugin, resolved);
         await ompWriter.add(plugin, resolved);
         ompPath = ompWriter.listInstalled().find(p => p.id === 'addy@personal')!.path!;
         const cursorPath = join(harness.storePath('cursor'), 'plugins/local/addy');
         const codexPath = join(harness.storePath('codex'), 'plugins/cache/personal/addy/0.1.0');
-        const cursorFp = fingerprintTree(cursorPath);
-        const codexFp = fingerprintTree(codexPath);
-        const ompFp = fingerprintTree(ompPath);
+        const fingerprint = legacyFingerprint ? fingerprintLegacyV1Tree : fingerprintTree;
+        const cursorFp = fingerprint(cursorPath);
+        const codexFp = fingerprint(codexPath);
+        const ompFp = fingerprint(ompPath);
         cursorScopeId = createDeploymentScopeIdentity({ kind: 'local', locator: sourceDir }, { kind: 'cursor', instance: 'default' }).id;
         codexScopeId = createDeploymentScopeIdentity({ kind: 'local', locator: sourceDir }, { kind: 'codex', instance: 'default' }).id;
         ompScopeId = createDeploymentScopeIdentity({ kind: 'local', locator: sourceDir }, { kind: 'omp', instance: 'default' }).id;
@@ -297,7 +302,7 @@ describe('legacy v1 ownership migration (Personal issue #63)', () => {
     });
   });
 
-  test('preserves modified legacy install and unmanaged install without overwriting bytes', async () => {
+  for (const legacyFingerprint of [false, true]) test(`preserves modified/unmanaged legacy install with pre-mode fingerprint=${legacyFingerprint}`, async () => {
     await withLifecycleCliHarness(async harness => {
       harness.fakeNative('claude', [
         { args: ['--version'], stdout: '2.1.296 (Claude Code)\n', exitCode: 0 },
@@ -313,7 +318,7 @@ describe('legacy v1 ownership migration (Personal issue #63)', () => {
         'plugins/addy/skills/code-review/SKILL.md': '# Code Review\n',
       });
 
-      const { installPath } = await seedLegacyClaudeV1(harness, sourceDir);
+      const { installPath } = await seedLegacyClaudeV1(harness, sourceDir, { legacyFingerprint });
       writeFileSync(join(installPath, 'skills/code-review/SKILL.md'), '# Locally Modified By User\n');
 
       const modifiedRun = harness.run(['add', sourceDir, '--target', 'claude-code', '--json']);
@@ -324,6 +329,64 @@ describe('legacy v1 ownership migration (Personal issue #63)', () => {
       const unmanagedRun = harness.run(['add', sourceDir, '--target', 'claude-code', '--json']);
       expect(unmanagedRun.exitCode).toBe(1);
       expect(readFileSync(join(installPath, 'skills/code-review/SKILL.md'), 'utf8')).toBe('# Locally Modified By User\n');
+    });
+  });
+
+  for (const legacyFingerprint of [false, true]) test(`migrates dcode imported unscoped ownership with pre-mode fingerprint=${legacyFingerprint}`, async () => {
+    await withLifecycleCliHarness(async harness => {
+      const sourceDir = harness.source('dcode-legacy', {
+        '.claude-plugin/marketplace.json': JSON.stringify({ name: 'personal', owner: { name: 'Charles' }, plugins: [{ name: 'addy', source: './plugins/addy' }] }),
+        'plugins/addy/plugin.json': JSON.stringify({ name: 'addy', version: '0.1.0' }),
+        'plugins/addy/skills/review/SKILL.md': '---\nname: review\ndescription: review\n---\nOriginal\n',
+      });
+      const binary = harness.fakeNative('dcode', Array.from({ length: 40 }, () => ({ args: ['--version'], stdout: 'deepagents-code 0.1.83\n' })));
+      const env = { OPEN_PLUGIN_DCODE_ROOT: harness.storePath('dcode'), OPEN_PLUGIN_DCODE_BIN: binary.path, OPEN_PLUGIN_DCODE_PYTHON_BIN: fakeDcodeLockInterpreter(harness.root) };
+      const previous = Object.fromEntries(['OPEN_PLUGIN_HOME', ...Object.keys(env)].map(key => [key, process.env[key]]));
+      let path = '';
+      let scopeId = '';
+      try {
+        Object.assign(process.env, env, { OPEN_PLUGIN_HOME: harness.home });
+        const resolved = resolveSource(sourceDir);
+        const plugin = resolved.plugins[0]!;
+        if (legacyFingerprint) plugin.contentFingerprint = fingerprintLegacyV1SourceTree(plugin.dir);
+        await dcodeWriter.add(plugin, resolved);
+        path = dcodeWriter.listInstalled()[0]!.path!;
+        scopeId = createDeploymentScopeIdentity({ kind: 'local', locator: sourceDir }, { kind: 'dcode', instance: 'default' }).id;
+        harness.writeHome({ 'state.json': JSON.stringify({ version: 2, stateGeneration: 1,
+          scopes: [{ id: scopeId, source: { kind: 'local', locator: sourceDir }, target: { kind: 'dcode', instance: 'default' }, authority: 'legacy-import', lifecycle: 'active', selectorMode: 'legacy-unknown' }],
+          activations: [{ scopeId, packageId: 'addy@personal', nativeId: 'addy@personal', sourceRelativeDir: 'plugins/addy', sourceRevision: resolved.sha, route: { kind: 'legacy-unverified' }, ownership: { kind: 'legacy-claim', prior: 'plgnz' }, fingerprints: { source: plugin.contentFingerprint, installed: (legacyFingerprint ? fingerprintLegacyV1Tree : fingerprintTree)(path) }, activationState: 'unknown', readbackState: 'unverified', pins: [] }],
+          attempts: [], tombstones: [] }) });
+      } finally {
+        for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+      }
+      const runtimeEnv = { OPEN_PLUGIN_DCODE_BIN: env.OPEN_PLUGIN_DCODE_BIN, OPEN_PLUGIN_DCODE_PYTHON_BIN: env.OPEN_PLUGIN_DCODE_PYTHON_BIN };
+      const first = harness.run(['add', sourceDir, '--target', 'dcode', '--json'], { env: runtimeEnv });
+      expect(first.exitCode).toBe(0);
+      expect(JSON.parse(first.stdout).summary.result).toBe('converged');
+      const second = harness.run(['add', sourceDir, '--target', 'dcode', '--json'], { env: runtimeEnv });
+      expect(second.exitCode).toBe(0);
+      expect(JSON.parse(second.stdout).summary.changed).toBe(false);
+      const registry = JSON.parse(readFileSync(join(harness.storePath('dcode'), '.state/installed_plugins.json'), 'utf8'));
+      const active = registry.plugins['addy@personal'][0].installPath;
+      expect(JSON.parse(readFileSync(join(active, '.plgnz-install.json'), 'utf8')).scopeId).toBe(scopeId);
+    });
+  });
+
+  test('does not use raw compatibility to accept a mode change against a current receipt', async () => {
+    await withLifecycleCliHarness(async harness => {
+      harness.fakeNative('claude', Array.from({ length: 8 }, () => ({ args: ['--version'], stdout: '2.1.296 (Claude Code)\n' })));
+      const sourceDir = harness.source('mode-proof', {
+        '.claude-plugin/marketplace.json': JSON.stringify({ name: 'personal', owner: { name: 'Charles' }, plugins: [{ name: 'addy', source: './plugins/addy' }] }),
+        'plugins/addy/plugin.json': JSON.stringify({ name: 'addy', version: '0.1.0' }),
+        'plugins/addy/skills/code-review/SKILL.md': '# Original\n',
+      });
+      const { installPath } = await seedLegacyClaudeV1(harness, sourceDir);
+      const changed = join(installPath, 'skills/code-review/SKILL.md');
+      chmodSync(changed, 0o755);
+      const result = harness.run(['add', sourceDir, '--target', 'claude-code', '--json']);
+      expect(result.exitCode).toBe(1);
+      expect(JSON.parse(result.stdout).summary.mutationStarted).toBe(false);
+      expect(readFileSync(changed, 'utf8')).toBe('# Original\n');
     });
   });
 

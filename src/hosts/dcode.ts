@@ -44,14 +44,11 @@ export function dcodeBinary(): string | undefined {
   return which('dcode') ?? undefined;
 }
 
-function dcodeProbeEnv(): Record<string, string | undefined> {
+export function dcodeProbeEnv(): Record<string, string | undefined> {
   const isolatedHome = process.env['OPEN_PLUGIN_HOME'];
-  const explicitRoot = process.env['OPEN_PLUGIN_DCODE_ROOT'];
   const home = isolatedHome !== undefined && isolatedHome.length > 0
     ? isolatedHome
-    : explicitRoot !== undefined && explicitRoot.length > 0
-      ? dcodeRoot()
-      : process.env['HOME'];
+    : process.env['HOME'];
   return { ...process.env, HOME: home, DEEPAGENTS_HOME: dcodeRoot() };
 }
 

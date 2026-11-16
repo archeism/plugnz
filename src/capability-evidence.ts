@@ -50,8 +50,10 @@ export interface CapabilityEvidenceProfile {
   operationStatus: CapabilityStatus;
   semantics: Readonly<Record<PackageSemantic, CapabilityStatus>>;
   hookPolicy: HookCapabilityEvidence | null;
-  /** Distinguish prompt resources from compiled native agent registration. */
-  agentPolicy?: 'prompt-resources' | 'portable-native';
+  /** Prompt resources need authored commands; prompt-commands generate wrappers; portable-native registers roles. */
+  agentPolicy?: 'prompt-resources' | 'prompt-commands' | 'portable-native';
+  /** Host-owned qualification for strict bare personas without portable model metadata. */
+  supportsBareAgents?: true;
   /** Repository-relative evidence references only; no locators or credentials. */
   evidence: readonly string[];
 }
@@ -208,11 +210,16 @@ export function admitPackageSemanticsFromProfiles(
   const portableSpecialized = candidates.filter(candidate => candidate.packageFormat === 'portable-hooks');
   const nativeSpecialized = candidates.filter(candidate => candidate.packageFormat === 'native-hooks');
   const ordinary = candidates.filter(candidate => candidate.packageFormat === undefined);
-  const portableAgents = (request.operation === 'install' || request.operation === 'update') && request.inventory.portableAgents === true;
+  const sourceOperation = request.operation === 'install' || request.operation === 'update';
+  const portableAgents = sourceOperation && request.inventory.portableAgents === true;
   const agentSpecialized = candidates.filter(candidate => candidate.packageFormat === 'portable-agents');
+  const bareAgentSpecialized = agentSpecialized.filter(candidate => candidate.supportsBareAgents === true);
+  const bareAgents = sourceOperation && request.inventory.components.agents.length > 0
+    && !ordinary.some(candidate => candidate.semantics.agents === 'supported');
   const matching = portableAgents && agentSpecialized.length > 0 ? agentSpecialized
     : portable && portableSpecialized.length > 0 ? portableSpecialized
     : native && nativeSpecialized.length > 0 ? nativeSpecialized
+    : bareAgents && bareAgentSpecialized.length > 0 ? bareAgentSpecialized
     : request.operation === 'install' || request.operation === 'update' ? ordinary
     : ordinary.length > 0 ? ordinary
     : portableSpecialized.length > 0 ? portableSpecialized : nativeSpecialized;
@@ -260,6 +267,8 @@ export function admitPackageSemanticsFromProfiles(
     const hookProblem = semantic === 'agents' && sourceOperation && request.inventory.portableAgents && profile.agentPolicy !== 'portable-native'
       ? { status: 'unsupported' as const, diagnostic: `target '${request.host}' has no qualified portable agent projection` }
       : semantic === 'agents' && sourceOperation && profile.agentPolicy === 'portable-native' && !request.inventory.portableAgents
+      ? unsupportedPromptPersona(request.inventory, false)
+      : semantic === 'agents' && sourceOperation && profile.agentPolicy === 'prompt-commands'
       ? unsupportedPromptPersona(request.inventory, false)
       : semantic === 'agents' && sourceOperation && profile.agentPolicy === 'prompt-resources'
       ? unsupportedPromptPersona(request.inventory)
@@ -355,6 +364,7 @@ export function createCapabilityEvidenceProfile(
     semantics: PACKAGE_SEMANTICS.map((semantic) => [semantic, input.semantics[semantic]]),
     hookPolicy,
     ...(input.agentPolicy === undefined ? {} : { agentPolicy: input.agentPolicy }),
+    ...(input.supportsBareAgents === undefined ? {} : { supportsBareAgents: input.supportsBareAgents }),
     evidence,
   };
   const hash = new CryptoHasher('sha256');
@@ -373,6 +383,7 @@ export function createCapabilityEvidenceProfile(
     semantics: Object.freeze({ ...input.semantics }),
     hookPolicy,
     ...(input.agentPolicy === undefined ? {} : { agentPolicy: input.agentPolicy }),
+    ...(input.supportsBareAgents === undefined ? {} : { supportsBareAgents: input.supportsBareAgents }),
     evidence: Object.freeze(evidence),
   });
 }

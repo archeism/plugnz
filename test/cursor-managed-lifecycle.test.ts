@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fingerprintTree } from '../src/fingerprint';
@@ -361,6 +361,41 @@ describe('cursor managed local projection', () => {
       const after = await cursorManagedLifecycle.observeTarget(target);
       expect(after.installations.find((installation) => installation.nativeId === 'neighbor')?.ownership.kind).toBe('ambiguous');
       expect(after.installations.find((installation) => installation.nativeId === nativeId)?.ownership.kind).toBe('owned');
+    });
+  });
+
+  test('continues past an unavailable Desktop shim and refuses an unqualified Agent runtime', async () => {
+    await withCursorHome(async (home) => {
+      writeFiles(home.home, {
+        'bin/cursor': '#!/bin/sh\nexit 1\n',
+        '.local/share/cursor-agent/versions/2026.10.01-e373342/cursor-agent': cursorVersionCommand('2026.10.01-e373342'),
+        '.local/share/cursor-agent/versions/2026.10.01-e373342/6136.index.js': 'HOUSE_ACP_PLUGIN_SERVICE forged marker or unqualified stock bytes',
+      });
+      chmodSync(join(home.home, 'bin', 'cursor'), 0o755);
+      const nativeBinary = join(home.home, '.local/share/cursor-agent/versions/2026.10.01-e373342/cursor-agent');
+      chmodSync(nativeBinary, 0o755);
+      symlinkSync(nativeBinary, join(home.home, 'bin', 'cursor-agent'));
+      const observed = await cursorManagedLifecycle.probeVersion(target);
+      expect(observed.kind).toBe('unparseable');
+      expect((await installDecision(home, observed, 'unqualified-agent', 'unqualified-agent-attempt', 'planned-create')).kind).toBe('capability-gap');
+      // Profile semantics are checked independently of runtime attestation.
+      const version = { kind: 'detected' as const, version: '2026.10.01-e373342', probeId: 'qualified-fixture' };
+      expect((await installDecision(home, version, 'agent-install', 'agent-attempt', 'planned-create')).kind).toBe('selected');
+      const combined = await installDecision(home, version, 'agent-components', 'agent-components-attempt', 'planned-create', {
+        'plugin.json': '{"name":"demo-plugin","version":"1.2.0"}\n',
+        'skills/manual/SKILL.md': manualSkill,
+        'commands/launch.md': '---\ndescription: launch\n---\nbody\n',
+        'resources/value.txt': 'fixture\n',
+        'mcp.json': '{"mcpServers":{"demo":{"url":"https://example.invalid/mcp"}}}\n',
+      });
+      expect(combined.kind).toBe('selected');
+      writeFileSync(join(home.home, 'bin', 'cursor'), cursorVersionCommand('9.9.9'));
+      const unknown = await cursorManagedLifecycle.probeVersion(target);
+      expect(unknown).toEqual({ kind: 'detected', version: '9.9.9', probeId: 'cursor-9.9.9' });
+      expect((await installDecision(home, unknown, 'unknown-agent', 'unknown-agent-attempt', 'planned-create')).kind).toBe('capability-gap');
+      process.env['OPEN_PLUGIN_CURSOR_BIN'] = join(home.home, 'bin', 'cursor');
+      writeFileSync(join(home.home, 'bin', 'cursor'), '#!/bin/sh\nexit 1\n');
+      expect(await cursorManagedLifecycle.probeVersion(target)).toEqual({ kind: 'unparseable' });
     });
   });
 

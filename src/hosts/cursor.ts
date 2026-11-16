@@ -17,9 +17,10 @@
  * commands cannot be assumed to resolve (spec §7.2.1) — doctor flags them and
  * `pin` rewrites them to absolute paths; `add` pins a fresh copy the same way.
  */
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { delimiter, join } from 'node:path';
+import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs';
+import { basename, delimiter, dirname, join } from 'node:path';
 import { isExecutableFile } from '../exec';
+import { CryptoHasher } from '../runtime';
 import type { HostReader, InstalledPlugin, McpServerEntry } from '../host';
 import { cursorRoot, homeRoot } from '../paths';
 import { collectPluginServers, collectUserServers, readJson, type PluginMcpCandidate } from '../mcp';
@@ -139,6 +140,28 @@ export function cursorProbePath(env: Record<string, string | undefined> = proces
   const isolated = env['OPEN_PLUGIN_HOME'];
   if (isolated !== undefined && isolated.length > 0) return join(homeRoot(), 'bin');
   return env['PATH'] ?? '';
+}
+
+/** Bind a versioned native executable to the exact runtime artifact qualified in evidence. */
+export function hasCursorRuntimeArtifact(binary: string, version: string, artifactName: string, expectedSha256: string): boolean {
+  try {
+    const executable = realpathSync(binary);
+    const directory = dirname(executable);
+    if (basename(executable) !== 'cursor-agent' || basename(directory) !== version) return false;
+    const artifact = join(directory, artifactName);
+    if (!lstatSync(artifact).isFile()) return false;
+    const bytes = (readFileSync as unknown as (path: string) => Uint8Array)(artifact);
+    return new CryptoHasher('sha256').update(bytes).digest('hex') === expectedSha256;
+  } catch { return false; }
+}
+
+/** Probe every installed native candidate; an explicit override remains authoritative. */
+export function cursorVersionProbeCandidates(): string[] {
+  const located = locateCursorProbeBinary();
+  if (located.kind !== 'path') return [];
+  return process.env['OPEN_PLUGIN_CURSOR_BIN'] !== undefined
+    ? [located.path]
+    : cursorProbeCandidates().filter(isExecutableFile);
 }
 
 /** Executable installation surfaces; candidates are probes, not version claims. */

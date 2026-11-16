@@ -1,0 +1,58 @@
+{
+  "date": "2026-11-16",
+  "scope": "Strict canonical agents/*.md containing only name, description and instructions use the already qualified native agent projection without a portable model sidecar.",
+  "asserted_limit": "Exact OMP18.8.7 and Grok1.0.46 only. No broader version/profile, authored native model/tools fields or unqualified hook semantics are admitted.",
+  "base_commit": "d4cf1d7ce433e19b6eabc61e9411d19a1d118683",
+  "runs": {
+    "omp": {
+      "version": "18.8.7",
+      "raw_root": "/home/charlesfengyc/.local/state/personal-plugin-recovery-20261116/runtime/omp-bare-personas-01",
+      "script": "/tmp/omp-bare-native-probe.py",
+      "script_sha256": "3eeb92b115724d820f09cb47e6fb164aceec1b7ba3156836c62bf8513904a1bc",
+      "adaptation": "Existing native qualification script; fixture removes plugnz.agents.json and every model/alias field; expectations require all children to inherit the parent model. Native task/spawn calls and exact-prose/tool checks remain.",
+      "strict_bare_roles": 4,
+      "verification_sha256": "5496ebcdfebe2492060b41275e052b03e0abede396ba0f414bc7e0baaf1fee94",
+      "assertions": 38,
+      "all_passed": true,
+      "resources": {
+        "wall_seconds": 5.093653656542301,
+        "sampled_native_peak_rss_kib": 528752,
+        "child_cpu_user_seconds": 5.685979999999999,
+        "child_cpu_system_seconds": 0.769162,
+        "allocated_bytes_before": 2043949,
+        "allocated_bytes_after": 4364696,
+        "requests": 9,
+        "live_inference": false,
+        "token_usage": "Synthetic protocol only; deterministic fixture counters, not billed model usage."
+      },
+      "public_install": true,
+      "native_child_dispatch": true,
+      "live_inference": false
+    },
+    "grok": {
+      "version": "1.0.46",
+      "raw_root": "/home/charlesfengyc/.local/state/personal-plugin-recovery-20261116/runtime/grok-bare-personas-01",
+      "script": "/tmp/grok-bare-native-probe.py",
+      "script_sha256": "4a1b38ca66201b20787d797cd4d3a1c91e381b138cd16c95321502820afb5ec0",
+      "adaptation": "Existing native qualification script; fixture removes plugnz.agents.json and every model/alias field; expectations require all children to inherit the parent model. Native task/spawn calls and exact-prose/tool checks remain.",
+      "strict_bare_roles": 5,
+      "verification_sha256": "07106be950bc32a3aabd7ed45a49a3390ee763e9be041575364bb9b7429fa76b",
+      "assertions": 51,
+      "all_passed": true,
+      "resources": {
+        "wall_seconds": 2.1178146163001657,
+        "sampled_native_peak_rss_kib": 131272,
+        "child_cpu_user_seconds": 0.7497639999999999,
+        "child_cpu_system_seconds": 0.38589799999999996,
+        "allocated_bytes_before": 20480,
+        "allocated_bytes_after": 532480,
+        "requests": 17,
+        "live_inference": false,
+        "token_usage": "Synthetic protocol only; deterministic fixture counters, not billed model usage."
+      },
+      "public_install": true,
+      "native_child_dispatch": true,
+      "live_inference": false
+    }
+  }
+}

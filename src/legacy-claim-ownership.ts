@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+import { fingerprintLegacyV1Tree } from './fingerprint';
 import { readLifecycleState, type PersistedSourceBinding } from './state';
 
 export interface LegacyMarkerCandidate {
@@ -12,13 +13,15 @@ export interface LegacyMarkerCandidate {
  * Resolve the recorded deployment scope for a legacy v1 ownership marker that
  * lacks `scopeId`, only when an imported v2 legacy claim (`prior: 'plgnz'`) in
  * `state.json` proves the same target, package/native identity, source
- * locator, source fingerprint, and unmodified installed fingerprint.
+ * locator, source fingerprint, and unmodified installed fingerprint. Pre-mode
+ * receipts prove raw bytes only; new observations and receipts stay mode-aware.
  */
 export function resolveLegacyV1MarkerScopeId(input: {
   readonly target: { readonly kind: string; readonly instance: string };
   readonly nativeId: string;
   readonly marker: LegacyMarkerCandidate | null | undefined;
   readonly installedFingerprint: string | null;
+  readonly installedRoot?: string;
   readonly matchesPluginId?: (markerPluginId: string, nativeId: string) => boolean;
 }): string | undefined {
   const { target, nativeId, marker, installedFingerprint } = input;
@@ -33,6 +36,10 @@ export function resolveLegacyV1MarkerScopeId(input: {
   } catch {
     return undefined;
   }
+  let legacyFingerprint: string | undefined;
+  if (input.installedRoot !== undefined) {
+    try { legacyFingerprint = fingerprintLegacyV1Tree(input.installedRoot); } catch { return undefined; }
+  }
   const candidates = loaded.state.activations.filter((activation) => {
     if (activation.ownership.kind !== 'legacy-claim' || activation.ownership.prior !== 'plgnz' || activation.route.kind !== 'legacy-unverified') {
       return false;
@@ -43,7 +50,7 @@ export function resolveLegacyV1MarkerScopeId(input: {
     if (activation.fingerprints.source === undefined || activation.fingerprints.source !== marker.fingerprint) {
       return false;
     }
-    if (activation.fingerprints.installed === undefined || activation.fingerprints.installed !== installedFingerprint) {
+    if (activation.fingerprints.installed === undefined || (activation.fingerprints.installed !== installedFingerprint && activation.fingerprints.installed !== legacyFingerprint)) {
       return false;
     }
     const scope = loaded.state.scopes.find((row) => row.id === activation.scopeId);
@@ -62,6 +69,7 @@ export function legacyV1MarkerMatchesScope(input: {
   readonly nativeId: string;
   readonly marker: LegacyMarkerCandidate | null | undefined;
   readonly installedFingerprint: string | null;
+  readonly installedRoot?: string;
   readonly matchesPluginId?: (markerPluginId: string, nativeId: string) => boolean;
 }): boolean {
   return resolveLegacyV1MarkerScopeId(input) === input.scopeId;

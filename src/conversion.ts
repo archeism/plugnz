@@ -9,6 +9,7 @@ import { spawnSync } from 'node:child_process';
 import { parse as parseToml } from 'smol-toml';
 import { readPluginManifest } from './source';
 import { hermesCommandCompanionId } from './hermes-identity';
+import { protectHermesCompanionCache } from './hosts/hermes-companion-cache';
 import { projectCodexAgents } from './hosts/codex-agents';
 import { projectOmpAgents } from './hosts/omp-agents';
 
@@ -191,6 +192,7 @@ export function projectPluginForHermes(sourceDir: string, destinationDir: string
     const commands = discoverCommands(source);
     validateClaudeNativeSemantics(source, commands);
     const pluginId = readPackageName(source);
+    projectHermesPersonas(stage);
     const skills = projectHermesSkills(stage);
     if (commands.length > 0 || skills.length > 0) {
       if (companionDir === undefined) throw new Error('Hermes skills and prompt commands require a native companion destination');
@@ -233,6 +235,30 @@ function writeHermesCommandCompanion(destinationDir: string, pluginId: string, c
   if (ordinary.length > 0) {
     const init = join(destination, '__init__.py');
     writeFileSync(init, `${readFileSync(init, 'utf8')}    import hashlib\n    plugin_id = ${JSON.stringify(pluginId)}\n    slug = "".join(ch if ch.isascii() and (ch.isalnum() or ch in "_-") else "-" for ch in plugin_id.lower()).strip("-_") or "plugin"\n    namespace = f"agent-plugin-{slug}-{hashlib.sha256(plugin_id.encode()).hexdigest()[:8]}"\n    skills = [\n${skillRows}\n    ]\n    lines = "\\n".join(f"- {namespace}:{name}: {description}" for name, description in skills)\n    section = ${JSON.stringify(`Portable skills from ${pluginId} are available through Hermes skill tools:\n`)} + lines + ${JSON.stringify('\nUse skill_view with the exact qualified name when a listed skill matches the task.')}\n    ctx.register_system_prompt_section(${JSON.stringify(`${companionId}.skills`)}, section, position="after_memory")\n`);
+  }
+  protectHermesCompanionCache(destination);
+}
+
+/** Canonical personas remain intact resources, reached through explicit native commands. */
+function projectHermesPersonas(stage: string): void {
+  const root = join(stage, 'agents');
+  if (!existsSync(root)) return;
+  for (const entry of readdirSync(root).sort()) {
+    const file = join(root, entry);
+    if (!entry.endsWith('.md') || !statSync(file).isFile()) throw new Error(`Hermes persona must be a Markdown file: ${file}`);
+    const match = readFileSync(file, 'utf8').match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    if (match === null) throw new Error(`Hermes persona frontmatter is required: ${file}`);
+    const metadata = parseYaml(match[1] ?? '', file);
+    const unknown = Object.keys(metadata).find(key => key !== 'name' && key !== 'description');
+    if (unknown !== undefined) throw new Error(`Hermes prompt persona cannot preserve metadata '${unknown}': ${file}`);
+    const name = metadata['name'], description = metadata['description'];
+    if (typeof name !== 'string' || !validSegment(name) || typeof description !== 'string' || !description.trim()) {
+      throw new Error(`Hermes persona requires a safe name and description: ${file}`);
+    }
+    const target = join(stage, 'skills', `persona-${name}`, 'SKILL.md');
+    if (existsSync(target)) throw new Error(`Hermes persona skill collision: ${target}`);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, `---\nname: ${JSON.stringify(`persona-${name}`)}\ndescription: ${JSON.stringify(description)}\ndisable-model-invocation: true\n---\nRead agents/${entry} relative to the plugin root and follow its complete persona instructions for this turn. Preserve all instructions in that file.\n`);
   }
 }
 

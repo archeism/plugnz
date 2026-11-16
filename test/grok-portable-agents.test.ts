@@ -311,3 +311,29 @@ test('Grok failed retirement restores a natively disabled plugin still disabled'
     expect(existsSync(join(h.storePath('grok'), 'plugins', 'demo'))).toBe(false);
   });
 }, 60_000);
+
+test('Grok strict bare personas use the qualified native projection without model configuration', () => {
+  return withLifecycleCliHarness(h => {
+    const { env } = fakeGrok(h);
+    const authored = agent('reviewer', '', 'BARE_GROK_EXACT_PROSE\n');
+    const source = h.source('bare-personas', { '.claude-plugin/marketplace.json': fixture['.claude-plugin/marketplace.json']!, 'plugins/demo/plugin.json': '{"name":"demo","version":"1.0.0"}', 'plugins/demo/agents/reviewer.md': authored });
+    success(h.run(['install', source, '--target', 'grok', '--json'], { env }));
+    const root = nativePackage(h);
+    expect(file(root, 'agents/reviewer.md')).toBe('---\nname: "reviewer"\ndescription: "Review the change"\n---\nBARE_GROK_EXACT_PROSE\n');
+    expect(file(source, 'plugins/demo/agents/reviewer.md')).toBe(authored);
+    expect(existsSync(join(root, 'plugnz.agents.json'))).toBe(false);
+    success(h.run(['update', 'demo', '--target', 'grok', '--json'], { env }));
+    success(h.run(['remove', 'demo', '--target', 'grok', '--json'], { env }));
+  });
+}, 60_000);
+
+for (const metadata of ['tools: Read\n', 'model: inherited\n']) test(`grok strict bare persona refuses metadata ${metadata.trim()}`, () => {
+  return withLifecycleCliHarness(h => {
+    const { env } = fakeGrok(h);
+    const source = h.source('bare-unsupported', { 'plugin.json': '{"name":"bare-unsupported","version":"1.0.0"}\n', 'agents/reviewer.md': agent('reviewer', metadata) });
+    const result = h.run(['install', source, '--target', 'grok', '--json'], { env });
+    expect(result.exitCode).toBe(1);
+    expect(parseLifecycleReport(JSON.parse(result.stdout)).summary.mutationStarted).toBe(false);
+    expect(result.stores.grok.after).toEqual(result.stores.grok.before);
+  });
+}, 30_000);

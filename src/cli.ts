@@ -1190,6 +1190,70 @@ async function runWriterAdd(
   });
 }
 
+/** Explicit removal may settle only an imported attempt whose native work is absent. */
+async function runAbsentLegacyPendingRemoval(
+  flags: VerbFlags,
+  target: string,
+  loaded: ReturnType<typeof readLifecycleState>,
+  selected: readonly HostWriter[],
+): Promise<LifecycleReport | null> {
+  if (selected.length !== 1 || flags.targets.length !== 1) return null;
+  const writer = selected[0]!;
+  const state = loaded.state;
+  const scopes = new Map(state.scopes.map((scope) => [scope.id, scope]));
+  const matches = state.activations.filter((activation) => activation.nativeId === target
+    && scopes.get(activation.scopeId)?.target.kind === writer.id
+    && scopes.get(activation.scopeId)?.target.instance === 'default');
+  if (matches.length !== 1 || matches[0]!.pending?.operation !== 'install') return null;
+  const activation = matches[0]!;
+  const scope = scopes.get(activation.scopeId)!;
+  const attempt = state.attempts.find((row) => row.id === activation.pending!.attemptId);
+  // Every imported identity and custody boundary must agree. Modern pending
+  // operations continue through their existing recovery restrictions.
+  if (scope.authority !== 'legacy-import' || scope.selectorMode !== 'legacy-unknown'
+    || activation.ownership.kind !== 'legacy-claim'
+    || !['plgnz', 'unrecorded'].includes(activation.ownership.prior ?? '')
+    || activation.route.kind !== 'legacy-unverified' || activation.pending?.phase !== 'applying'
+    || attempt?.command !== 'legacy-recovery' || attempt.phase !== 'applying'
+    || attempt.scopeIds.length !== 1 || attempt.scopeIds[0] !== scope.id
+    || attempt.journal.length !== 1 || attempt.journal[0]!.action !== 'install'
+    || attempt.journal[0]!.state !== 'applying' || attempt.journal[0]!.sealedOperation !== undefined
+    || attempt.journal[0]!.route?.kind !== 'legacy-unverified') return null;
+  const failure = () => reportFor('remove', flags.dryRun, [], [], {
+    terminalPhase: 'preflight', mutationStarted: false,
+    reason: reason('internal', 'internal.invariant', `cannot prove all native artifacts absent for legacy pending install '${target}'; refusing removal`),
+  });
+  const absenceScope = { source: scope.source.locator, scopeId: scope.id };
+  const absent = async () => {
+    try { return await writer.observeLegacyInstallAbsence?.(target, absenceScope) === 'absent'; }
+    catch { return false; }
+  };
+  if (!await absent()) return failure();
+  const operation = planOperation({ command: 'remove', scope: createDeploymentScopeIdentity(scope.source, scope.target),
+    package: activation.packageId, nativeId: target, action: 'retire-orphan', route: 'managed',
+    discriminator: String(state.stateGeneration) });
+  if (flags.dryRun) return reportFor('remove', true, [operation], [outcomeFor(operation, { result: 'succeeded', changed: false })], { mutationStarted: false });
+  if (!await absent()) return failure();
+  // The observer may yield to another writer. Re-read after its final await;
+  // v1 imports all have generation zero, so compare the complete state too.
+  const fresh = readLifecycleState();
+  if (fresh.sourceVersion !== loaded.sourceVersion || JSON.stringify(fresh.state) !== JSON.stringify(state)) return failure();
+  const now = new Date().toISOString();
+  // Preserve the original import and operation ID as a terminal rollback.
+  // There were no native resources to undo, and no native writer is invoked.
+  const settled: LifecycleStateV2 = {
+    ...state,
+    stateGeneration: state.stateGeneration + 1,
+    activations: state.activations.filter((row) => row !== activation),
+    attempts: state.attempts.map((row) => row !== attempt ? row : {
+      ...row, phase: 'completed', completedAt: now, updatedAt: now,
+      journal: row.journal.map((entry) => ({ ...entry, state: 'rolled-back', updatedAt: now })),
+    }),
+  };
+  writeLifecycleState(settled, { globalPreflight: 'succeeded' });
+  return reportFor('remove', false, [operation], [outcomeFor(operation, { result: 'succeeded', changed: true })], { mutationStarted: true });
+}
+
 async function runRecordedLifecycleRemove(
   flags: VerbFlags,
   target: string,
@@ -1688,6 +1752,11 @@ export async function main(argv: string[]): Promise<number> {
       const report = reportFor('remove', flags.dryRun, [], [], { terminalPhase: 'preflight', mutationStarted: false, reason: failure });
       printReport(report, mutationOutput);
       return exitCodeForLifecycleReport(report);
+    }
+    const absentLegacy = await runAbsentLegacyPendingRemoval(flags, target, { state: lifecycleState, sourceVersion: lifecycleVersion }, selection.selected);
+    if (absentLegacy !== null) {
+      printReport(absentLegacy, mutationOutput);
+      return exitCodeForLifecycleReport(absentLegacy);
     }
     if (lifecycleVersion === 2) {
       const recorded = await runRecordedLifecycleRemove(flags, target, lifecycleState, selection.selected);

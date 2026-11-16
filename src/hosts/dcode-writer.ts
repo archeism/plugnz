@@ -1,3 +1,4 @@
+import { resolveLegacyV1MarkerScopeId } from '../legacy-claim-ownership';
 import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -7,7 +8,8 @@ import { pinPluginMcpFiles } from '../mcp-write';
 import { CryptoHasher, spawnSync } from '../runtime';
 import { dcode, dcodeBinary, dcodeCacheRoot, dcodeEnablementFile, dcodeMcpCandidates, dcodeRegistryFile, dcodeRoot, dcodeStateDir, probeDcodeVersion } from './dcode';
 import { spawn as spawnChild } from 'node:child_process';
-import { requirePackageSemantics } from '../capability-evidence';
+import { admitPackageSemanticsFromProfiles, PackageCapabilityError } from '../capability-evidence';
+import { assertDcodeManualSkillsCache, dcodeManualSkillsEnabled, dcodeManualSkillsProfiles, projectDcodeManualSkills } from './dcode-manual-skills';
 import { inventoryPackageSemantics } from '../semantic-inventory';
 import { capabilityEvidenceProfiles, createCapabilityEvidenceProfile } from '../capability-evidence';
 import { fingerprintTree } from '../fingerprint';
@@ -111,10 +113,12 @@ function observeDcodeTarget(target: LifecycleTargetIdentity): TargetInstallation
     const marker = present ? ownership(path) : null;
     const body = present ? readDoc(join(path, MARKER), {}, 'ownership marker') : {};
     const owned = marker?.pluginId === nativeId;
+    if (owned && marker.kind === 'current') assertDcodeManualSkillsCache(path);
     const fingerprint = present ? fingerprintTree(path) : null;
+    const scopeId = typeof body.scopeId === 'string' ? body.scopeId : resolveLegacyV1MarkerScopeId({ target, nativeId, marker, installedFingerprint: fingerprint, installedRoot: present ? path : undefined });
     return {
       nativeId, packageName: nativeId.split('@')[0]!,
-      ownership: owned ? { kind: 'owned', proof: body.proof === 'adopted' ? 'adopted' : 'created', scopeId: typeof body.scopeId === 'string' ? body.scopeId : 'dcode:default', proofId: `dcode-marker:${nativeId}` } : { kind: 'unmanaged' },
+      ownership: owned ? { kind: 'owned', proof: body.proof === 'adopted' ? 'adopted' : 'created', scopeId: scopeId ?? 'dcode:default', proofId: `dcode-marker:${nativeId}` } : { kind: 'unmanaged' },
       presence: present ? 'present' : 'absent', enablement: enabled[nativeId] === true ? 'enabled' : 'disabled',
       activation: enabled[nativeId] === true && present ? 'active' : 'inactive',
       ...(owned && present && dirname(path) === join(dcodeCacheRoot(), 'plgnz') ? { observedRoute: 'managed' as const } : {}),
@@ -216,8 +220,12 @@ function setDcodeRow(nativeId: string, row: unknown, enabled: boolean | null): v
   writeDoc(dcodeRegistryFile(), { ...registry, plugins }); writeDoc(dcodeEnablementFile(), { ...enablement, enabledPlugins: flags });
 }
 
+function manualSkillsEnabled(): boolean {
+  try { return dcodeManualSkillsEnabled(nativePython()); } catch { return false; }
+}
+
 const dcodeDefinition: LifecycleHostDefinition = {
-  id: 'dcode', evidenceProfiles: capabilityEvidenceProfiles.filter(profile => profile.host === 'dcode').flatMap(profile => [profile, createCapabilityEvidenceProfile({ ...profile, operations: ['disable'], semantics: { ...profile.semantics, 'reversible-disable': 'supported' }, evidence: [...profile.evidence, 'docs/evidence/dcode-managed-lifecycle-20261011.md'] })]),
+  id: 'dcode', evidenceProfiles: dcodeManualSkillsProfiles(capabilityEvidenceProfiles.filter(profile => profile.host === 'dcode'), manualSkillsEnabled()).flatMap(profile => [profile, createCapabilityEvidenceProfile({ ...profile, operations: ['disable'], semantics: { ...profile.semantics, 'reversible-disable': 'supported' }, evidence: [...profile.evidence, 'docs/evidence/dcode-managed-lifecycle-20261011.md'] })]),
   probeVersion: async () => probeLifecycleVersion(),
   observeTarget: async target => ({ target, installations: observeDcodeTarget(target) }),
   observeNativeMutationScope: async () => ({ kind: 'unavailable' }),
@@ -303,6 +311,7 @@ const dcodeDefinition: LifecycleHostDefinition = {
       // only a complete sealed directory; never mutate a registered live root.
       renameSync(prepared.stagingRoot, target);
     }
+    assertDcodeManualSkillsCache(target);
     setDcodeRow(prepared.handle.nativeId, [{ installPath: target }], true);
     return { receiptId: `dcode-apply:${prepared.handle.operationId}`, changed: true };
   },
@@ -429,14 +438,15 @@ export const dcodeWriter: HostWriter = {
     const enabled = boolObject(enablement.enabledPlugins, 'enabledPlugins');
     const manifest = declaredManifest(plugin.dir, plugin.name);
     const observation = probeDcodeVersion();
-    requirePackageSemantics({
+    const admission = admitPackageSemanticsFromProfiles({
       host: 'dcode',
       detectedVersion: observation.kind === 'detected' ? observation.version : undefined,
       sourceType: resolved.isGit ? 'git' : 'local',
       operation: rowsFor(plugins[id]).length === 0 ? 'install' : 'update',
       route: 'managed',
       inventory: inventoryPackageSemantics({ ...plugin, dir: plugin.dir, version: manifest.version }),
-    });
+    }, dcodeManualSkillsProfiles(capabilityEvidenceProfiles.filter(profile => profile.host === 'dcode'), manualSkillsEnabled()));
+    if (admission.status === 'refused') throw new PackageCapabilityError('dcode', admission);
     const prior = assessPrior(plugins[id], id, resolved.sourceUri, opts?.adoptExisting === true, plugin.name, manifest.version, plugin.dir);
     const managedRoot = join(dcodeCacheRoot(), 'plgnz');
     assertCachePath(managedRoot);
@@ -588,7 +598,10 @@ function assessPrior(value: unknown, id: string, source: string, adopt: boolean,
   const install = rowInstall(rows[0]!, id);
   assertCachePath(install);
   const marker = ownership(install);
-  if (marker !== null && marker.pluginId === id && marker.source === source) return { kind: 'owned', path: install, marker };
+  if (marker !== null && marker.pluginId === id && marker.source === source) {
+    if (marker.kind === 'current') assertDcodeManualSkillsCache(install);
+    return { kind: 'owned', path: install, marker };
+  }
   if (marker !== null) throw new Error(`dcode plugin ${id} has a conflicting ownership marker`);
   if (!adopt) throw new Error(`dcode install record ${id} is not plgnz-owned; refusing to replace it`);
   if (!existsSync(install) || lstatSync(install).isSymbolicLink() || !lstatSync(install).isDirectory()) {
@@ -630,6 +643,7 @@ function stagePlugin(source: string, stage: string, name: string, version: strin
   assertNoSymlinks(stage);
   const manifest = declaredManifest(stage, name);
   if (manifest.version !== version) throw new Error(`dcode manifest identity does not match ${name}`);
+  projectDcodeManualSkills(stage, name, manualSkillsEnabled());
 }
 
 function forceAutoUpdateOff(dir: string): void {
@@ -660,6 +674,7 @@ function assertReadback(id: string, registryFile: string, enablementFile: string
   if (marker?.kind !== 'current' || marker.projectedFingerprint !== projected || marker.sourceRevision !== sourceRevision) {
     throw new Error(`dcode readback fingerprint mismatch for ${id}`);
   }
+  assertDcodeManualSkillsCache(target);
   if (projectionDigest(target) !== projected) throw new Error(`dcode readback content mismatch for ${id}`);
 }
 

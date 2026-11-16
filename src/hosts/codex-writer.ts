@@ -517,7 +517,7 @@ function assertNoWinningForeignVersion(slot: string, requested: string, id: stri
     if (wins(version, requested) && (marker?.pluginId !== id || marker.source !== source)
       && !(handle !== undefined && marker !== null && fingerprintTree(candidate) === handle.prior.installedFingerprint
         && (priorSourceRepairAllows(handle, proof => historicalGitMarker(marker, proof))
-          || legacyV1MarkerMatchesScope({ target: handle.target, scopeId: handle.scopeId, nativeId: id, marker, installedFingerprint: handle.prior.installedFingerprint })))) {
+          || legacyV1MarkerMatchesScope({ target: handle.target, scopeId: handle.scopeId, nativeId: id, marker, installedFingerprint: handle.prior.installedFingerprint, installedRoot: candidate })))) {
       throw new Error(`foreign Codex cache version ${version} would remain active over ${requested}`);
     }
   }
@@ -534,7 +534,7 @@ function cleanupOwnedVersions(slot: string, active: string, id: string, source: 
     if (marker?.pluginId === id && (marker.source === source || (handle !== undefined
       && fingerprintTree(candidate) === handle.prior.installedFingerprint
       && (priorSourceRepairAllows(handle, proof => historicalGitMarker(marker, proof))
-        || legacyV1MarkerMatchesScope({ target: handle.target, scopeId: handle.scopeId, nativeId: id, marker, installedFingerprint: handle.prior.installedFingerprint }))))) rmSync(candidate, { recursive: true, force: true });
+        || legacyV1MarkerMatchesScope({ target: handle.target, scopeId: handle.scopeId, nativeId: id, marker, installedFingerprint: handle.prior.installedFingerprint, installedRoot: candidate }))))) rmSync(candidate, { recursive: true, force: true });
   }
 }
 
@@ -578,7 +578,7 @@ type CodexCatalogBinding =
   | { readonly kind: 'absent'; readonly marketplace: string };
 
 const CODEX_NATIVE_ROUTE_VERSION = '0.162.0';
-const CODEX_MANAGED_ROUTE_VERSIONS = ['0.161.0', '0.162.0'] as const;
+const CODEX_MANAGED_ROUTE_VERSIONS = ['0.161.0', '0.162.0', '0.169.0'] as const;
 const NATIVE_UPGRADE_TIMEOUT_MS = 120_000;
 /** The native primitive has no whole-checkout rollback; adapter compensation captures its Git state separately. */
 export const codexMarketplaceCheckoutRollback = 'unverified' as const;
@@ -600,6 +600,7 @@ export const codexEvidenceProfiles: readonly CapabilityEvidenceProfile[] = [
   codexRouteProfile(CODEX_NATIVE_ROUTE_VERSION, 'native', ['update'], UPDATE_SEMANTICS, ['docs/research/native-plugin-update-capabilities-2026-10-09.md', 'docs/evidence/codex-native-released-20261011.md']),
   ...CODEX_MANAGED_ROUTE_VERSIONS.map(version => codexRouteProfile(version, 'managed', ['install', 'update', 'retire'], version === '0.161.0' ? [...OH_MY_AI_INSTALL_SEMANTICS, 'retirement', 'retention-safety', 'commands', 'model-invocation-control', 'agents'] : MANAGED_SEMANTICS, [
     'docs/hosts/codex.md',
+    ...(version === '0.169.0' ? ['docs/evidence/codex-0169-native-20261116.json'] : []),
     ...(['0.161.0', '0.162.0'].includes(version) ? ['docs/evidence/codex-addy-20261019.json', 'docs/evidence/codex-native-agents-20261022.md'] : []),
     'docs/adr/0004-retain-plugin-state-on-removal.md',
     'docs/evidence/codex-policy-mcp-20261013.json',
@@ -660,7 +661,7 @@ function codexRouteProfile(
     throw new Error('codex marketplace checkout rollback must stay unverified');
   }
   const supported = new Set<PackageSemantic>(supportedSemantics);
-  if (!['0.161.0', '0.162.0'].includes(detectedVersion)) supported.delete('agents');
+  if (!['0.161.0', '0.162.0', '0.169.0'].includes(detectedVersion)) supported.delete('agents');
   const semantics = {} as Record<PackageSemantic, CapabilityStatus>;
   for (const semantic of PACKAGE_SEMANTICS) semantics[semantic] = supported.has(semantic) ? 'supported' : 'unsupported';
   return createCapabilityEvidenceProfile({
@@ -815,7 +816,7 @@ function applyManagedCodexActivation(prepared: PreparedActivationMutation): Muta
   const marker = readOwnership(targetDir);
   if (marker !== null && (marker.source !== source || marker.pluginId !== handle.nativeId)
     && !(fingerprintTree(targetDir) === handle.prior.installedFingerprint && (priorSourceRepairAllows(handle, proof => historicalGitMarker(marker, proof))
-      || legacyV1MarkerMatchesScope({ target: handle.target, scopeId: handle.scopeId, nativeId: handle.nativeId, marker, installedFingerprint: handle.prior.installedFingerprint })))) {
+      || legacyV1MarkerMatchesScope({ target: handle.target, scopeId: handle.scopeId, nativeId: handle.nativeId, marker, installedFingerprint: handle.prior.installedFingerprint, installedRoot: targetDir })))) {
     throw new Error(`codex cache slot ${targetDir} has a different owned source identity; refusing to replace it`);
   }
   const before = cacheFingerprint(handle.nativeId);
@@ -1596,7 +1597,7 @@ function installationRecord(plugin: InstalledPlugin): TargetInstallationData {
     ? new CryptoHasher('sha256').update(`codex-unmanaged-symlink\0${readlinkSync(plugin.path)}`).digest('hex')
     : fingerprintTree(plugin.path);
   const resolvedScopeId = owned?.pluginId === plugin.id
-    ? (owned.scopeId ?? resolveLegacyV1MarkerScopeId({ target: { kind: 'codex', instance: 'default' }, nativeId: plugin.id, marker: owned, installedFingerprint }))
+    ? (owned.scopeId ?? resolveLegacyV1MarkerScopeId({ target: { kind: 'codex', instance: 'default' }, nativeId: plugin.id, marker: owned, installedFingerprint, installedRoot: plugin.path }))
     : undefined;
   const ownership = owned?.pluginId === plugin.id
     ? { kind: 'owned' as const, proof: 'created' as const, scopeId: resolvedScopeId ?? `codex:${plugin.id}`, proofId: `marker:${plugin.id}` }

@@ -367,14 +367,9 @@ for (const version of ['18.1.4', '18.10.3']) test(`OMP ${version} refuses portab
   });
 }, 30_000);
 
-test('OMP refuses plain native agents and mixed portable hooks without a qualified projection', () => {
+test('OMP refuses mixed portable hooks without a qualified projection', () => {
   return withLifecycleCliHarness(h => {
     const env = prepare(h);
-    const plain = h.source('plain-agents', {
-      'plugin.json': '{"name":"plain-agents","version":"1.0.0"}\n',
-      'agents/reviewer.md': agent('reviewer'),
-    });
-    expect(h.run(['install', plain, '--target', 'omp', '--json'], { env }).exitCode).toBe(1);
     const mixed = h.source('mixed-package', {
       'plugin.json': '{"name":"mixed-package","version":"1.0.0"}\n',
       'plugnz.agents.json': '{"version":1}',
@@ -385,5 +380,34 @@ test('OMP refuses plain native agents and mixed portable hooks without a qualifi
     expect(result.exitCode).toBe(1);
     expect(result.stderr + result.stdout).toContain('hooks');
     expect(liveFiles(result)).toEqual({});
+  });
+}, 30_000);
+
+for (const collision of [false, true]) test(`OMP strict bare personas project losslessly or reject namespace collision=${collision}`, () => {
+  return withLifecycleCliHarness(h => {
+    const env = prepare(h);
+    if (collision) h.writeHome({ '.omp/agent/agents/shadow.md': '---\nname: bare-personas:reviewer\ndescription: user shadow\n---\nUSER_PROSE\n' });
+    const authored = agent('reviewer', '', 'BARE_OMP_EXACT_PROSE\n');
+    const source = h.source('bare-personas', { 'plugin.json': '{"name":"bare-personas","version":"1.0.0"}\n', 'agents/reviewer.md': authored });
+    const installed = h.run(['install', source, '--target', 'omp', '--json'], { env });
+    if (collision) { expect(installed.exitCode).toBe(1); expect(installed.stdout).toContain('agent identity collision'); expect(liveFiles(installed)).toEqual(installed.stores.omp.before.files); return; }
+    success(installed);
+    const root = packageRoot(h);
+    expect(file(root, 'agents/reviewer.md')).toBe('---\nname: "bare-personas:reviewer"\ndescription: "Review the change"\n---\nBARE_OMP_EXACT_PROSE\n');
+    expect(file(source, 'agents/reviewer.md')).toBe(authored);
+    expect(() => file(root, 'plugnz.agents.json')).toThrow();
+    success(h.run(['update', 'bare-personas', '--target', 'omp', '--json'], { env }));
+    success(h.run(['remove', 'bare-personas', '--target', 'omp', '--json'], { env }));
+  });
+}, 30_000);
+
+for (const metadata of ['tools: Read\n', 'model: inherited\n']) test(`omp strict bare persona refuses metadata ${metadata.trim()}`, () => {
+  return withLifecycleCliHarness(h => {
+    const env = prepare(h);
+    const source = h.source('bare-unsupported', { 'plugin.json': '{"name":"bare-unsupported","version":"1.0.0"}\n', 'agents/reviewer.md': agent('reviewer', metadata) });
+    const result = h.run(['install', source, '--target', 'omp', '--json'], { env });
+    expect(result.exitCode).toBe(1);
+    expect(parseLifecycleReport(JSON.parse(result.stdout)).summary.mutationStarted).toBe(false);
+    expect(result.stores.omp.after).toEqual(result.stores.omp.before);
   });
 }, 30_000);

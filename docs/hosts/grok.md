@@ -31,7 +31,11 @@ register types in 1.0.46. Actual child requests against a deterministic
 loopback provider proved exact model resolution (explicit > user alias >
 package alias > inherit), the disclosed native fallback to the parent model
 for unknown ids, authored prose (trim-normalized), and the ordinary native
-toolset; `1.0.24`/`1.0.41` and plain native agent packages stay refused.
+toolset. Strict bare personas with only `name`, `description`, and prose now use
+the same projection with no model field or sidecar;
+[the native proof](../evidence/omp-grok-bare-personas-20261116.json) checks five
+actual child requests and native removal. `1.0.24`/`1.0.41` and unqualified
+native metadata stay refused.
 Public `remove` retires the lifecycle-recorded install through the same
 ownership guard as the direct writer: the plugin, its `demo:*` agent types, activation
 link, marketplace, and registry row disappear natively while unrelated

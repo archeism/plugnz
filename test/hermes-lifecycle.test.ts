@@ -102,6 +102,20 @@ describe('Hermes native portable-plugin lifecycle', () => {
     expect(readFileSync(join(target, 'foreign.txt'), 'utf8')).toBe('keep\n');
   }));
 
+  test('keeps strict persona bytes and exposes an explicit private-skill command', async () => isolated(async root => {
+    const persona = '---\nname: reviewer\ndescription: Review code\n---\nFollow every persona instruction.\n';
+    const incoming = fixture({ 'agents/reviewer.md': persona });
+    await hermesWriter.add(incoming.plugin, incoming.resolved);
+    const installed = join(root, '.hermes/plugins/demo-plugin');
+    expect(readFileSync(join(installed, 'agents/reviewer.md'), 'utf8')).toBe(persona);
+    expect(existsSync(join(installed, 'skills/persona-reviewer'))).toBe(false);
+    expect(readFileSync(join(installed, '.plgnz-user-skills/persona-reviewer/SKILL.md'), 'utf8')).toContain('Read agents/reviewer.md relative to the plugin root');
+    expect(readFileSync(join(root, '.hermes/plugins/demo-plugin.plgnz-commands/__init__.py'), 'utf8')).toContain('demo-plugin:persona-reviewer');
+    const unsupported = fixture({ 'agents/reviewer.md': persona.replace('description: Review code', 'description: Review code\nmodel: fast') });
+    expect((await failure(() => hermesWriter.add(unsupported.plugin, unsupported.resolved))).message).toContain("cannot preserve metadata 'model'");
+    expect(readFileSync(join(installed, 'agents/reviewer.md'), 'utf8')).toBe(persona);
+  }));
+
   test('recognizes sidecar-only user-only policy and preserves a profile config symlink and mode', async () => isolated(async root => {
     const userOnly = fixture({ 'skills/ordinary/agents/openai.yaml': 'policy:\n  allow_implicit_invocation: false\n' });
     expect(await hermesWriter.add(userOnly.plugin, userOnly.resolved, { dryRun: true })).toBeUndefined();

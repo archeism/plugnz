@@ -4,6 +4,7 @@ import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createCapabilityEvidenceProfile } from '../capability-evidence';
 import { projectPluginForHermes } from '../conversion';
+import { assertHermesCompanionCache } from './hermes-companion-cache';
 import { fingerprintTree } from '../fingerprint';
 import { capturePriorSourceRepair, priorSourceRepairAllows, recordedPriorSource, releasePriorSourceRepair, type PriorSourceProof } from '../prior-source-proof';
 import type { AddOptions, HostWriter, InstalledPlugin, PinOptions, PinOutcome } from '../host';
@@ -72,6 +73,7 @@ export const hermesWriter: HostWriter = {
       if (hasCompanion) assertReplaceable(companion, companionStage, companionId, ownershipId, resolved.sourceUri, opts?.adoptExisting === true, validateCompanion);
       else if (existsSync(companion)) assertReplaceable(companion, undefined, companionId, ownershipId, resolved.sourceUri, opts?.adoptExisting === true, validateCompanion);
       const primaryMarker = readOwnership(target); const companionMarker = readOwnership(companion);
+      if (companionMarker !== null) assertHermesCompanionCache(companion);
       const unchangedPrimary = primaryMarker?.pluginId === ownershipId && primaryMarker.fingerprint === ownership.fingerprint && sameTree(packageStage, target);
       const unchangedCompanion = hasCompanion
         ? companionMarker?.pluginId === ownershipId && companionMarker.fingerprint === ownership.fingerprint && sameTree(companionStage, companion)
@@ -145,6 +147,7 @@ function validatePackage(root: string, expected: string): void {
 
 function validateCompanion(root: string, expected: string): void {
   assertTree(root);
+  assertHermesCompanionCache(root);
   const manifest = join(root, 'plugin.yaml');
   if (!existsSync(manifest) || !existsSync(join(root, '__init__.py'))) throw new Error(`Hermes native companion is incomplete: ${root}`);
   const value: unknown = yamlParse(readFileSync(manifest, 'utf8'));
@@ -357,6 +360,10 @@ function verifiedSourceImportClosure(root: string): boolean {
       // This dependency tree is not the tracked Python import source tree.
       // Keep the root's module-name collision check above (node_modules.py).
       if (entry.startsWith('.') || entry === '__pycache__' || entry === 'node_modules') continue;
+      // A native installation may retain its root venv as dependency data.
+      // It is not a source package; the module-name collision check above stays.
+      if (top && entry === 'venv' && lstatSync(join(directory, entry)).isDirectory() && existsSync(join(directory, entry, 'pyvenv.cfg'))
+        && !existsSync(join(directory, entry, '__init__.py'))) continue;
       const path = join(directory, entry);
       const stat = lstatSync(path);
       if (stat.isSymbolicLink()) {
@@ -487,13 +494,16 @@ const hermesManagedProfiles = hermesProvenManagedRevisions.map(detectedVersion =
   host: 'hermes',
   detectedVersion,
   sourceTypes: ['local', 'git'],
-  operations: detectedVersion === '7dbbb0f4a6ebeec9a8714ec37fa41340fe9e4e00'
+  operations: ['7dbbb0f4a6ebeec9a8714ec37fa41340fe9e4e00', 'd923a5eb487a17c0a68801bba9ef0f56c81040a8'].includes(detectedVersion)
     ? ['install', 'update', 'retire'] : ['install', 'update', 'disable', 'retire'],
   route: 'managed',
   operationStatus: 'supported',
-  semantics: Object.fromEntries(PACKAGE_SEMANTICS.map(semantic => [semantic, HERMES_SUPPORTED.has(semantic) && !(detectedVersion === '7dbbb0f4a6ebeec9a8714ec37fa41340fe9e4e00' && semantic === 'reversible-disable') ? 'supported' : 'unsupported'])) as Record<PackageSemantic, 'supported' | 'unsupported'>,
+  ...(detectedVersion === 'd923a5eb487a17c0a68801bba9ef0f56c81040a8' ? { agentPolicy: 'prompt-commands' as const } : {}),
+  semantics: Object.fromEntries(PACKAGE_SEMANTICS.map(semantic => [semantic, (HERMES_SUPPORTED.has(semantic) || (semantic === 'agents' && detectedVersion === 'd923a5eb487a17c0a68801bba9ef0f56c81040a8')) && !(['7dbbb0f4a6ebeec9a8714ec37fa41340fe9e4e00', 'd923a5eb487a17c0a68801bba9ef0f56c81040a8'].includes(detectedVersion) && semantic === 'reversible-disable') ? 'supported' : 'unsupported'])) as Record<PackageSemantic, 'supported' | 'unsupported'>,
   evidence: [
-    detectedVersion === 'c0d7294769a38c17ceae51d8f7995e66e1dcae27'
+    detectedVersion === 'd923a5eb487a17c0a68801bba9ef0f56c81040a8'
+      ? 'docs/evidence/hermes-native-loader-d923a5e-20261116.json'
+      : detectedVersion === 'c0d7294769a38c17ceae51d8f7995e66e1dcae27'
       ? 'docs/evidence/hermes-native-loader-c0d7294-20260923.json'
       : detectedVersion === '6e7b83a2f1c093e992a8d838ed77ea320fbd8e51'
         ? 'docs/evidence/hermes-native-loader-6e7b83a-20261013.json'
@@ -822,6 +832,7 @@ function inspect(store: HermesStore, nativeId: string, packageName: string, rout
     ? Object.entries(installed.contentRoots).map(([label, path]) => ({ label, path, fingerprint: fingerprintTree(path) }))
     : [];
   const companion = installed?.contentRoots?.['commands'];
+  if (companion !== undefined && readOwnership(companion) !== null) assertHermesCompanionCache(companion);
   return {
     adapterId: 'hermes',
     target: { kind: 'hermes', instance: '', context: { root: store.root, configPath: store.configPath } },
@@ -874,6 +885,7 @@ const hermesLifecycleDefinition: LifecycleHostDefinition = {
       const packageDir = plugin.path ?? join(store.pluginsDir, plugin.name);
       const marker = readMarker(packageDir);
       const companion = plugin.contentRoots?.['commands'];
+      if (companion !== undefined && readOwnership(companion) !== null) assertHermesCompanionCache(companion);
       const contentRoots = Object.entries(plugin.contentRoots ?? { package: packageDir }).map(([label, path]) => ({ label, path, fingerprint: fingerprintTree(path) }));
       return {
         nativeId: plugin.id,

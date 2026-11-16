@@ -53,3 +53,21 @@ test('an unqualified Codex version cannot claim native agent registration', asyn
     expect(result.stores.codex.before).toEqual(result.stores.codex.after);
   });
 });
+
+test('Claude 2.1.296 preserves supported native agent metadata without portable configuration', async () => {
+  await withLifecycleCliHarness(h => {
+    h.fakeNative('claude', Array.from({ length: 16 }, () => ({ args: ['--version'], stdout: '2.1.296 (Claude Code)\n' })));
+    const authored = agent('reviewer', 'model: sonnet\n');
+    const source = h.source('native-review', {
+      'plugin.json': '{"name":"native-review","version":"1.0.0"}',
+      'agents/reviewer.md': authored,
+    });
+    const installed = h.run(['install', source, '--target', 'claude-code', '--json']);
+    expect(installed.exitCode).toBe(0);
+    const copies = Object.entries(installed.stores['claude-code'].after.files)
+      .filter(([path]) => path.endsWith('/agents/reviewer.md'))
+      .map(([, bytes]) => bytesToText(bytes));
+    expect(copies.length).toBeGreaterThan(0);
+    for (const copy of copies) expect(copy).toBe(authored);
+  });
+}, 30_000);

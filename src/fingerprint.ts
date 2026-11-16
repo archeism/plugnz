@@ -19,7 +19,16 @@ export function fingerprintSourceTree(root: string, excludedRootFiles: readonly 
   return fingerprint(root, true, excludedRootFiles);
 }
 
-function fingerprint(root: string, ignoreGitMetadata: boolean, excludedRootFiles: readonly string[] = []): string {
+/** Read-only compatibility with receipts written before executable modes were hashed. */
+export function fingerprintLegacyV1Tree(root: string): string {
+  return fingerprint(root, false, [], false);
+}
+
+export function fingerprintLegacyV1SourceTree(root: string, excludedRootFiles: readonly string[] = []): string {
+  return fingerprint(root, true, excludedRootFiles, false);
+}
+
+function fingerprint(root: string, ignoreGitMetadata: boolean, excludedRootFiles: readonly string[] = [], includeMode = true): string {
   if (lstatSync(root).isSymbolicLink()) throw new Error('cannot fingerprint symlink: .');
   const hash = new CryptoHasher('sha256');
   const walk = (dir: string, prefix: string): void => {
@@ -41,7 +50,7 @@ function fingerprint(root: string, ignoreGitMetadata: boolean, excludedRootFiles
         // Git and host loaders distinguish regular files from executables.
         // Normalize to that portable semantic instead of hashing platform-
         // specific read/write permission bits.
-        hash.update(stat.mode & 0o111 ? 'x\0' : '-\0');
+        if (includeMode) hash.update(stat.mode & 0o111 ? 'x\0' : '-\0');
         const content = new CryptoHasher('sha256');
         content.update(readBytes(path));
         hash.update(content.digest('hex'));

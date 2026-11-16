@@ -1,0 +1,90 @@
+{
+  "version": "codex-cli 0.169.0",
+  "scope": "Direct native writer staging + actual released Codex child-role dispatch and idempotent update/removal; not public producer admission.",
+  "roles": [
+    {
+      "name": "addy:code-reviewer",
+      "config_keys": [
+        "name",
+        "description",
+        "developer_instructions"
+      ],
+      "model": "inherited",
+      "body_sha256": "026376212fd4cb9cca771e9ae9cdc2b5ca888dc341246ffb6bc8a4fe48d7776d"
+    },
+    {
+      "name": "addy:security-auditor",
+      "config_keys": [
+        "name",
+        "description",
+        "developer_instructions"
+      ],
+      "model": "inherited",
+      "body_sha256": "ddfcf6ff44895bd8e0ee93546b2288641af2e3ad3ddf7996da2d95f34d9655f6"
+    },
+    {
+      "name": "addy:test-engineer",
+      "config_keys": [
+        "name",
+        "description",
+        "developer_instructions"
+      ],
+      "model": "inherited",
+      "body_sha256": "ed1dc43602393e5205b57c9b74a2b0bf519fe7a5631b2b00a0b70c662317a2f9"
+    },
+    {
+      "name": "addy:web-performance-auditor",
+      "config_keys": [
+        "name",
+        "description",
+        "developer_instructions"
+      ],
+      "model": "inherited",
+      "body_sha256": "7bc14beefc1f17a3ec1f3262e37f5a03432081394f67ce59a19773a0f609a8a9"
+    }
+  ],
+  "native_child_request_captured": true,
+  "exact_role_body_captured": true,
+  "childCount": 1,
+  "parentCount": 2,
+  "requests": 3,
+  "changed_agent_body_update": true,
+  "idempotent_update": true,
+  "owned_role_retirement": true,
+  "unrelated_config_preserved": true,
+  "synthetic_provider": true,
+  "model_inference_requests": 0,
+  "wall_ms": 3329,
+  "cpu_microseconds": {
+    "user": 1194676,
+    "system": 845553
+  },
+  "max_rss_kib": 124312,
+  "child_resources": "not measured",
+  "root": "/home/charlesfengyc/.local/state/personal-plugin-recovery-20261116/runtime/codex169-roles-8y3kRe",
+  "native_post_removal_skills_absent": true,
+  "receipt_source_sha256": "86f783de06a0f14254b02bc169e42bcd37a4e2401a715adc9ba4ac8af5758d5d",
+  "binary": {
+    "path": "/home/charlesfengyc/.codex/packages/standalone/releases/0.169.0-x86_64-unknown-linux-musl/bin/codex",
+    "sha256": "b452ca20f838a8855a88a41050ee4a694033fff4ea3ecdad5633e6e0e8d13f2b"
+  },
+  "supporting_probes": [
+    {
+      "scope": "actual native skills and manual skill prompt discovery",
+      "receipt": "/home/charlesfengyc/.local/state/personal-plugin-recovery-20261116/runtime/codex-addy-native-Eq10GA/evidence.json",
+      "sha256": "4bb7bbc36d174d0846b5a7130df429bf12acf403e5793624c349196c59e88a91"
+    },
+    {
+      "scope": "actual native manual invocation policy and plugin MCP discovery",
+      "log": "/tmp/codex169-native-policy.log",
+      "sha256": "84c8cb3d88c630795a817b574da04b925cbee5dc6c40639c0f3b2256364ffa98",
+      "result": "1 pass, 0 fail"
+    }
+  ],
+  "public_readonly_admission": {
+    "result": "converged",
+    "packages": 11,
+    "mutationStarted": false,
+    "artifact": "/tmp/plugnz-codex169-public-preview.json"
+  }
+}

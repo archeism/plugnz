@@ -27,7 +27,7 @@ import { announceAgentExclusion, agentExclusionDisposition, assertNoAgentManifes
 import { CryptoHasher, spawnSync } from '../runtime';
 import type { SourceType } from '../semantic-inventory';
 import type { PluginSource, ResolvedSource } from '../source';
-import { cursor, cursorInstanceRoot, cursorProbePath, localDir, locateCursorProbeBinary, mcpCandidates } from './cursor';
+import { cursor, cursorInstanceRoot, cursorProbePath, cursorVersionProbeCandidates, hasCursorRuntimeArtifact, localDir, locateCursorProbeBinary, mcpCandidates } from './cursor';
 import { proveCursorLegacyAdoption } from './cursor-adoption';
 import type { ProveLegacyAdoption } from '../legacy-admission';
 
@@ -44,6 +44,8 @@ export const proveCursorSelectedLegacyAdoption: ProveLegacyAdoption = request =>
 const OWNERSHIP = '.plgnz-install.json';
 const CURSOR_MANAGED_VERSION = '2.4.0';
 const CURSOR_DIRECTORY_SURFACE = 'directory';
+const CURSOR_AGENT_VERSION = '2026.10.01-e373342';
+const CURSOR_AGENT_ACP_SHA256 = 'caee83093c76b54b5f0b5e57be488ef3108ed4f193073521139049f596c673c6';
 const MARKETPLACE_REFRESH_UNVERIFIED = 'cursor-marketplace-refresh';
 const RELOAD_REQUIRED: LifecycleReadbackData['transition'] = { requirement: 'reload', status: 'effective' };
 
@@ -393,6 +395,19 @@ const cursorManagedProfile = createCapabilityEvidenceProfile({
   ],
 });
 
+/** Exact Agent build, verified with the native loader; no Desktop version inference. */
+const cursorAgentProfile = createCapabilityEvidenceProfile({
+  ...cursorManagedProfile,
+  detectedVersion: CURSOR_AGENT_VERSION,
+  semantics: {
+    ...cursorManagedProfile.semantics,
+    mcp: 'supported',
+    commands: 'supported',
+    resources: 'supported',
+  },
+  evidence: ['docs/evidence/cursor-agent-native-20261116.json'],
+});
+
 /** Cursor has no native agent projection: agent definitions are a loud owner-approved exclusion, never native support. */
 const cursorAgentSurface: AgentExclusionSurface = {
   host: 'cursor',
@@ -449,7 +464,7 @@ const cursorDirectoryProfile = createCapabilityEvidenceProfile({
 
 const cursorLifecycleDefinition: LifecycleHostDefinition = {
   id: 'cursor',
-  evidenceProfiles: [cursorManagedProfile, cursorDirectoryProfile],
+  evidenceProfiles: [cursorManagedProfile, cursorAgentProfile, cursorDirectoryProfile],
   async probeVersion(target) {
     assertCursorTarget(target);
     return probeCursorVersion();
@@ -642,15 +657,23 @@ function probeCursorVersion(): TargetVersionObservation {
     const unreachable: never = located;
     return unreachable;
   }
-  const result = spawnSync([located.path, '--version'], {
-    stdout: 'pipe',
-    stderr: 'pipe',
-    timeout: 10_000,
-    env: { ...process.env, HOME: homeRoot(), PATH: cursorProbePath() },
-  });
-  const version = cursorVersion(decodeStdout(result.stdout));
-  if (result.exitCode !== 0 || version === undefined) return { kind: 'unparseable' };
-  return { kind: 'detected', version, probeId: `cursor-${version}` };
+  for (const binary of cursorVersionProbeCandidates()) {
+    const result = spawnSync([binary, '--version'], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+      timeout: 10_000,
+      env: { ...process.env, HOME: homeRoot(), PATH: cursorProbePath() },
+    });
+    const version = cursorVersion(decodeStdout(result.stdout));
+    // The official `cursor` shim can exist without the Desktop app. Continue
+    // to the actual Agent binary; a valid unknown version still fails closed.
+    if (result.exitCode !== 0 || version === undefined) continue;
+    if (version === CURSOR_AGENT_VERSION && !hasCursorRuntimeArtifact(binary, version, '6136.index.js', CURSOR_AGENT_ACP_SHA256)) {
+      return { kind: 'unparseable', diagnostic: 'Cursor Agent ACP runtime is unqualified: expected the exact native-tested 6136.index.js SHA256; stock, missing or changed bundles are refused' };
+    }
+    return { kind: 'detected', version, probeId: `cursor-${version}` };
+  }
+  return { kind: 'unparseable' };
 }
 
 function cursorVersion(stdout: string): string | undefined {
@@ -658,6 +681,8 @@ function cursorVersion(stdout: string): string | undefined {
   if (line === undefined) return undefined;
   const branded = /^Cursor (\d+\.\d+\.\d+)$/u.exec(line);
   if (branded?.[1] !== undefined) return branded[1];
+  const agent = /^(\d{4}\.\d{2}\.\d{2}-[a-f0-9]+)$/u.exec(line);
+  if (agent?.[1] !== undefined) return agent[1];
   const bare = /^(\d+\.\d+\.\d+)$/u.exec(line);
   return bare?.[1];
 }
@@ -722,7 +747,7 @@ function readLocalInstallation(instance: string, entry: string, dir: string): Ta
       contentRoots: [{ label: 'local', path: resolve(dir), fingerprint: digest }],
     };
   }
-  const ownership = ownershipOf(instance, entry, marker, digest);
+  const ownership = ownershipOf(instance, entry, marker, digest, dir);
   return {
     nativeId: entry,
     packageName: manifest.name,
@@ -745,10 +770,10 @@ function unreadableFingerprint(nativeId: string): string {
   return hash.digest('hex');
 }
 
-function ownershipOf(instance: string, nativeId: string, marker: Ownership | null, installedFingerprint: string): TargetOwnershipObservation {
+function ownershipOf(instance: string, nativeId: string, marker: Ownership | null, installedFingerprint: string, installedRoot?: string): TargetOwnershipObservation {
   if (marker === null) return { kind: 'unmanaged' };
   if (!ownsNativeDirectory(marker.pluginId, nativeId)) return { kind: 'ambiguous', proofIds: [`cursor-marker-${nativeId}`] };
-  const scopeId = marker.scopeId ?? resolveLegacyV1MarkerScopeId({ target: { kind: 'cursor', instance }, nativeId, marker, installedFingerprint, matchesPluginId: ownsNativeDirectory });
+  const scopeId = marker.scopeId ?? resolveLegacyV1MarkerScopeId({ target: { kind: 'cursor', instance }, nativeId, marker, installedFingerprint, installedRoot, matchesPluginId: ownsNativeDirectory });
   if (scopeId === undefined) return { kind: 'unmanaged' };
   return {
     kind: 'owned',

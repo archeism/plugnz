@@ -1,7 +1,7 @@
 /** OMP native task agents: project portable agents into the extension package. */
 import { existsSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { planPortableAgents, renderPortableAgentMarkdown, PORTABLE_AGENTS_FILE } from '../portable-agents';
+import { planPortableAgents, planPromptResourceAgents, renderPortableAgentMarkdown, PORTABLE_AGENTS_FILE } from '../portable-agents';
 import { yamlParse } from '../yaml';
 
 function invalid(message: string): never {
@@ -16,11 +16,11 @@ function invalid(message: string): never {
  * parser accepts the colon form and matches agents by that exact string.
  * Portable metadata stays out of the generated package: the rendered Markdown
  * holds name, description and the resolved model only, and the sidecar is
- * removed. Returns false when the package has no portable agents, leaving
- * native `agents/*.md` semantics untouched.
+ * removed. Strict instruction-only agents use the same native projection without
+ * requiring portable model configuration. Returns false when no agents exist.
  */
 export function projectOmpAgents(source: string, stage: string, namespace: string): boolean {
-  const agents = planPortableAgents(source, 'omp');
+  const agents = planPortableAgents(source, 'omp') ?? planPromptResourceAgents(source);
   if (agents === null) return false;
   if (resolve(source) === resolve(stage)) invalid('source and stage must be distinct');
   if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(namespace)) invalid('namespace must be a plugin identifier');
@@ -80,7 +80,7 @@ function agentNames(directory: string): Array<{ name: string; path: string }> {
  * install-time observable, so it is outside this guard.
  */
 export function assertOmpAgentIdentitiesAvailable(source: string, namespace: string, roots: OmpAgentIdentityRoots): void {
-  const agents = planPortableAgents(source, 'omp');
+  const agents = planPortableAgents(source, 'omp') ?? planPromptResourceAgents(source);
   if (agents === null) return;
   const wanted = new Set(agents.map(agent => `${namespace}:${agent.name}`));
   const collisions: string[] = [];
